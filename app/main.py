@@ -3,6 +3,7 @@
 import asyncio
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from app.bot.handlers import admin, generate, history, misc, payments, referral_promo, start
@@ -21,7 +22,10 @@ async def main() -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
 
-    bot = Bot(token=settings.bot_token, parse_mode=ParseMode.HTML)
+    bot = Bot(
+        token=settings.bot_token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
     dp = Dispatcher()
 
     sessionmaker = create_sessionmaker()
