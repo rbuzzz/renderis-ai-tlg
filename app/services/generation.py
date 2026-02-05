@@ -1,7 +1,7 @@
 ﻿from __future__ import annotations
 
 import uuid
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,6 +45,8 @@ class GenerationService:
         prompt: str,
         options: Dict[str, Any],
         outputs: int,
+        reference_urls: List[str] | None = None,
+        reference_files: List[str] | None = None,
     ) -> Generation:
         if user.is_banned:
             raise ValueError('banned')
@@ -67,13 +69,19 @@ class GenerationService:
         if not self._admin_free_mode(user) and user.balance_credits < breakdown.total:
             raise ValueError('no_credits')
 
+        options_payload = dict(options)
+        if reference_urls:
+            options_payload['reference_urls'] = reference_urls
+        if reference_files:
+            options_payload['reference_files'] = reference_files
+
         generation = Generation(
             generation_order_id=str(uuid.uuid4()),
             user_id=user.id,
             provider=model.provider,
             model=model.key,
             prompt=prompt,
-            options=options,
+            options=options_payload,
             outputs_requested=outputs,
             total_cost_credits=breakdown.per_output * outputs,
             discount_pct=discount,
@@ -98,7 +106,7 @@ class GenerationService:
 
         await self.session.flush()
         try:
-            await self._create_tasks(generation, model, prompt, options, outputs)
+            await self._create_tasks(generation, model, prompt, options, outputs, reference_urls)
         except Exception:
             generation.status = 'fail'
             generation.updated_at = utcnow()
@@ -123,9 +131,10 @@ class GenerationService:
         prompt: str,
         options: Dict[str, Any],
         outputs: int,
+        reference_urls: List[str] | None,
     ) -> None:
         for _ in range(outputs):
-            payload = model.build_input(prompt, options, image_inputs=None)
+            payload = model.build_input(prompt, options, image_inputs=reference_urls)
             try:
                 data = await self.kie.create_task(model.model_id, payload)
             except KieError as exc:

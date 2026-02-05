@@ -5,6 +5,7 @@ class GenerateFlow(StatesGroup):
     choosing_model = State()
     entering_prompt = State()
     choosing_options = State()
+    collecting_refs = State()
     choosing_outputs = State()
     confirming = State()
 

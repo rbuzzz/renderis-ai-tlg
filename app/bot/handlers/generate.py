@@ -1,10 +1,12 @@
 ﻿from __future__ import annotations
 
-from typing import Any, Dict
+import os
+import uuid
+from typing import Any, Dict, List
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +25,15 @@ from app.utils.text import escape_html, clamp_text
 
 router = Router()
 rate_limiter = RateLimiter(get_settings().per_user_generate_cooldown_seconds)
+
+
+def _refs_menu() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text='Готово', callback_data='gen:refs:done')],
+            [InlineKeyboardButton(text='Пропустить', callback_data='gen:refs:skip')],
+        ]
+    )
 
 
 @router.callback_query(F.data == 'gen:start')
@@ -62,8 +73,6 @@ async def gen_model(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(model_key=model_key, options={}, opt_index=0, outputs=1)
     await state.set_state(GenerateFlow.entering_prompt)
     await callback.message.answer(f'Введите промпт для {model.display_name}:')
-    if model.supports_reference_images:
-        await callback.message.answer('Референс-изображения временно недоступны. Скоро добавим.')
     await callback.answer()
 
 
@@ -98,6 +107,15 @@ async def _ask_option(message_or_callback: Any, state: FSMContext) -> None:
         return
     idx = int(data.get('opt_index', 0))
     if idx >= len(model.options):
+        options = data.get('options', {})
+        if model.supports_reference_images and options.get('reference_images') == 'has' and not data.get('ref_urls'):
+            await state.set_state(GenerateFlow.collecting_refs)
+            await message_or_callback.answer(
+                'Отправьте до 8 референс-фото одним или несколькими сообщениями.\n'
+                'Когда закончите, нажмите "Готово".',
+                reply_markup=_refs_menu(),
+            )
+            return
         await state.set_state(GenerateFlow.choosing_outputs)
         outputs = int(data.get('outputs', 1))
         await message_or_callback.answer(
@@ -108,6 +126,65 @@ async def _ask_option(message_or_callback: Any, state: FSMContext) -> None:
     opt = model.options[idx]
     selected = data.get('options', {}).get(opt.key, opt.default)
     await message_or_callback.answer(f'Выберите: {opt.label}', reply_markup=option_menu(opt, selected))
+
+
+@router.message(GenerateFlow.collecting_refs, F.photo)
+async def collect_refs(message: Message, state: FSMContext) -> None:
+    settings = get_settings()
+    data = await state.get_data()
+    ref_urls: List[str] = data.get('ref_urls', [])
+    ref_files: List[str] = data.get('ref_files', [])
+    ref_token = data.get('ref_token')
+
+    if len(ref_urls) >= settings.max_reference_images:
+        await message.answer('Достигнут лимит референс-изображений.')
+        return
+
+    if not ref_token:
+        ref_token = uuid.uuid4().hex
+        await state.update_data(ref_token=ref_token)
+
+    ref_dir = os.path.join(settings.reference_storage_path, ref_token)
+    os.makedirs(ref_dir, exist_ok=True)
+
+    file = await message.bot.get_file(message.photo[-1].file_id)
+    ext = os.path.splitext(file.file_path or '')[1] or '.jpg'
+    filename = f'{uuid.uuid4().hex}{ext}'
+    local_path = os.path.join(ref_dir, filename)
+    await message.bot.download_file(file.file_path, destination=local_path)
+
+    public_url = f'{settings.public_file_base_url}/{ref_token}/{filename}'
+
+    ref_urls.append(public_url)
+    ref_files.append(local_path)
+    await state.update_data(ref_urls=ref_urls, ref_files=ref_files)
+
+    await message.answer(f'Добавлено референсов: {len(ref_urls)}', reply_markup=_refs_menu())
+
+
+@router.message(GenerateFlow.collecting_refs)
+async def collect_refs_text(message: Message) -> None:
+    await message.answer('Пожалуйста, отправьте фото или нажмите "Готово".')
+
+
+@router.callback_query(F.data == 'gen:refs:done')
+async def refs_done(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(GenerateFlow.choosing_outputs)
+    outputs = int((await state.get_data()).get('outputs', 1))
+    await callback.message.answer('Сколько вариантов сгенерировать?', reply_markup=outputs_menu(get_settings().max_outputs_per_request, outputs))
+    await callback.answer()
+
+
+@router.callback_query(F.data == 'gen:refs:skip')
+async def refs_skip(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    options = data.get('options', {})
+    options['reference_images'] = 'none'
+    await state.update_data(options=options, ref_urls=[], ref_files=[])
+    await state.set_state(GenerateFlow.choosing_outputs)
+    outputs = int(data.get('outputs', 1))
+    await callback.message.answer('Сколько вариантов сгенерировать?', reply_markup=outputs_menu(get_settings().max_outputs_per_request, outputs))
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith('gen:opt:'))
@@ -152,6 +229,7 @@ async def _show_preview(callback: CallbackQuery, state: FSMContext, session: Asy
     prompt = data.get('prompt', '')
     options = model.validate_options(data.get('options', {}))
     outputs = int(data.get('outputs', 1))
+    ref_urls: List[str] = data.get('ref_urls', [])
 
     user = await _get_user(session, callback.from_user.id)
     discount = user.referral_discount_pct or 0 if user else 0
@@ -163,6 +241,7 @@ async def _show_preview(callback: CallbackQuery, state: FSMContext, session: Asy
         f'Модель: {model.display_name}\n'
         f'Промпт: {escape_html(prompt)}\n'
         f'Опции: {escape_html(str(options))}\n'
+        f'Референсов: {len(ref_urls)}\n'
         f'Выходов: {outputs}\n'
         f'Цена за 1: {breakdown.per_output} кр.\n'
         f'Итого: {breakdown.total} кр.\n'
@@ -185,6 +264,8 @@ async def gen_confirm(callback: CallbackQuery, state: FSMContext, session: Async
     prompt = data.get('prompt', '')
     options = model.validate_options(data.get('options', {}))
     outputs = int(data.get('outputs', 1))
+    ref_urls: List[str] = data.get('ref_urls', [])
+    ref_files: List[str] = data.get('ref_files', [])
 
     if not rate_limiter.allow(callback.from_user.id):
         await callback.answer('Слишком часто. Подождите пару секунд.', show_alert=True)
@@ -198,7 +279,7 @@ async def gen_confirm(callback: CallbackQuery, state: FSMContext, session: Async
     kie = KieClient()
     gen_service = GenerationService(session, kie)
     try:
-        generation = await gen_service.create_generation(user, model, prompt, options, outputs)
+        generation = await gen_service.create_generation(user, model, prompt, options, outputs, ref_urls, ref_files)
         await session.commit()
     except ValueError as exc:
         await session.rollback()

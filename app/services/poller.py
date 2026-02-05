@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import asyncio
+import os
 from typing import Dict, List, Optional
 
 from aiogram import Bot
@@ -159,6 +160,30 @@ class PollManager:
                 generation.status = 'running'
             generation.updated_at = utcnow()
             await session.commit()
+
+            if generation.status in ('success', 'fail', 'partial'):
+                await self._cleanup_reference_files(generation)
+
+    async def _cleanup_reference_files(self, generation: Generation) -> None:
+        options = generation.options or {}
+        files = options.get('reference_files') or []
+        if not files:
+            return
+        parents = set()
+        for path in files:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+            except Exception as exc:
+                logger.warning('ref_delete_failed', path=path, error=str(exc))
+            parents.add(os.path.dirname(path))
+
+        for parent in parents:
+            try:
+                os.rmdir(parent)
+            except OSError:
+                pass
 
     async def _deliver_results(self, telegram_id: int, generation: Generation, urls: List[str]) -> None:
         if not urls:

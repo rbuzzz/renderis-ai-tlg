@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     refund_on_fail: bool = Field(True, alias='REFUND_ON_FAIL')
     max_prompt_length: int = Field(20000, alias='MAX_PROMPT_LENGTH')
 
+    # Reference images
+    reference_storage_path: str = Field('/var/www/tonmd.cloud/ref', alias='REFERENCE_STORAGE_PATH')
+    public_file_base_url: str = Field('https://tonmd.cloud/ref', alias='PUBLIC_FILE_BASE_URL')
+    max_reference_images: int = Field(8, alias='MAX_REFERENCE_IMAGES')
+
     # Polling
     poll_max_wait_seconds: int = Field(180, alias='POLL_MAX_WAIT_SECONDS')
     poll_backoff_sequence: str = Field('1,2,3,5,8,13,20', alias='POLL_BACKOFF_SEQUENCE')
