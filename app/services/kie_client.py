@@ -67,7 +67,8 @@ class KieClient:
 
     def get_status(self, record: Dict[str, Any]) -> str:
         data = record.get('data') or {}
-        return str(data.get('status') or '')
+        # Kie returns `state` (waiting/success/fail). Some responses may include `status`.
+        return str(data.get('state') or data.get('status') or '')
 
     def get_fail_info(self, record: Dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
         data = record.get('data') or {}
