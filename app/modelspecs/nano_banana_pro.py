@@ -34,11 +34,11 @@ NANO_BANANA_PRO = ModelSpec(
         OptionSpec(
             key='resolution',
             label='Разрешение',
-            default='1k',
+            default='1K',
             values=[
-                OptionValue('1k', '1K', 'resolution_1k'),
-                OptionValue('2k', '2K', 'resolution_2k'),
-                OptionValue('4k', '4K', 'resolution_4k'),
+                OptionValue('1K', '1K', 'resolution_1k'),
+                OptionValue('2K', '2K', 'resolution_2k'),
+                OptionValue('4K', '4K', 'resolution_4k'),
             ],
         ),
         OptionSpec(

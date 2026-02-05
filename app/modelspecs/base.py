@@ -50,7 +50,11 @@ class ModelSpec:
     def build_input(self, prompt: str, options: Dict[str, Any], image_inputs: Optional[List[str]] = None) -> Dict[str, Any]:
         payload = {'prompt': prompt}
         for opt in self.options:
-            payload[opt.key] = options.get(opt.key, opt.default)
+            # reference_images is a UI-only toggle until public image hosting is implemented
+            if opt.key == 'reference_images':
+                continue
+            value = options.get(opt.key, opt.default)
+            payload[opt.key] = value
         if self.supports_reference_images and image_inputs:
             payload['image_input'] = image_inputs
         return payload
