@@ -56,22 +56,6 @@ python -m app.scripts.seed
 python -m app.main
 ```
 
-## Автокоммит и автопуш
-В репозитории настроены git‑хуки для автопуша после ручного коммита.
-Также есть простой авто‑коммит скрипт, который периодически коммитит и пушит изменения.
-
-Запуск авто‑коммита:
-
-```bash
-python scripts/auto_commit.py
-```
-
-Пауза авто‑коммита: создайте файл `.disable_autocommit`.
-Настройки через переменные окружения:
-- `AUTO_COMMIT_INTERVAL_SECONDS` (по умолчанию 10)
-- `AUTO_COMMIT_MESSAGE` (шаблон сообщения, например `auto: {ts}`)
-- `AUTO_COMMIT_PUSH` (true/false)
-
 ## Настройка Telegram Stars
 - Валюта: `XTR`
 - Для Stars `STARS_PROVIDER_TOKEN` можно оставить пустым.
