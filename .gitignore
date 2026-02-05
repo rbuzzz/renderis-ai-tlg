@@ -6,3 +6,4 @@ __pycache__/
 *.sqlite
 .idea/
 .vscode/
+.disable_autocommit
