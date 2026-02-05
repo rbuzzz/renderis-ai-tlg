@@ -1,0 +1,3 @@
+﻿#!/bin/sh
+# Auto-push after manual commits
+exec git push

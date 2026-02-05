@@ -1,0 +1,271 @@
+﻿from __future__ import annotations
+
+import tempfile
+import uuid
+
+from aiogram import F, Router
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery, Message
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.bot.keyboards.admin import admin_menu
+from app.bot.states import AdminFlow
+from app.config import get_settings
+from app.db.models import User
+from app.modelspecs.registry import get_model
+from app.services.analytics import AnalyticsService
+from app.services.credits import CreditsService
+from app.services.pricing import PricingService
+from app.services.promos import PromoService
+from app.services.referrals import ReferralService
+
+
+router = Router()
+
+
+async def _is_admin(session: AsyncSession, telegram_id: int) -> bool:
+    settings = get_settings()
+    if telegram_id in settings.admin_ids():
+        return True
+    result = await session.execute(select(User).where(User.telegram_id == telegram_id))
+    user = result.scalar_one_or_none()
+    return bool(user and user.is_admin)
+
+
+@router.message(Command('admin'))
+async def admin_menu_cmd(message: Message, session: AsyncSession) -> None:
+    if not await _is_admin(session, message.from_user.id):
+        await message.answer('Недостаточно прав.')
+        return
+    await message.answer('Админ-панель:', reply_markup=admin_menu())
+
+
+@router.callback_query(F.data == 'admin:set_price')
+async def admin_set_price(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    if not await _is_admin(session, callback.from_user.id):
+        await callback.answer('Недостаточно прав', show_alert=True)
+        return
+    await state.set_state(AdminFlow.setting_price)
+    await callback.message.answer('Формат: model_key option_key price_credits. Пример: nano_banana base 5')
+    await callback.answer()
+
+
+@router.message(AdminFlow.setting_price)
+async def admin_set_price_input(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    parts = (message.text or '').split()
+    if len(parts) != 3:
+        await message.answer('Неверный формат. Пример: nano_banana base 5')
+        return
+    model_key, option_key, price = parts[0], parts[1], int(parts[2])
+    model = get_model(model_key)
+    if not model:
+        await message.answer('Модель не найдена.')
+        return
+    service = PricingService(session)
+    await service.set_price(model_key, option_key, price, model.model_type, model.provider)
+    await session.commit()
+    await state.clear()
+    await message.answer('Цена обновлена.')
+
+
+@router.callback_query(F.data == 'admin:bulk')
+async def admin_bulk(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    if not await _is_admin(session, callback.from_user.id):
+        await callback.answer('Недостаточно прав', show_alert=True)
+        return
+    await state.set_state(AdminFlow.bulk_multiplier)
+    await callback.message.answer('Введите множитель, например 1.1 или 0.9')
+    await callback.answer()
+
+
+@router.message(AdminFlow.bulk_multiplier)
+async def admin_bulk_input(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    try:
+        multiplier = float(message.text or '1')
+    except ValueError:
+        await message.answer('Неверный формат.')
+        return
+    service = PricingService(session)
+    count = await service.bulk_multiply(multiplier)
+    await session.commit()
+    await state.clear()
+    await message.answer(f'Обновлено цен: {count}')
+
+
+@router.callback_query(F.data == 'admin:ref:create')
+async def admin_ref_create(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    if not await _is_admin(session, callback.from_user.id):
+        await callback.answer('Недостаточно прав', show_alert=True)
+        return
+    await state.set_state(AdminFlow.create_referral)
+    await callback.message.answer('Введите скидку в процентах (например 10)')
+    await callback.answer()
+
+
+@router.message(AdminFlow.create_referral)
+async def admin_ref_create_input(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    try:
+        pct = int(message.text or '0')
+    except ValueError:
+        await message.answer('Неверный формат.')
+        return
+    service = ReferralService(session)
+    ref = await service.create_code(pct, message.from_user.id)
+    await session.commit()
+    await state.clear()
+    await message.answer(f'Создан код: {ref.code} со скидкой {pct}%')
+
+
+@router.callback_query(F.data == 'admin:ref:list')
+async def admin_ref_list(callback: CallbackQuery, session: AsyncSession) -> None:
+    if not await _is_admin(session, callback.from_user.id):
+        await callback.answer('Недостаточно прав', show_alert=True)
+        return
+    service = ReferralService(session)
+    codes = await service.list_codes()
+    if not codes:
+        await callback.message.answer('Кодов нет.')
+        await callback.answer()
+        return
+    text = '\n'.join([f'{c} - {pct}% - использований: {cnt} - {"активен" if act else "неактивен"}' for c, pct, cnt, act in codes])
+    await callback.message.answer(text)
+    await callback.answer()
+
+
+@router.callback_query(F.data == 'admin:promo:create')
+async def admin_promo_create(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    if not await _is_admin(session, callback.from_user.id):
+        await callback.answer('Недостаточно прав', show_alert=True)
+        return
+    await state.set_state(AdminFlow.create_promo)
+    await callback.message.answer('Формат: количество credits. Пример: 50 20')
+    await callback.answer()
+
+
+@router.message(AdminFlow.create_promo)
+async def admin_promo_create_input(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    parts = (message.text or '').split()
+    if len(parts) != 2:
+        await message.answer('Неверный формат. Пример: 50 20')
+        return
+    amount = int(parts[0])
+    credits = int(parts[1])
+    batch_id = str(uuid.uuid4())
+    service = PromoService(session)
+    codes = await service.create_batch(amount, credits, message.from_user.id, batch_id)
+    await session.commit()
+
+    content = '\n'.join([c.code for c in codes])
+    with tempfile.NamedTemporaryFile('w+', delete=False, suffix='.txt') as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    await message.answer_document(open(tmp_path, 'rb'), caption=f'Промо-партия {batch_id} создана.')
+    await state.clear()
+
+
+@router.callback_query(F.data == 'admin:stats')
+async def admin_stats(callback: CallbackQuery, session: AsyncSession) -> None:
+    if not await _is_admin(session, callback.from_user.id):
+        await callback.answer('Недостаточно прав', show_alert=True)
+        return
+    service = AnalyticsService(session)
+    today = await service.dashboard(1)
+    week = await service.dashboard(7)
+    month = await service.dashboard(30)
+
+    def fmt(label: str, data: dict) -> str:
+        return (
+            f'<b>{label}</b>\n'
+            f'Выручка (звезды): {data["revenue_stars"]}\n'
+            f'Кредитов выдано: {data["credits_issued"]}\n'
+            f'Кредитов потрачено: {data["credits_spent"]}\n'
+            f'Активные пользователи: {data["active_users"]}\n'
+            f'DAU/WAU: {data["dau"]}/{data["wau"]}\n'
+            f'Конверсия: {data["conversion_pct"]:.1f}%\n'
+            f'Ошибки: {data["failure_rate_pct"]:.1f}%\n'
+            f'Средняя задержка: {data["avg_latency_sec"]:.1f}s\n'
+        )
+
+    await callback.message.answer(fmt('Сегодня', today))
+    await callback.message.answer(fmt('7 дней', week))
+    await callback.message.answer(fmt('30 дней', month))
+    await callback.answer()
+
+
+@router.callback_query(F.data == 'admin:grant')
+async def admin_grant(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    if not await _is_admin(session, callback.from_user.id):
+        await callback.answer('Недостаточно прав', show_alert=True)
+        return
+    await state.set_state(AdminFlow.grant_credits)
+    await callback.message.answer('Формат: telegram_id credits (пример: 123456 50)')
+    await callback.answer()
+
+
+@router.message(AdminFlow.grant_credits)
+async def admin_grant_input(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    parts = (message.text or '').split()
+    if len(parts) != 2:
+        await message.answer('Неверный формат.')
+        return
+    telegram_id = int(parts[0])
+    credits = int(parts[1])
+    result = await session.execute(select(User).where(User.telegram_id == telegram_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        await message.answer('Пользователь не найден.')
+        return
+    credits_service = CreditsService(session)
+    await credits_service.add_ledger(user, credits, 'admin_grant', meta={'admin': message.from_user.id})
+    await session.commit()
+    await state.clear()
+    await message.answer('Кредиты выданы.')
+
+
+@router.callback_query(F.data == 'admin:ban')
+async def admin_ban(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    if not await _is_admin(session, callback.from_user.id):
+        await callback.answer('Недостаточно прав', show_alert=True)
+        return
+    await state.set_state(AdminFlow.ban_user)
+    await callback.message.answer('Формат: telegram_id on/off (пример: 123456 on)')
+    await callback.answer()
+
+
+@router.message(AdminFlow.ban_user)
+async def admin_ban_input(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    parts = (message.text or '').split()
+    if len(parts) != 2:
+        await message.answer('Неверный формат.')
+        return
+    telegram_id = int(parts[0])
+    flag = parts[1].lower() == 'on'
+    result = await session.execute(select(User).where(User.telegram_id == telegram_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        await message.answer('Пользователь не найден.')
+        return
+    user.is_banned = flag
+    await session.commit()
+    await state.clear()
+    await message.answer('Статус обновлен.')
+
+
+@router.callback_query(F.data == 'admin:free_mode')
+async def admin_free_mode(callback: CallbackQuery, session: AsyncSession) -> None:
+    if not await _is_admin(session, callback.from_user.id):
+        await callback.answer('Недостаточно прав', show_alert=True)
+        return
+    result = await session.execute(select(User).where(User.telegram_id == callback.from_user.id))
+    user = result.scalar_one_or_none()
+    if not user:
+        await callback.answer('Пользователь не найден', show_alert=True)
+        return
+    current = bool(user.settings.get('admin_free_mode', get_settings().admin_free_mode_default))
+    user.settings['admin_free_mode'] = not current
+    await session.commit()
+    await callback.message.answer(f'Admin free-mode теперь: {"ON" if not current else "OFF"}')
+    await callback.answer()
