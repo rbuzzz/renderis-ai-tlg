@@ -12,6 +12,7 @@ from app.config import get_settings
 from app.db.session import create_sessionmaker
 from app.services.kie_client import KieClient
 from app.services.poller import PollManager
+from app.services.poller_runtime import set_poller
 from app.utils.logging import configure_logging, get_logger
 
 
@@ -41,7 +42,7 @@ async def main() -> None:
 
     kie_client = KieClient()
     poller = PollManager(bot, sessionmaker, kie_client)
-    bot['poller'] = poller
+    set_poller(poller)
 
     await poller.restore_pending()
 

@@ -5,11 +5,12 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Generation, GenerationTask, User
+from app.db.models import Generation, GenerationTask
 from app.modelspecs.registry import get_model
+from app.services.credits import CreditsService
 from app.services.generation import GenerationService
 from app.services.kie_client import KieClient
-from app.services.credits import CreditsService
+from app.services.poller_runtime import get_poller
 from app.utils.text import escape_html
 
 
@@ -74,7 +75,7 @@ async def history_open(callback: CallbackQuery, session: AsyncSession) -> None:
     )
     tasks = list(result.scalars().all())
     if not tasks:
-        await callback.message.answer('Результаты ещё не готовы.')
+        await callback.message.answer('Результаты еще не готовы.')
         await callback.answer()
         return
 
@@ -122,7 +123,7 @@ async def history_regen(callback: CallbackQuery, session: AsyncSession) -> None:
         select(GenerationTask.id).where(GenerationTask.generation_id == new_gen.id)
     )
     task_ids = [row[0] for row in result.all()]
-    poller = callback.bot.get('poller')
+    poller = get_poller()
     if poller:
         for task_id in task_ids:
             poller.schedule(task_id)

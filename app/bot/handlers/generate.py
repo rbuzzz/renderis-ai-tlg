@@ -15,6 +15,7 @@ from app.db.models import GenerationTask
 from app.modelspecs.registry import get_model, list_models
 from app.services.generation import GenerationService
 from app.services.kie_client import KieClient, KieError
+from app.services.poller_runtime import get_poller
 from app.services.pricing import PricingService
 from app.services.rate_limit import RateLimiter
 from app.utils.text import escape_html, clamp_text
@@ -225,7 +226,7 @@ async def gen_confirm(callback: CallbackQuery, state: FSMContext, session: Async
         select(GenerationTask.id).where(GenerationTask.generation_id == generation.id)
     )
     task_ids = [row[0] for row in result.all()]
-    poller = callback.bot.get('poller')
+    poller = get_poller()
     if poller:
         for task_id in task_ids:
             poller.schedule(task_id)
