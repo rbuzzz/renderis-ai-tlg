@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -49,6 +49,8 @@ class Price(Base):
     model_key: Mapped[str] = mapped_column(String(64), index=True)
     option_key: Mapped[str] = mapped_column(String(64), index=True)
     price_credits: Mapped[int] = mapped_column(Integer)
+    provider_credits: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    provider_cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     model_type: Mapped[str] = mapped_column(String(32))
     provider: Mapped[str] = mapped_column(String(32))
@@ -56,6 +58,14 @@ class Price(Base):
     __table_args__ = (
         UniqueConstraint('model_key', 'option_key', name='uq_prices_model_option'),
     )
+
+
+class AppSetting(Base):
+    __tablename__ = 'app_settings'
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(String(255))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class ReferralCode(Base):

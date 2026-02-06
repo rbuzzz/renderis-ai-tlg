@@ -33,6 +33,15 @@ DEFAULT_PRICES = [
     ('nano_banana_pro', 'resolution_4k', 10, 'image', 'kie'),
     ('nano_banana_pro', 'ref_none', 0, 'image', 'kie'),
     ('nano_banana_pro', 'ref_has', 5, 'image', 'kie'),
+    # Nano Banana Edit
+    ('nano_banana_edit', 'base', 8, 'image', 'kie'),
+    ('nano_banana_edit', 'output_format_png', 0, 'image', 'kie'),
+    ('nano_banana_edit', 'output_format_jpeg', 0, 'image', 'kie'),
+    ('nano_banana_edit', 'aspect_1_1', 0, 'image', 'kie'),
+    ('nano_banana_edit', 'aspect_3_4', 1, 'image', 'kie'),
+    ('nano_banana_edit', 'aspect_4_3', 1, 'image', 'kie'),
+    ('nano_banana_edit', 'aspect_9_16', 2, 'image', 'kie'),
+    ('nano_banana_edit', 'aspect_16_9', 2, 'image', 'kie'),
 ]
 
 DEFAULT_PRODUCTS = [
@@ -48,7 +57,10 @@ async def main() -> None:
     sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
 
     async with sessionmaker() as session:
-        for model_key, option_key, price, model_type, provider in DEFAULT_PRICES:
+        for item in DEFAULT_PRICES:
+            model_key, option_key, price, model_type, provider = item[:5]
+            provider_credits = item[5] if len(item) > 5 else None
+            provider_cost_usd = item[6] if len(item) > 6 else None
             result = await session.execute(
                 select(Price).where(Price.model_key == model_key, Price.option_key == option_key)
             )
@@ -60,6 +72,8 @@ async def main() -> None:
                     model_key=model_key,
                     option_key=option_key,
                     price_credits=price,
+                    provider_credits=provider_credits,
+                    provider_cost_usd=provider_cost_usd,
                     active=True,
                     model_type=model_type,
                     provider=provider,

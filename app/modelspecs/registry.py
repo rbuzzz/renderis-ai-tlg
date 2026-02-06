@@ -4,12 +4,14 @@ from typing import Dict, List
 
 from app.modelspecs.base import ModelSpec
 from app.modelspecs.nano_banana import NANO_BANANA
+from app.modelspecs.nano_banana_edit import NANO_BANANA_EDIT
 from app.modelspecs.nano_banana_pro import NANO_BANANA_PRO
 
 
 MODEL_SPECS: Dict[str, ModelSpec] = {
     NANO_BANANA.key: NANO_BANANA,
     NANO_BANANA_PRO.key: NANO_BANANA_PRO,
+    NANO_BANANA_EDIT.key: NANO_BANANA_EDIT,
 }
 
 

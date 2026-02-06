@@ -69,6 +69,9 @@ class GenerationService:
         if not self._admin_free_mode(user) and user.balance_credits < breakdown.total:
             raise ValueError('no_credits')
 
+        if model.requires_reference_images and not reference_urls:
+            raise ValueError('refs_required')
+
         options_payload = dict(options)
         if reference_urls:
             options_payload['reference_urls'] = reference_urls

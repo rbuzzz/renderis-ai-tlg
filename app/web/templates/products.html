@@ -1,0 +1,43 @@
+﻿{% extends "layout.html" %}
+{% block content %}
+  <div class="section">
+    <h3>Товары (цены генерации)</h3>
+    {% if saved %}
+    <div class="notice">Изменения сохранены.</div>
+    {% endif %}
+    <table>
+      <thead>
+        <tr>
+          <th>Модель</th>
+          <th>Kie кредиты</th>
+          <th>Kie $</th>
+          <th>Renderis кредиты</th>
+          <th>Renderis $</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in products %}
+        <tr>
+          <td>{{ p.model_name }}</td>
+          <td>
+            <input form="price-{{ p.id }}" name="provider_credits" value="{{ p.provider_credits }}" placeholder="—" />
+          </td>
+          <td>
+            <input form="price-{{ p.id }}" name="provider_cost_usd" value="{{ p.provider_cost_usd }}" placeholder="—" />
+          </td>
+          <td>{{ p.renderis_credits }}</td>
+          <td>{{ p.renderis_usd }}</td>
+          <td>
+            <button form="price-{{ p.id }}" type="submit">Сохранить</button>
+            <form id="price-{{ p.id }}" method="post" action="/admin/products/{{ p.id }}"></form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="muted">Нет данных</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}
+

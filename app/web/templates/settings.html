@@ -1,0 +1,29 @@
+﻿{% extends "layout.html" %}
+{% block content %}
+  <div class="section">
+    <h3>Общие настройки Renderis</h3>
+    {% if saved %}
+    <div class="notice">Настройки сохранены.</div>
+    {% endif %}
+    <form method="post" action="/admin/settings">
+      <div class="form-row">
+        <div>
+          <label>Цена 1 кредита (Stars)</label>
+          <input name="stars_per_credit" value="{{ stars_per_credit }}" />
+        </div>
+        <div>
+          <label>Стоимость 1 Stars (USD)</label>
+          <input name="usd_per_star" value="{{ usd_per_star }}" />
+        </div>
+        <div>
+          <label>USD за 1 кредит</label>
+          <input value="{{ usd_per_credit }}" readonly />
+        </div>
+      </div>
+      <div style="margin-top: 12px;">
+        <button type="submit">Сохранить</button>
+      </div>
+    </form>
+  </div>
+{% endblock %}
+

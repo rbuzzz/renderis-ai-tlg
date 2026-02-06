@@ -26,11 +26,38 @@ def generate_category_menu() -> InlineKeyboardMarkup:
 
 
 def model_menu(models: list[ModelSpec]) -> InlineKeyboardMarkup:
-    buttons = []
+    rows: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
     for model in models:
-        buttons.append([InlineKeyboardButton(text=model.display_name, callback_data=f'gen:model:{model.key}')])
-    buttons.append([InlineKeyboardButton(text='⬅️ Назад', callback_data='gen:back')])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+        label = _model_label(model)
+        row.append(InlineKeyboardButton(text=label, callback_data=f'gen:model:{model.key}'))
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append([InlineKeyboardButton(text='⬅️ Назад', callback_data='gen:back')])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _model_label(model: ModelSpec) -> str:
+    icon_map = {
+        'nano_banana': '🍌',
+        'nano_banana_pro': '⭐',
+        'nano_banana_edit': '🛠️',
+    }
+    icon = icon_map.get(model.key, '✨')
+    return f'{icon} {model.display_name}'
+
+
+def ref_mode_menu() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text='Без референсов', callback_data='gen:refmode:none')],
+            [InlineKeyboardButton(text='С референсами', callback_data='gen:refmode:has')],
+            [InlineKeyboardButton(text='⬅️ Назад', callback_data='gen:back')],
+        ]
+    )
 
 
 def option_menu(option: OptionSpec, selected: str) -> InlineKeyboardMarkup:
@@ -38,6 +65,49 @@ def option_menu(option: OptionSpec, selected: str) -> InlineKeyboardMarkup:
     for val in option.values:
         marker = '[x] ' if val.value == selected else ''
         rows.append([InlineKeyboardButton(text=f'{marker}{val.label}', callback_data=f'gen:opt:{option.key}:{val.value}')])
+    rows.append([InlineKeyboardButton(text='⬅️ Назад', callback_data='gen:options:back')])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def options_panel(
+    model: ModelSpec,
+    options: dict[str, str],
+    outputs: int,
+    max_outputs: int,
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for opt in model.options:
+        if opt.ui_hidden:
+            continue
+        rows.append([InlineKeyboardButton(text=f'— {opt.label} —', callback_data='gen:noop')])
+        line: list[InlineKeyboardButton] = []
+        selected = options.get(opt.key, opt.default)
+        for value in opt.values:
+            marker = '✅ ' if value.value == selected else ''
+            line.append(
+                InlineKeyboardButton(
+                    text=f'{marker}{value.label}',
+                    callback_data=f'gen:opt:{opt.key}:{value.value}',
+                )
+            )
+            if len(line) == 2:
+                rows.append(line)
+                line = []
+        if line:
+            rows.append(line)
+
+    rows.append([InlineKeyboardButton(text='— Количество —', callback_data='gen:noop')])
+    line = []
+    for i in range(1, max_outputs + 1):
+        marker = '✅ ' if i == outputs else ''
+        line.append(InlineKeyboardButton(text=f'{marker}{i}', callback_data=f'gen:outputs:{i}'))
+        if len(line) == 4:
+            rows.append(line)
+            line = []
+    if line:
+        rows.append(line)
+
+    rows.append([InlineKeyboardButton(text='➡️ Далее', callback_data='gen:options:next')])
     rows.append([InlineKeyboardButton(text='⬅️ Назад', callback_data='gen:options:back')])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

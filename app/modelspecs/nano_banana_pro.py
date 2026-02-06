@@ -9,6 +9,7 @@ NANO_BANANA_PRO = ModelSpec(
     model_id='nano-banana-pro',
     model_type='image',
     display_name='Nano Banana Pro',
+    tagline='Больше деталей и качество. Можно добавлять референсы.',
     options=[
         OptionSpec(
             key='output_format',
@@ -50,8 +51,10 @@ NANO_BANANA_PRO = ModelSpec(
                 OptionValue('has', 'С референсами', 'ref_has'),
             ],
             required=False,
+            ui_hidden=True,
         ),
     ],
     supports_reference_images=True,
+    max_reference_images=8,
     allows_n=False,
 )

@@ -5,7 +5,6 @@ import os
 from typing import Dict, List, Optional
 
 from aiogram import Bot
-from aiogram.types import InputMediaPhoto
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -190,15 +189,25 @@ class PollManager:
             await self.bot.send_message(telegram_id, 'Генерация завершена, но ссылки не получены.')
             return
         try:
-            if len(urls) == 1:
-                await self.bot.send_photo(telegram_id, urls[0])
-            else:
-                media = [InputMediaPhoto(media=u) for u in urls[:10]]
-                await self.bot.send_media_group(telegram_id, media=media)
+            for url in urls:
+                try:
+                    await self.bot.send_document(telegram_id, url, caption='Изображение без сжатия')
+                except Exception as exc:
+                    logger.warning('send_document_failed', url=url, error=str(exc))
+                if self._is_image_url(url):
+                    try:
+                        await self.bot.send_photo(telegram_id, url, caption='Сжатая версия')
+                    except Exception as exc:
+                        logger.warning('send_photo_failed', url=url, error=str(exc))
             await self.bot.send_message(telegram_id, '✅ Готово.')
         except Exception as exc:
             logger.warning('deliver_failed', error=str(exc))
             await self.bot.send_message(telegram_id, 'Не удалось отправить результат. Попробуйте позже.')
+
+    @staticmethod
+    def _is_image_url(url: str) -> bool:
+        lowered = url.lower()
+        return lowered.endswith(('.png', '.jpg', '.jpeg', '.webp'))
 
     async def _notify_failure(self, telegram_id: int, msg: Optional[str]) -> None:
         text = 'Генерация не удалась.'

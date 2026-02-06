@@ -1,15 +1,15 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from app.modelspecs.base import ModelSpec, OptionSpec, OptionValue
 
 
-NANO_BANANA = ModelSpec(
-    key='nano_banana',
+NANO_BANANA_EDIT = ModelSpec(
+    key='nano_banana_edit',
     provider='kie',
-    model_id='google/nano-banana',
+    model_id='google/nano-banana-edit',
     model_type='image',
-    display_name='Nano Banana',
-    tagline='Быстрые генерации по вашему описанию.',
+    display_name='Nano Banana Edit',
+    tagline='Редактирование по вашим фотографиям.',
     options=[
         OptionSpec(
             key='output_format',
@@ -33,7 +33,8 @@ NANO_BANANA = ModelSpec(
             ],
         ),
     ],
-    supports_reference_images=False,
-    max_reference_images=0,
+    requires_reference_images=True,
+    image_input_key='image_urls',
+    max_reference_images=10,
     allows_n=False,
 )

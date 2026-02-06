@@ -18,6 +18,7 @@ class OptionSpec:
     values: List[OptionValue]
     default: str
     required: bool = True
+    ui_hidden: bool = False
 
 
 @dataclass
@@ -29,6 +30,10 @@ class ModelSpec:
     display_name: str
     options: List[OptionSpec]
     supports_reference_images: bool = False
+    requires_reference_images: bool = False
+    image_input_key: str = 'image_input'
+    max_reference_images: int = 8
+    tagline: str = ''
     allows_n: bool = False
 
     def option_by_key(self, key: str) -> Optional[OptionSpec]:
@@ -55,6 +60,6 @@ class ModelSpec:
                 continue
             value = options.get(opt.key, opt.default)
             payload[opt.key] = value
-        if self.supports_reference_images and image_inputs:
-            payload['image_input'] = image_inputs
+        if (self.supports_reference_images or self.requires_reference_images) and image_inputs:
+            payload[self.image_input_key] = image_inputs
         return payload

@@ -3,10 +3,10 @@
 
 class GenerateFlow(StatesGroup):
     choosing_model = State()
+    choosing_ref_mode = State()
     entering_prompt = State()
     choosing_options = State()
     collecting_refs = State()
-    choosing_outputs = State()
     confirming = State()
 
 

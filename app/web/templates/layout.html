@@ -1,0 +1,132 @@
+﻿<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title }}</title>
+    <style>
+      :root {
+        --bg: #0f1b2b;
+        --card: #18283f;
+        --text: #e7eef7;
+        --muted: #9ab0c8;
+        --accent: #3ccf91;
+        --line: #2b3f59;
+        --danger: #ff7a7a;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(120deg, #0f1b2b 0%, #13253b 50%, #0f1b2b 100%);
+        color: var(--text);
+        padding: 28px;
+      }
+      a { color: inherit; }
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+      .brand {
+        font-size: 20px;
+        font-weight: 700;
+      }
+      nav {
+        display: flex;
+        gap: 12px;
+      }
+      nav a {
+        text-decoration: none;
+        padding: 6px 10px;
+        border-radius: 8px;
+        color: var(--muted);
+        border: 1px solid transparent;
+      }
+      nav a.active {
+        color: var(--text);
+        border-color: var(--line);
+        background: #122135;
+      }
+      .logout {
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 14px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+      .card {
+        background: var(--card);
+        border-radius: 14px;
+        padding: 16px;
+        border: 1px solid var(--line);
+      }
+      .card h3 { margin: 0 0 8px; font-size: 14px; color: var(--muted); }
+      .card .value { font-size: 22px; font-weight: 700; }
+      .section {
+        background: var(--card);
+        border-radius: 14px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        margin-bottom: 16px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th, td {
+        text-align: left;
+        padding: 8px 6px;
+        border-bottom: 1px solid var(--line);
+      }
+      th { color: var(--muted); font-weight: 600; }
+      .muted { color: var(--muted); }
+      .form-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+        align-items: end;
+      }
+      label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px; }
+      input {
+        width: 100%;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid #2b3f59;
+        background: #0f1b2b;
+        color: var(--text);
+      }
+      button {
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: none;
+        background: var(--accent);
+        color: #062015;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .notice { color: var(--accent); font-size: 13px; margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <div class="brand">Renderis Admin</div>
+      <nav>
+        <a href="/admin" class="{{ 'active' if active_tab == 'dashboard' else '' }}">Дашборд</a>
+        <a href="/admin/products" class="{{ 'active' if active_tab == 'products' else '' }}">Товары</a>
+        <a href="/admin/settings" class="{{ 'active' if active_tab == 'settings' else '' }}">Настройки</a>
+      </nav>
+      <a class="logout" href="/logout">Выйти</a>
+    </div>
+
+    {% block content %}{% endblock %}
+  </body>
+</html>
+
