@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.admin import admin_menu
+from app.bot.utils import safe_cleanup_callback
 from app.bot.states import AdminFlow
 from app.config import get_settings
 from app.db.models import User
@@ -39,7 +40,7 @@ async def admin_menu_cmd(message: Message, session: AsyncSession) -> None:
     if not await _is_admin(session, message.from_user.id):
         await message.answer('Недостаточно прав.')
         return
-    await message.answer('Админ-панель:', reply_markup=admin_menu())
+    await message.answer('🛠️ Админ-панель:', reply_markup=admin_menu())
 
 
 @router.callback_query(F.data == 'admin:set_price')
@@ -50,6 +51,7 @@ async def admin_set_price(callback: CallbackQuery, state: FSMContext, session: A
     await state.set_state(AdminFlow.setting_price)
     await callback.message.answer('Формат: model_key option_key price_credits. Пример: nano_banana base 5')
     await callback.answer()
+    await safe_cleanup_callback(callback)
 
 
 @router.message(AdminFlow.setting_price)
@@ -78,6 +80,7 @@ async def admin_bulk(callback: CallbackQuery, state: FSMContext, session: AsyncS
     await state.set_state(AdminFlow.bulk_multiplier)
     await callback.message.answer('Введите множитель, например 1.1 или 0.9')
     await callback.answer()
+    await safe_cleanup_callback(callback)
 
 
 @router.message(AdminFlow.bulk_multiplier)
@@ -102,6 +105,7 @@ async def admin_ref_create(callback: CallbackQuery, state: FSMContext, session: 
     await state.set_state(AdminFlow.create_referral)
     await callback.message.answer('Введите скидку в процентах (например 10)')
     await callback.answer()
+    await safe_cleanup_callback(callback)
 
 
 @router.message(AdminFlow.create_referral)
@@ -128,10 +132,12 @@ async def admin_ref_list(callback: CallbackQuery, session: AsyncSession) -> None
     if not codes:
         await callback.message.answer('Кодов нет.')
         await callback.answer()
+        await safe_cleanup_callback(callback)
         return
     text = '\n'.join([f'{c} - {pct}% - использований: {cnt} - {"активен" if act else "неактивен"}' for c, pct, cnt, act in codes])
     await callback.message.answer(text)
     await callback.answer()
+    await safe_cleanup_callback(callback)
 
 
 @router.callback_query(F.data == 'admin:promo:create')
@@ -142,6 +148,7 @@ async def admin_promo_create(callback: CallbackQuery, state: FSMContext, session
     await state.set_state(AdminFlow.create_promo)
     await callback.message.answer('Формат: количество credits. Пример: 50 20')
     await callback.answer()
+    await safe_cleanup_callback(callback)
 
 
 @router.message(AdminFlow.create_promo)
@@ -193,6 +200,7 @@ async def admin_stats(callback: CallbackQuery, session: AsyncSession) -> None:
     await callback.message.answer(fmt('7 дней', week))
     await callback.message.answer(fmt('30 дней', month))
     await callback.answer()
+    await safe_cleanup_callback(callback)
 
 
 @router.callback_query(F.data == 'admin:grant')
@@ -203,6 +211,7 @@ async def admin_grant(callback: CallbackQuery, state: FSMContext, session: Async
     await state.set_state(AdminFlow.grant_credits)
     await callback.message.answer('Формат: telegram_id credits (пример: 123456 50)')
     await callback.answer()
+    await safe_cleanup_callback(callback)
 
 
 @router.message(AdminFlow.grant_credits)
@@ -233,6 +242,7 @@ async def admin_ban(callback: CallbackQuery, state: FSMContext, session: AsyncSe
     await state.set_state(AdminFlow.ban_user)
     await callback.message.answer('Формат: telegram_id on/off (пример: 123456 on)')
     await callback.answer()
+    await safe_cleanup_callback(callback)
 
 
 @router.message(AdminFlow.ban_user)
@@ -269,3 +279,4 @@ async def admin_free_mode(callback: CallbackQuery, session: AsyncSession) -> Non
     await session.commit()
     await callback.message.answer(f'Admin free-mode теперь: {"ON" if not current else "OFF"}')
     await callback.answer()
+    await safe_cleanup_callback(callback)

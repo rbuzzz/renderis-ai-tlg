@@ -65,6 +65,37 @@ python -m app.main
 - `/ref CODE` — применить рефкод
 - `/promo CODE` — применить промо‑код
 
+## Веб‑админка (опционально)
+1. В `.env`/`/etc/renderis-bot.env` включите:
+
+```
+ADMIN_WEB_ENABLED=true
+ADMIN_WEB_HOST=127.0.0.1
+ADMIN_WEB_PORT=9001
+ADMIN_WEB_USERNAME=admin
+ADMIN_WEB_PASSWORD=your_password
+ADMIN_WEB_SECRET=your_secret
+```
+
+2. Запуск вручную:
+
+```bash
+python -m app.web.main
+```
+
+3. Или через systemd:
+
+```bash
+sudo cp systemd/renderis-admin-web.service /etc/systemd/system/renderis-admin-web.service
+sudo systemctl daemon-reload
+sudo systemctl enable renderis-admin-web
+sudo systemctl start renderis-admin-web
+```
+
+4. Откройте через браузер:
+- локально: `http://127.0.0.1:9001`
+- через NPM/прокси: проксируйте на `127.0.0.1:9001`
+
 ## Деплой на Ubuntu
 1. Создайте пользователя и папку:
 
@@ -120,6 +151,6 @@ pg_dump -U bot -h localhost renderis_bot > backup.sql
 3. Добавьте цены в таблицу `prices` (или используйте `app/scripts/seed.py`).
 
 ## Примечания
-- Референс‑изображения для Nano Banana Pro временно выключены. Архитектура готова к добавлению S3/R2 и передачи URL.
+- Референс‑изображения Nano Banana Pro поддерживаются через локальное хранилище и публичные URL.
 - В `.env` можно задать `NSFW_BLOCKLIST` (через запятую) для простого стоп‑листа.
 - Все сообщения пользователю на русском.

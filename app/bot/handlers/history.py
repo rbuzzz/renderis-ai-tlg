@@ -11,6 +11,7 @@ from app.services.credits import CreditsService
 from app.services.generation import GenerationService
 from app.services.kie_client import KieClient
 from app.services.poller_runtime import get_poller
+from app.bot.utils import safe_cleanup_callback
 from app.utils.text import escape_html
 
 
@@ -34,8 +35,9 @@ async def history_list(callback: CallbackQuery, session: AsyncSession) -> None:
     )
     items = list(result.scalars().all())
     if not items:
-        await callback.message.answer('История пуста.')
+        await callback.message.answer('🕘 История пуста.')
         await callback.answer()
+        await safe_cleanup_callback(callback)
         return
 
     for gen in items:
@@ -54,6 +56,7 @@ async def history_list(callback: CallbackQuery, session: AsyncSession) -> None:
         )
         await callback.message.answer(text, reply_markup=keyboard)
     await callback.answer()
+    await safe_cleanup_callback(callback)
 
 
 @router.callback_query(F.data.startswith('history:open:'))
@@ -75,16 +78,18 @@ async def history_open(callback: CallbackQuery, session: AsyncSession) -> None:
     )
     tasks = list(result.scalars().all())
     if not tasks:
-        await callback.message.answer('Результаты еще не готовы.')
+        await callback.message.answer('⏳ Результаты еще не готовы.')
         await callback.answer()
+        await safe_cleanup_callback(callback)
         return
 
     urls = []
     for task in tasks:
         urls.extend(task.result_urls or [])
     if not urls:
-        await callback.message.answer('Ссылки не найдены.')
+        await callback.message.answer('⚠️ Ссылки не найдены.')
         await callback.answer()
+        await safe_cleanup_callback(callback)
         return
     if len(urls) == 1:
         await callback.message.answer_photo(urls[0])
@@ -92,6 +97,7 @@ async def history_open(callback: CallbackQuery, session: AsyncSession) -> None:
         media = [InputMediaPhoto(media=u) for u in urls[:10]]
         await callback.message.answer_media_group(media=media)
     await callback.answer()
+    await safe_cleanup_callback(callback)
 
 
 @router.callback_query(F.data.startswith('history:regen:'))
@@ -128,5 +134,6 @@ async def history_regen(callback: CallbackQuery, session: AsyncSession) -> None:
         for task_id in task_ids:
             poller.schedule(task_id)
 
-    await callback.message.answer('Регенерация запущена.')
+    await callback.message.answer('✅ Регенерация запущена.')
     await callback.answer()
+    await safe_cleanup_callback(callback)

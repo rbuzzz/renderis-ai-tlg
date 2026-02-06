@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Renderis Admin — Вход</title>
+    <style>
+      :root {
+        --bg: #0f1b2b;
+        --card: #18283f;
+        --text: #e7eef7;
+        --muted: #9ab0c8;
+        --accent: #3ccf91;
+        --danger: #ff7a7a;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: radial-gradient(900px 450px at 20% -10%, #243b55 0%, #0f1b2b 60%);
+        color: var(--text);
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+      }
+      .card {
+        width: 100%;
+        max-width: 420px;
+        background: var(--card);
+        border-radius: 16px;
+        padding: 28px;
+        box-shadow: 0 15px 40px rgba(0,0,0,0.35);
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 22px;
+      }
+      p { margin: 0 0 20px; color: var(--muted); }
+      label { display: block; margin: 12px 0 6px; font-size: 14px; color: var(--muted); }
+      input {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid #2b3f59;
+        background: #0f1b2b;
+        color: var(--text);
+      }
+      button {
+        width: 100%;
+        margin-top: 16px;
+        padding: 12px 14px;
+        border: none;
+        border-radius: 10px;
+        background: var(--accent);
+        color: #062015;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .error {
+        margin-top: 12px;
+        color: var(--danger);
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Вход в админ-панель</h1>
+      <p>Введите логин и пароль администратора.</p>
+      <form method="post" action="/login">
+        <label for="username">Логин</label>
+        <input id="username" name="username" autocomplete="username" />
+        <label for="password">Пароль</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" />
+        <button type="submit">Войти</button>
+      </form>
+      {% if error %}
+      <div class="error">{{ error }}</div>
+      {% endif %}
+    </div>
+  </body>
+</html>

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.services.payments import PaymentsService
 from app.services.credits import CreditsService
+from app.bot.utils import safe_cleanup_callback
 
 
 router = Router()
@@ -19,8 +20,9 @@ async def buy_credits(callback: CallbackQuery, session: AsyncSession) -> None:
     service = PaymentsService(session)
     products = await service.list_products()
     if not products:
-        await callback.message.answer('Пакеты не настроены. Обратитесь к администратору.')
+        await callback.message.answer('⚠️ Пакеты не настроены. Обратитесь к администратору.')
         await callback.answer()
+        await safe_cleanup_callback(callback)
         return
     buttons = []
     for p in products:
@@ -30,8 +32,9 @@ async def buy_credits(callback: CallbackQuery, session: AsyncSession) -> None:
                 callback_data=f'pay:product:{p.id}',
             )
         ])
-    await callback.message.answer('Выберите пакет:', reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+    await callback.message.answer('💳 Выберите пакет:', reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
     await callback.answer()
+    await safe_cleanup_callback(callback)
 
 
 @router.callback_query(F.data.startswith('pay:product:'))
@@ -56,6 +59,7 @@ async def pay_product(callback: CallbackQuery, session: AsyncSession) -> None:
         prices=prices,
     )
     await callback.answer()
+    await safe_cleanup_callback(callback)
 
 
 @router.pre_checkout_query()

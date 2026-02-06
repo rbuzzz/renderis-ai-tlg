@@ -6,6 +6,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.main import main_menu
+from app.bot.utils import safe_cleanup_callback
 from app.config import get_settings
 from app.services.credits import CreditsService
 from app.utils.text import escape_html
@@ -23,9 +24,9 @@ async def cmd_start(message: Message, session: AsyncSession) -> None:
     await session.commit()
 
     text = (
-        f"Привет, {escape_html(message.from_user.full_name)}!\n"
-        f"Баланс: <b>{user.balance_credits}</b> кредитов.\n"
-        "Используя бот, вы подтверждаете соблюдение законов и правил сервиса."
+        f"👋 Привет, {escape_html(message.from_user.full_name)}!\n"
+        f"💰 Баланс: <b>{user.balance_credits}</b> кредитов.\n"
+        "📜 Используя бот, вы подтверждаете соблюдение законов и правил сервиса."
     )
     if bonus_applied:
         text += f"\nБонус за старт: +{settings.signup_bonus_credits} кредитов."
@@ -35,7 +36,8 @@ async def cmd_start(message: Message, session: AsyncSession) -> None:
 @router.callback_query(F.data == 'help')
 async def show_help(callback: CallbackQuery) -> None:
     await callback.message.answer(
-        'Это бот для генерации изображений. Используйте меню ниже.\n'
+        'ℹ️ Это бот для генерации изображений. Используйте меню ниже.\n'
         'Команды: /start /ref CODE /promo CODE /admin (для админов).'
     )
     await callback.answer()
+    await safe_cleanup_callback(callback)

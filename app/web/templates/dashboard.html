@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Renderis Admin — Панель</title>
+    <style>
+      :root {
+        --bg: #0f1b2b;
+        --card: #18283f;
+        --text: #e7eef7;
+        --muted: #9ab0c8;
+        --accent: #3ccf91;
+        --line: #2b3f59;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(120deg, #0f1b2b 0%, #13253b 50%, #0f1b2b 100%);
+        color: var(--text);
+        padding: 28px;
+      }
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+      }
+      .topbar a {
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 14px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+      .card {
+        background: var(--card);
+        border-radius: 14px;
+        padding: 16px;
+        border: 1px solid var(--line);
+      }
+      .card h3 { margin: 0 0 8px; font-size: 14px; color: var(--muted); }
+      .card .value { font-size: 22px; font-weight: 700; }
+      .section {
+        background: var(--card);
+        border-radius: 14px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        margin-bottom: 16px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th, td {
+        text-align: left;
+        padding: 8px 6px;
+        border-bottom: 1px solid var(--line);
+      }
+      th { color: var(--muted); font-weight: 600; }
+      .muted { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <h1>Админ‑панель Renderis</h1>
+      <a href="/logout">Выйти</a>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Пользователи</h3>
+        <div class="value">{{ users_count }}</div>
+      </div>
+      <div class="card">
+        <h3>Генерации</h3>
+        <div class="value">{{ generations_count }}</div>
+      </div>
+      <div class="card">
+        <h3>Заказы</h3>
+        <div class="value">{{ orders_count }}</div>
+      </div>
+      <div class="card">
+        <h3>Выручка (Stars)</h3>
+        <div class="value">{{ stars_revenue }}</div>
+      </div>
+      <div class="card">
+        <h3>Кредитов выдано</h3>
+        <div class="value">{{ credits_issued }}</div>
+      </div>
+      <div class="card">
+        <h3>Кредитов потрачено</h3>
+        <div class="value">{{ credits_spent }}</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Последние заказы</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Пользователь</th>
+            <th>Stars</th>
+            <th>Кредиты</th>
+            <th>Статус</th>
+            <th>Время</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in recent_orders %}
+          <tr>
+            <td>{{ o.id }}</td>
+            <td class="muted">{{ o.user_id }}</td>
+            <td>{{ o.stars_amount }}</td>
+            <td>{{ o.credits_amount }}</td>
+            <td>{{ o.status }}</td>
+            <td class="muted">{{ o.created_at }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="muted">Нет данных</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h3>Последние генерации</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Пользователь</th>
+            <th>Модель</th>
+            <th>Статус</th>
+            <th>Время</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in recent_gens %}
+          <tr>
+            <td>{{ g.id }}</td>
+            <td class="muted">{{ g.user_id }}</td>
+            <td>{{ g.model }}</td>
+            <td>{{ g.status }}</td>
+            <td class="muted">{{ g.created_at }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="muted">Нет данных</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </body>
+</html>

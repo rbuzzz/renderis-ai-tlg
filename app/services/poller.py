@@ -5,7 +5,7 @@ import os
 from typing import Dict, List, Optional
 
 from aiogram import Bot
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
+from aiogram.types import InputMediaPhoto
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -195,13 +195,7 @@ class PollManager:
             else:
                 media = [InputMediaPhoto(media=u) for u in urls[:10]]
                 await self.bot.send_media_group(telegram_id, media=media)
-            await self.bot.send_message(
-                telegram_id,
-                'Готово. Хотите сообщить о проблеме?',
-                reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[[InlineKeyboardButton(text='Сообщить', callback_data=f'report:{generation.id}')]]
-                ),
-            )
+            await self.bot.send_message(telegram_id, '✅ Готово.')
         except Exception as exc:
             logger.warning('deliver_failed', error=str(exc))
             await self.bot.send_message(telegram_id, 'Не удалось отправить результат. Попробуйте позже.')

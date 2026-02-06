@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     public_file_base_url: str = Field('https://tonmd.cloud/ref', alias='PUBLIC_FILE_BASE_URL')
     max_reference_images: int = Field(8, alias='MAX_REFERENCE_IMAGES')
 
+    # Admin web
+    admin_web_enabled: bool = Field(False, alias='ADMIN_WEB_ENABLED')
+    admin_web_host: str = Field('127.0.0.1', alias='ADMIN_WEB_HOST')
+    admin_web_port: int = Field(9001, alias='ADMIN_WEB_PORT')
+    admin_web_username: str = Field('admin', alias='ADMIN_WEB_USERNAME')
+    admin_web_password: str = Field('', alias='ADMIN_WEB_PASSWORD')
+    admin_web_secret: str = Field('change-me', alias='ADMIN_WEB_SECRET')
+
     # Polling
     poll_max_wait_seconds: int = Field(180, alias='POLL_MAX_WAIT_SECONDS')
     poll_backoff_sequence: str = Field('1,2,3,5,8,13,20', alias='POLL_BACKOFF_SEQUENCE')
