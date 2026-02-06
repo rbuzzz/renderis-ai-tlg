@@ -5,6 +5,7 @@ import uuid
 from typing import Any, Dict, List
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
@@ -35,12 +36,21 @@ def _refs_menu() -> InlineKeyboardMarkup:
         ]
     )
 
+async def _cleanup_callback_message(callback: CallbackQuery) -> None:
+    try:
+        await callback.message.delete()
+    except TelegramBadRequest:
+        return
+    except Exception:
+        return
+
 
 @router.callback_query(F.data == 'gen:start')
 async def gen_start(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     await callback.message.answer('Выберите категорию:', reply_markup=generate_category_menu())
     await callback.answer()
+    await _cleanup_callback_message(callback)
 
 
 @router.callback_query(F.data == 'gen:category:image')
@@ -48,12 +58,14 @@ async def gen_category(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(GenerateFlow.choosing_model)
     await callback.message.answer('Выберите модель:', reply_markup=model_menu(list_models()))
     await callback.answer()
+    await _cleanup_callback_message(callback)
 
 
 @router.callback_query(F.data == 'gen:category:video')
 async def gen_category_video(callback: CallbackQuery) -> None:
     await callback.message.answer('Видео пока недоступно. Скоро добавим.')
     await callback.answer()
+    await _cleanup_callback_message(callback)
 
 
 @router.callback_query(F.data == 'gen:back')
@@ -61,6 +73,7 @@ async def gen_back(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     await callback.message.answer('Главное меню', reply_markup=generate_category_menu())
     await callback.answer()
+    await _cleanup_callback_message(callback)
 
 
 @router.callback_query(F.data.startswith('gen:model:'))
@@ -74,6 +87,7 @@ async def gen_model(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(GenerateFlow.entering_prompt)
     await callback.message.answer(f'Введите промпт для {model.display_name}:')
     await callback.answer()
+    await _cleanup_callback_message(callback)
 
 
 @router.message(GenerateFlow.entering_prompt)
@@ -173,6 +187,7 @@ async def refs_done(callback: CallbackQuery, state: FSMContext) -> None:
     outputs = int((await state.get_data()).get('outputs', 1))
     await callback.message.answer('Сколько вариантов сгенерировать?', reply_markup=outputs_menu(get_settings().max_outputs_per_request, outputs))
     await callback.answer()
+    await _cleanup_callback_message(callback)
 
 
 @router.callback_query(F.data == 'gen:refs:skip')
@@ -185,6 +200,7 @@ async def refs_skip(callback: CallbackQuery, state: FSMContext) -> None:
     outputs = int(data.get('outputs', 1))
     await callback.message.answer('Сколько вариантов сгенерировать?', reply_markup=outputs_menu(get_settings().max_outputs_per_request, outputs))
     await callback.answer()
+    await _cleanup_callback_message(callback)
 
 
 @router.callback_query(F.data.startswith('gen:opt:'))
@@ -194,8 +210,23 @@ async def gen_option(callback: CallbackQuery, state: FSMContext) -> None:
     options: Dict[str, Any] = data.get('options', {})
     options[key] = value
     await state.update_data(options=options, opt_index=int(data.get('opt_index', 0)) + 1)
+
+    if key == 'reference_images' and value == 'has':
+        model = get_model(data.get('model_key', ''))
+        if model and model.supports_reference_images:
+            await state.set_state(GenerateFlow.collecting_refs)
+            await callback.message.answer(
+                'Отправьте до 8 референс-фото одним или несколькими сообщениями.\n'
+                'Когда закончите, нажмите "Готово".',
+                reply_markup=_refs_menu(),
+            )
+            await callback.answer()
+            await _cleanup_callback_message(callback)
+            return
+
     await _ask_option(callback.message, state)
     await callback.answer()
+    await _cleanup_callback_message(callback)
 
 
 @router.callback_query(F.data == 'gen:options:back')
@@ -205,6 +236,7 @@ async def gen_option_back(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(opt_index=idx)
     await _ask_option(callback.message, state)
     await callback.answer()
+    await _cleanup_callback_message(callback)
 
 
 @router.callback_query(F.data.startswith('gen:outputs:'))
@@ -214,10 +246,12 @@ async def gen_outputs(callback: CallbackQuery, state: FSMContext, session: Async
         await state.set_state(GenerateFlow.choosing_options)
         await _ask_option(callback.message, state)
         await callback.answer()
+        await _cleanup_callback_message(callback)
         return
     outputs = int(value)
     await state.update_data(outputs=outputs)
     await _show_preview(callback, state, session)
+    await _cleanup_callback_message(callback)
 
 
 async def _show_preview(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
@@ -286,6 +320,7 @@ async def gen_confirm(callback: CallbackQuery, state: FSMContext, session: Async
         msg = _error_text(str(exc))
         await callback.message.answer(msg)
         await callback.answer()
+        await _cleanup_callback_message(callback)
         return
     except KieError as exc:
         await session.commit()
@@ -299,6 +334,7 @@ async def gen_confirm(callback: CallbackQuery, state: FSMContext, session: Async
         else:
             await callback.message.answer('Не удалось создать задачу. Попробуйте позже.')
         await callback.answer()
+        await _cleanup_callback_message(callback)
         return
     finally:
         await kie.close()
@@ -315,6 +351,7 @@ async def gen_confirm(callback: CallbackQuery, state: FSMContext, session: Async
     await callback.message.answer('Задача запущена. Как только будет готово - отправлю результат.')
     await state.clear()
     await callback.answer()
+    await _cleanup_callback_message(callback)
 
 
 @router.callback_query(GenerateFlow.confirming, F.data == 'gen:edit:prompt')
@@ -322,6 +359,7 @@ async def gen_edit_prompt(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(GenerateFlow.entering_prompt)
     await callback.message.answer('Введите новый промпт:')
     await callback.answer()
+    await _cleanup_callback_message(callback)
 
 
 @router.callback_query(GenerateFlow.confirming, F.data == 'gen:edit:options')
@@ -330,6 +368,7 @@ async def gen_edit_options(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(GenerateFlow.choosing_options)
     await _ask_option(callback.message, state)
     await callback.answer()
+    await _cleanup_callback_message(callback)
 
 
 @router.callback_query(F.data == 'gen:cancel')
@@ -337,6 +376,7 @@ async def gen_cancel(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     await callback.message.answer('Отменено.')
     await callback.answer()
+    await _cleanup_callback_message(callback)
 
 
 async def _queue_position(session: AsyncSession) -> int:
