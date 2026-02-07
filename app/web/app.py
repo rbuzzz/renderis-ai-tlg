@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import secrets
+import uuid
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
@@ -10,10 +11,12 @@ from sqlalchemy import func, select
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
-from app.db.models import CreditLedger, Generation, Order, Price, User
+from app.db.models import CreditLedger, Generation, Order, Price, PromoCode, User
 from app.db.session import create_sessionmaker
 from app.modelspecs.registry import list_models
 from app.services.app_settings import AppSettingsService
+from app.services.kie_balance import KieBalanceService
+from app.services.promos import PromoService
 
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
@@ -366,6 +369,12 @@ def create_app() -> FastAPI:
             usd_per_star = await settings_service.get_float("usd_per_star", 0.013)
             usd_per_credit = round(stars_per_credit * usd_per_star, 6)
             kie_usd_per_credit = await settings_service.get_float("kie_usd_per_credit", 0.02)
+            kie_balance_service = KieBalanceService(session)
+            kie_balance_credits = await kie_balance_service.get_balance()
+            kie_balance_usd = round(kie_balance_credits * kie_usd_per_credit, 4)
+            kie_warn_green = await settings_service.get("kie_warn_green", "1000")
+            kie_warn_yellow = await settings_service.get("kie_warn_yellow", "500")
+            kie_warn_red = await settings_service.get("kie_warn_red", "200")
 
         return app.state.templates.TemplateResponse(
             "settings.html",
@@ -377,6 +386,11 @@ def create_app() -> FastAPI:
                 "usd_per_star": usd_per_star,
                 "usd_per_credit": usd_per_credit,
                 "kie_usd_per_credit": kie_usd_per_credit,
+                "kie_balance_credits": kie_balance_credits,
+                "kie_balance_usd": kie_balance_usd,
+                "kie_warn_green": kie_warn_green,
+                "kie_warn_yellow": kie_warn_yellow,
+                "kie_warn_red": kie_warn_red,
                 "saved": bool(saved),
             },
         )
@@ -387,12 +401,17 @@ def create_app() -> FastAPI:
         stars_per_credit: str = Form(""),
         usd_per_star: str = Form(""),
         kie_usd_per_credit: str = Form(""),
+        add_kie_credits: str = Form(""),
+        kie_warn_green: str = Form(""),
+        kie_warn_yellow: str = Form(""),
+        kie_warn_red: str = Form(""),
     ):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
 
         async with app.state.sessionmaker() as session:
             settings_service = AppSettingsService(session)
+            kie_balance_service = KieBalanceService(session)
             if stars_per_credit.strip():
                 parsed = _parse_float(stars_per_credit.strip())
                 if parsed is not None:
@@ -405,9 +424,201 @@ def create_app() -> FastAPI:
                 parsed = _parse_float(kie_usd_per_credit.strip())
                 if parsed is not None:
                     await settings_service.set("kie_usd_per_credit", str(parsed))
+            if add_kie_credits.strip():
+                parsed = _parse_int(add_kie_credits.strip())
+                if parsed is not None and parsed > 0:
+                    await kie_balance_service.add_credits(parsed)
+            if kie_warn_green.strip():
+                parsed = _parse_int(kie_warn_green.strip())
+                if parsed is not None:
+                    await settings_service.set("kie_warn_green", str(parsed))
+            if kie_warn_yellow.strip():
+                parsed = _parse_int(kie_warn_yellow.strip())
+                if parsed is not None:
+                    await settings_service.set("kie_warn_yellow", str(parsed))
+            if kie_warn_red.strip():
+                parsed = _parse_int(kie_warn_red.strip())
+                if parsed is not None:
+                    await settings_service.set("kie_warn_red", str(parsed))
             await session.commit()
 
         return RedirectResponse(url="/admin/settings?saved=1", status_code=302)
+
+    @app.get("/admin/promos", response_class=HTMLResponse)
+    async def admin_promos(request: Request, code: str | None = None, saved: int | None = None):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+
+        search_code = (code or "").strip().upper()
+        async with app.state.sessionmaker() as session:
+            batch_rows = await session.execute(
+                select(
+                    PromoCode.batch_id,
+                    func.min(PromoCode.created_at).label("created_at"),
+                    func.count(PromoCode.code).label("count"),
+                    func.max(PromoCode.credits_amount).label("credits_amount"),
+                )
+                .where(PromoCode.batch_id.is_not(None))
+                .group_by(PromoCode.batch_id)
+                .order_by(func.min(PromoCode.created_at).desc())
+            )
+            batches = [
+                {
+                    "batch_id": row.batch_id,
+                    "created_at": row.created_at,
+                    "count": row.count,
+                    "credits_amount": row.credits_amount,
+                }
+                for row in batch_rows.all()
+            ]
+
+            promo = None
+            if search_code:
+                result = await session.execute(
+                    select(PromoCode, User)
+                    .outerjoin(User, PromoCode.redeemed_by_user_id == User.id)
+                    .where(PromoCode.code == search_code)
+                )
+                row = result.first()
+                if row:
+                    promo_row, user = row
+                    status = "Не активирован"
+                    if promo_row.redeemed_by_user_id:
+                        status = "Активирован"
+                    elif not promo_row.active:
+                        status = "Отключён"
+                    redeemed_user = None
+                    user_balance = None
+                    if user:
+                        name = user.username or "-"
+                        redeemed_user = f"{user.telegram_id} ({name})"
+                        user_balance = user.balance_credits
+                    promo = {
+                        "code": promo_row.code,
+                        "credits_amount": promo_row.credits_amount,
+                        "batch_id": promo_row.batch_id,
+                        "status": status,
+                        "redeemed_user": redeemed_user,
+                        "user_balance": user_balance,
+                        "can_deactivate": promo_row.active and not promo_row.redeemed_by_user_id,
+                    }
+
+        return app.state.templates.TemplateResponse(
+            "promos.html",
+            {
+                "request": request,
+                "title": "Renderis Admin — Промо-коды",
+                "active_tab": "promos",
+                "batches": batches,
+                "promo": promo,
+                "search_code": search_code,
+                "saved": bool(saved),
+            },
+        )
+
+    @app.post("/admin/promos/create")
+    async def admin_promos_create(
+        request: Request,
+        amount: str = Form(""),
+        credits: str = Form(""),
+    ):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+
+        parsed_amount = _parse_int(amount.strip()) if amount.strip() else None
+        parsed_credits = _parse_int(credits.strip()) if credits.strip() else None
+        if not parsed_amount or not parsed_credits:
+            return RedirectResponse(url="/admin/promos", status_code=302)
+
+        batch_id = uuid.uuid4().hex
+        async with app.state.sessionmaker() as session:
+            service = PromoService(session)
+            await service.create_batch(parsed_amount, parsed_credits, admin_id=0, batch_id=batch_id)
+            await session.commit()
+
+        return RedirectResponse(url=f"/admin/promos/batch/{batch_id}", status_code=302)
+
+    @app.get("/admin/promos/batch/{batch_id}", response_class=HTMLResponse)
+    async def admin_promos_batch(request: Request, batch_id: str):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+
+        async with app.state.sessionmaker() as session:
+            rows_data = await session.execute(
+                select(PromoCode, User)
+                .outerjoin(User, PromoCode.redeemed_by_user_id == User.id)
+                .where(PromoCode.batch_id == batch_id)
+                .order_by(PromoCode.code)
+            )
+            rows = []
+            codes = []
+            for promo_row, user in rows_data.all():
+                status = "new"
+                if promo_row.redeemed_by_user_id:
+                    status = "redeemed"
+                elif not promo_row.active:
+                    status = "inactive"
+                redeemed_user = None
+                user_balance = None
+                if user:
+                    name = user.username or "-"
+                    redeemed_user = f"{user.telegram_id} ({name})"
+                    user_balance = user.balance_credits
+                rows.append(
+                    {
+                        "code": promo_row.code,
+                        "status": status,
+                        "redeemed_user": redeemed_user,
+                        "user_balance": user_balance,
+                        "can_deactivate": promo_row.active and not promo_row.redeemed_by_user_id,
+                    }
+                )
+                codes.append(promo_row.code)
+
+            summary = await session.execute(
+                select(
+                    func.min(PromoCode.created_at).label("created_at"),
+                    func.count(PromoCode.code).label("count"),
+                    func.max(PromoCode.credits_amount).label("credits_amount"),
+                ).where(PromoCode.batch_id == batch_id)
+            )
+            summary_row = summary.first()
+            batch = {
+                "batch_id": batch_id,
+                "created_at": summary_row.created_at if summary_row else None,
+                "count": summary_row.count if summary_row else 0,
+                "credits_amount": summary_row.credits_amount if summary_row else 0,
+            }
+
+        return app.state.templates.TemplateResponse(
+            "promo_batch.html",
+            {
+                "request": request,
+                "title": "Renderis Admin — Батч промо-кодов",
+                "active_tab": "promos",
+                "batch": batch,
+                "rows": rows,
+                "codes": codes,
+            },
+        )
+
+    @app.post("/admin/promos/code/{code}/deactivate")
+    async def admin_promos_deactivate(request: Request, code: str):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+
+        form = await request.form()
+        next_url = str(form.get("next") or "/admin/promos")
+        if not next_url.startswith("/"):
+            next_url = "/admin/promos"
+
+        async with app.state.sessionmaker() as session:
+            promo = await session.get(PromoCode, code.strip().upper())
+            if promo and not promo.redeemed_by_user_id:
+                promo.active = False
+                await session.commit()
+
+        return RedirectResponse(url=next_url, status_code=302)
 
     return app
 

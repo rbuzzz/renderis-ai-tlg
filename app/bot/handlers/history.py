@@ -120,7 +120,7 @@ async def history_regen(callback: CallbackQuery, session: AsyncSession) -> None:
         return
 
     kie = KieClient()
-    service = GenerationService(session, kie)
+    service = GenerationService(session, kie, callback.message.bot)
     new_gen = await service.create_generation(user, model, gen.prompt, gen.options or {}, gen.outputs_requested)
     await session.commit()
     await kie.close()

@@ -27,6 +27,43 @@
           <input name="kie_usd_per_credit" value="{{ kie_usd_per_credit }}" />
         </div>
       </div>
+
+      <div style="height: 16px;"></div>
+      <h3 style="margin: 0 0 8px;">Баланс Kie</h3>
+      <div class="form-row">
+        <div>
+          <label>Добавить кредиты Kie</label>
+          <input name="add_kie_credits" placeholder="Например 1000" />
+        </div>
+        <div>
+          <label>Текущий баланс (кредиты)</label>
+          <input value="{{ kie_balance_credits }}" readonly />
+        </div>
+        <div>
+          <label>Баланс (USD)</label>
+          <input value="{{ kie_balance_usd }}" readonly />
+        </div>
+      </div>
+
+      <div style="height: 16px;"></div>
+      <h3 style="margin: 0 0 8px;">Оповещения по балансу</h3>
+      <p class="muted" style="margin-top: 6px;">
+        При снижении ниже порога бот отправит уведомление администраторам. Уровни: зелёный → жёлтый → красный.
+      </p>
+      <div class="form-row">
+        <div>
+          <label>Зелёный порог (кредиты)</label>
+          <input name="kie_warn_green" value="{{ kie_warn_green }}" />
+        </div>
+        <div>
+          <label>Жёлтый порог (кредиты)</label>
+          <input name="kie_warn_yellow" value="{{ kie_warn_yellow }}" />
+        </div>
+        <div>
+          <label>Красный порог (кредиты)</label>
+          <input name="kie_warn_red" value="{{ kie_warn_red }}" />
+        </div>
+      </div>
       <div style="margin-top: 12px;">
         <button type="submit">Сохранить</button>
       </div>

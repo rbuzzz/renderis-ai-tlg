@@ -1,0 +1,81 @@
+﻿{% extends "layout.html" %}
+{% block content %}
+  <div class="section">
+    <h3>Промо-коды</h3>
+    {% if saved %}
+    <div class="notice">Изменения сохранены.</div>
+    {% endif %}
+
+    <form method="post" action="/admin/promos/create" class="form-row" style="margin-bottom: 16px;">
+      <div>
+        <label>Количество кодов</label>
+        <input name="amount" placeholder="Например 50" />
+      </div>
+      <div>
+        <label>Кредитов за код</label>
+        <input name="credits" placeholder="Например 10" />
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button type="submit">Создать батч</button>
+      </div>
+    </form>
+
+    <form method="get" action="/admin/promos" class="form-row" style="margin-bottom: 16px;">
+      <div>
+        <label>Поиск промо-кода</label>
+        <input name="code" value="{{ search_code }}" placeholder="Введите промо-код" />
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button type="submit">Найти</button>
+      </div>
+    </form>
+
+    {% if promo is not none %}
+      <div class="card" style="margin-bottom: 16px;">
+        <div style="display:flex; justify-content: space-between; align-items:center;">
+          <div>
+            <div style="font-weight:700;">Код: {{ promo.code }}</div>
+            <div class="subtle">Батч: {{ promo.batch_id or '—' }}</div>
+            <div class="subtle">Кредиты: {{ promo.credits_amount }}</div>
+            <div class="subtle">Статус: {{ promo.status }}</div>
+            <div class="subtle">Активирован: {{ promo.redeemed_user or '—' }}</div>
+            <div class="subtle">Баланс пользователя: {{ promo.user_balance or '—' }}</div>
+          </div>
+          {% if promo.can_deactivate %}
+            <form method="post" action="/admin/promos/code/{{ promo.code }}/deactivate">
+              <input type="hidden" name="next" value="/admin/promos?code={{ promo.code }}" />
+              <button type="submit">Деактивировать</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+
+    <table>
+      <thead>
+        <tr>
+          <th>Батч</th>
+          <th>Дата</th>
+          <th>Кодов</th>
+          <th>Кредитов за код</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in batches %}
+        <tr>
+          <td><a class="row-link" href="/admin/promos/batch/{{ b.batch_id }}">{{ b.batch_id }}</a></td>
+          <td class="muted">{{ b.created_at }}</td>
+          <td>{{ b.count }}</td>
+          <td>{{ b.credits_amount }}</td>
+          <td><a class="row-link" href="/admin/promos/batch/{{ b.batch_id }}">Открыть</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="muted">Батчи не найдены</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

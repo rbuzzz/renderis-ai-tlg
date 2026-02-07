@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.db.models import Generation, GenerationTask, User
 from app.modelspecs.base import ModelSpec
 from app.services.credits import CreditsService
+from app.services.kie_balance import KieBalanceService
 from app.services.kie_client import KieClient, KieError
 from app.services.pricing import PricingService
 from app.utils.logging import get_logger
@@ -20,10 +21,11 @@ logger = get_logger('generation')
 
 
 class GenerationService:
-    def __init__(self, session: AsyncSession, kie: KieClient) -> None:
+    def __init__(self, session: AsyncSession, kie: KieClient, bot=None) -> None:
         self.session = session
         self.kie = kie
         self.settings = get_settings()
+        self.bot = bot
 
     async def _count_active_jobs(self, user: User) -> int:
         result = await self.session.execute(
@@ -60,6 +62,7 @@ class GenerationService:
         pricing = PricingService(self.session)
         discount = user.referral_discount_pct or 0
         breakdown = await pricing.resolve_cost(model, options, outputs, discount)
+        provider_credits = await pricing.resolve_provider_credits(model, options, outputs)
 
         credits_service = CreditsService(self.session)
         daily_spent = await credits_service.get_daily_spent(user)
@@ -106,6 +109,29 @@ class GenerationService:
                 idempotency_key=f'gen:{generation.generation_order_id}',
             )
             charged = True
+
+        if provider_credits:
+            kie_balance = KieBalanceService(self.session)
+            alert = await kie_balance.spend_credits(provider_credits)
+            if alert and self.bot:
+                level, balance, green, yellow, red, usd_per_credit = alert
+                level_text = {
+                    "green": "🟢",
+                    "yellow": "🟡",
+                    "red": "🔴",
+                }.get(level, "⚠️")
+                usd_value = round(balance * usd_per_credit, 4)
+                text = (
+                    f"{level_text} <b>Баланс Kie снижен</b>\n"
+                    f"Кредиты: {balance}\n"
+                    f"USD эквивалент: ${usd_value}\n"
+                    f"Пороги: зелёный {green}, жёлтый {yellow}, красный {red}"
+                )
+                for admin_id in self.settings.admin_ids():
+                    try:
+                        await self.bot.send_message(admin_id, text)
+                    except Exception:
+                        continue
 
         await self.session.flush()
         try:

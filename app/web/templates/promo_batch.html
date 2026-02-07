@@ -1,0 +1,69 @@
+﻿{% extends "layout.html" %}
+{% block content %}
+  <div class="section">
+    <a class="row-link" href="/admin/promos">← Назад</a>
+    <h3 style="margin-top: 10px;">Батч {{ batch.batch_id }}</h3>
+    <div class="subtle">Создан: {{ batch.created_at }}</div>
+    <div class="subtle">Кодов: {{ batch.count }} · Кредиты за код: {{ batch.credits_amount }}</div>
+
+    <div style="height: 12px;"></div>
+    <div class="card">
+      <label>Скопировать все коды (по одному в строке)</label>
+      <textarea id="codes" style="width:100%; min-height:120px; background:#0f1b2b; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px;">{% for code in codes %}{{ code }}{% if not loop.last %}
+{% endif %}{% endfor %}</textarea>
+      <div style="margin-top: 8px;">
+        <button type="button" onclick="copyCodes()">Скопировать</button>
+      </div>
+    </div>
+
+    <div style="height: 16px;"></div>
+    <table>
+      <thead>
+        <tr>
+          <th>Код</th>
+          <th>Статус</th>
+          <th>Активирован</th>
+          <th>Баланс пользователя</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.code }}</td>
+          <td>
+            {% if row.status == 'redeemed' %}
+              <span class="badge ok">Активирован</span>
+            {% elif row.status == 'inactive' %}
+              <span class="badge danger">Отключён</span>
+            {% else %}
+              <span class="badge">Не активирован</span>
+            {% endif %}
+          </td>
+          <td class="muted">{{ row.redeemed_user or '—' }}</td>
+          <td class="muted">{{ row.user_balance or '—' }}</td>
+          <td>
+            {% if row.can_deactivate %}
+              <form method="post" action="/admin/promos/code/{{ row.code }}/deactivate">
+                <input type="hidden" name="next" value="/admin/promos/batch/{{ batch.batch_id }}" />
+                <button type="submit">Деактивировать</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="muted">Нет кодов</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    function copyCodes() {
+      const el = document.getElementById('codes');
+      el.select();
+      el.setSelectionRange(0, 999999);
+      document.execCommand('copy');
+    }
+  </script>
+{% endblock %}

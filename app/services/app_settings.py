@@ -13,6 +13,11 @@ DEFAULT_SETTINGS: Dict[str, str] = {
     'stars_per_credit': '2',
     'usd_per_star': '0.013',
     'kie_usd_per_credit': '0.02',
+    'kie_balance_credits': '0',
+    'kie_warn_green': '1000',
+    'kie_warn_yellow': '500',
+    'kie_warn_red': '200',
+    'kie_warn_level': 'ok',
 }
 
 

@@ -473,7 +473,7 @@ async def gen_confirm(callback: CallbackQuery, state: FSMContext, session: Async
         return
 
     kie = KieClient()
-    gen_service = GenerationService(session, kie)
+    gen_service = GenerationService(session, kie, callback.message.bot)
     try:
         generation = await gen_service.create_generation(user, model, prompt, options, outputs, ref_urls, ref_files)
         await session.commit()
@@ -622,7 +622,7 @@ async def gen_repeat_confirm(callback: CallbackQuery, session: AsyncSession) -> 
     outputs = int(gen.outputs_requested or 1)
 
     kie = KieClient()
-    gen_service = GenerationService(session, kie)
+    gen_service = GenerationService(session, kie, callback.message.bot)
     try:
         new_gen = await gen_service.create_generation(
             user,

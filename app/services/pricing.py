@@ -32,6 +32,53 @@ class PricingService:
         )
         return {row[0]: int(row[1]) for row in result.all()}
 
+    async def get_provider_map(self, model_key: str) -> Dict[str, int]:
+        result = await self.session.execute(
+            select(Price.option_key, Price.provider_credits)
+            .where(Price.model_key == model_key)
+            .where(Price.active.is_(True))
+        )
+        data: Dict[str, int] = {}
+        for key, value in result.all():
+            if value is None:
+                continue
+            data[key] = int(value)
+        return data
+
+    async def resolve_provider_credits(
+        self, model: ModelSpec, options: Dict[str, str], outputs: int
+    ) -> int:
+        provider_map = await self.get_provider_map(model.key)
+        if model.key == "nano_banana_pro":
+            refs = options.get("reference_images", "none")
+            resolution = options.get("resolution", "1K")
+            if refs == "has":
+                bundle_key = f"bundle_refs_{resolution.lower()}"
+                if bundle_key in provider_map:
+                    return provider_map[bundle_key] * outputs
+            else:
+                if "bundle_no_refs" in provider_map:
+                    return provider_map["bundle_no_refs"] * outputs
+        base = provider_map.get("base", 0)
+        modifiers: List[int] = []
+        for opt in model.options:
+            val = options.get(opt.key, opt.default)
+            price_key = None
+            for v in opt.values:
+                if v.value == val:
+                    price_key = v.price_key
+                    break
+            if price_key and price_key in provider_map:
+                if price_key.startswith("output_format_") or price_key.startswith("aspect_"):
+                    continue
+                if model.key == "nano_banana_pro" and opt.key == "resolution" and options.get("reference_images", "none") != "has":
+                    continue
+                if model.key == "nano_banana_pro" and opt.key == "reference_images" and val == "none":
+                    continue
+                modifiers.append(provider_map[price_key])
+        per_output = base + sum(modifiers)
+        return per_output * outputs
+
     async def resolve_cost(self, model: ModelSpec, options: Dict[str, str], outputs: int, discount_pct: int = 0) -> PriceBreakdown:
         price_map = await self.get_price_map(model.key)
         if model.key == "nano_banana_pro":
