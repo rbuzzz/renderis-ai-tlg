@@ -27,6 +27,25 @@ def _model_name_map() -> dict[str, str]:
     return {m.key: m.display_name for m in list_models()}
 
 
+def _option_label(option_key: str) -> str:
+    if option_key == "base":
+        return "База"
+    if option_key.startswith("output_format_"):
+        fmt = option_key.split("_", 2)[-1].upper()
+        return f"Формат {fmt}"
+    if option_key.startswith("aspect_"):
+        ratio = option_key.replace("aspect_", "").replace("_", ":").upper()
+        return f"Соотношение {ratio}"
+    if option_key.startswith("resolution_"):
+        size = option_key.replace("resolution_", "").upper()
+        return f"Разрешение {size}"
+    if option_key == "ref_none":
+        return "Референсы: без"
+    if option_key == "ref_has":
+        return "Референсы: с"
+    return option_key
+
+
 def _parse_int(value: str) -> int | None:
     try:
         return int(value)
@@ -148,7 +167,7 @@ def create_app() -> FastAPI:
 
             prices = (
                 await session.execute(
-                    select(Price).where(Price.option_key == "base").order_by(Price.model_key)
+                    select(Price).order_by(Price.model_key, Price.option_key)
                 )
             ).scalars().all()
 
@@ -159,15 +178,21 @@ def create_app() -> FastAPI:
                 renderis_usd = round(renderis_credits * usd_per_credit, 4)
                 provider_credits = "" if price.provider_credits is None else price.provider_credits
                 provider_cost = "" if price.provider_cost_usd is None else float(price.provider_cost_usd)
+                renderis_vs_kie = ""
+                if provider_cost:
+                    renderis_vs_kie = round((renderis_usd / provider_cost) * 100, 1)
                 products.append(
                     {
                         "id": price.id,
                         "model_key": price.model_key,
                         "model_name": names.get(price.model_key, price.model_key),
+                        "option_key": price.option_key,
+                        "option_label": _option_label(price.option_key),
                         "provider_credits": provider_credits,
                         "provider_cost_usd": provider_cost,
                         "renderis_credits": renderis_credits,
                         "renderis_usd": renderis_usd,
+                        "renderis_vs_kie": renderis_vs_kie,
                     }
                 )
 
@@ -188,6 +213,7 @@ def create_app() -> FastAPI:
         price_id: int,
         provider_credits: str = Form(""),
         provider_cost_usd: str = Form(""),
+        renderis_credits: str = Form(""),
     ):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
@@ -199,8 +225,11 @@ def create_app() -> FastAPI:
 
             parsed_credits = _parse_int(provider_credits.strip()) if provider_credits.strip() else None
             parsed_cost = _parse_float(provider_cost_usd.strip()) if provider_cost_usd.strip() else None
+            parsed_renderis = _parse_int(renderis_credits.strip()) if renderis_credits.strip() else None
             price.provider_credits = parsed_credits
             price.provider_cost_usd = parsed_cost
+            if parsed_renderis is not None:
+                price.price_credits = parsed_renderis
             await session.commit()
 
         return RedirectResponse(url="/admin/products?saved=1", status_code=302)

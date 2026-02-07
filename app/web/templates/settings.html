@@ -6,17 +6,20 @@
     <div class="notice">Настройки сохранены.</div>
     {% endif %}
     <form method="post" action="/admin/settings">
+      <p class="muted" style="margin-top: 6px;">
+        Формула: стоимость 1 кредита Renderis (USD) = стоимость 1 звезды (USD) × звезд за 1 кредит.
+      </p>
       <div class="form-row">
         <div>
-          <label>Цена 1 кредита (Stars)</label>
+          <label>Звезд за 1 кредит</label>
           <input name="stars_per_credit" value="{{ stars_per_credit }}" />
         </div>
         <div>
-          <label>Стоимость 1 Stars (USD)</label>
+          <label>Стоимость 1 звезды (USD)</label>
           <input name="usd_per_star" value="{{ usd_per_star }}" />
         </div>
         <div>
-          <label>USD за 1 кредит</label>
+          <label>Стоимость 1 кредита Renderis (USD)</label>
           <input value="{{ usd_per_credit }}" readonly />
         </div>
       </div>

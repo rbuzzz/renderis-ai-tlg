@@ -9,10 +9,12 @@
       <thead>
         <tr>
           <th>Модель</th>
+          <th>Опция</th>
           <th>Kie кредиты</th>
           <th>Kie $</th>
           <th>Renderis кредиты</th>
           <th>Renderis $</th>
+          <th>Renderis %</th>
           <th></th>
         </tr>
       </thead>
@@ -20,21 +22,31 @@
         {% for p in products %}
         <tr>
           <td>{{ p.model_name }}</td>
+          <td>{{ p.option_label }}</td>
           <td>
             <input form="price-{{ p.id }}" name="provider_credits" value="{{ p.provider_credits }}" placeholder="—" />
           </td>
           <td>
             <input form="price-{{ p.id }}" name="provider_cost_usd" value="{{ p.provider_cost_usd }}" placeholder="—" />
           </td>
-          <td>{{ p.renderis_credits }}</td>
+          <td>
+            <input form="price-{{ p.id }}" name="renderis_credits" value="{{ p.renderis_credits }}" />
+          </td>
           <td>{{ p.renderis_usd }}</td>
+          <td>
+            {% if p.renderis_vs_kie == "" %}
+              —
+            {% else %}
+              {{ p.renderis_vs_kie }}%
+            {% endif %}
+          </td>
           <td>
             <button form="price-{{ p.id }}" type="submit">Сохранить</button>
             <form id="price-{{ p.id }}" method="post" action="/admin/products/{{ p.id }}"></form>
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="6" class="muted">Нет данных</td></tr>
+        <tr><td colspan="8" class="muted">Нет данных</td></tr>
         {% endfor %}
       </tbody>
     </table>
