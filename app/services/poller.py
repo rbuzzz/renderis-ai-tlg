@@ -8,11 +8,13 @@ from aiogram import Bot
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.bot.keyboards.main import generation_result_menu
 from app.config import get_settings
 from app.db.models import Generation, GenerationTask, User
 from app.services.credits import CreditsService
 from app.services.kie_client import KieClient, KieError
 from app.utils.logging import get_logger
+from app.utils.text import clamp_text, escape_html
 from app.utils.time import utcnow
 
 
@@ -189,6 +191,11 @@ class PollManager:
             await self.bot.send_message(telegram_id, 'Генерация завершена, но ссылки не получены.')
             return
         try:
+            prompt_short = clamp_text(generation.prompt or '', 800)
+            caption = (
+                f'Промпт: {escape_html(prompt_short)}\n'
+                'Напишите в чат, если нужно изменить что-то еще.'
+            )
             for url in urls:
                 try:
                     await self.bot.send_document(telegram_id, url, caption='Изображение без сжатия')
@@ -196,10 +203,14 @@ class PollManager:
                     logger.warning('send_document_failed', url=url, error=str(exc))
                 if self._is_image_url(url):
                     try:
-                        await self.bot.send_photo(telegram_id, url, caption='Сжатая версия')
+                        await self.bot.send_photo(telegram_id, url, caption=caption)
                     except Exception as exc:
                         logger.warning('send_photo_failed', url=url, error=str(exc))
-            await self.bot.send_message(telegram_id, '✅ Готово.')
+            await self.bot.send_message(
+                telegram_id,
+                'Что дальше?',
+                reply_markup=generation_result_menu(generation.id),
+            )
         except Exception as exc:
             logger.warning('deliver_failed', error=str(exc))
             await self.bot.send_message(telegram_id, 'Не удалось отправить результат. Попробуйте позже.')

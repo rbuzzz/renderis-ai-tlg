@@ -53,8 +53,8 @@ def _model_label(model: ModelSpec) -> str:
 def ref_mode_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text='Без референсов', callback_data='gen:refmode:none')],
-            [InlineKeyboardButton(text='С референсами', callback_data='gen:refmode:has')],
+            [InlineKeyboardButton(text='🚫 Без референсов', callback_data='gen:refmode:none')],
+            [InlineKeyboardButton(text='📎 С референсами', callback_data='gen:refmode:has')],
             [InlineKeyboardButton(text='⬅️ Назад', callback_data='gen:back')],
         ]
     )
@@ -76,10 +76,18 @@ def options_panel(
     max_outputs: int,
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
+    emoji_map = {
+        'output_format': '🖼️',
+        'image_size': '📐',
+        'aspect_ratio': '📐',
+        'resolution': '🧩',
+        'reference_images': '📎',
+    }
     for opt in model.options:
         if opt.ui_hidden:
             continue
-        rows.append([InlineKeyboardButton(text=f'— {opt.label} —', callback_data='gen:noop')])
+        emoji = emoji_map.get(opt.key, '⚙️')
+        rows.append([InlineKeyboardButton(text=f'— {emoji} {opt.label} —', callback_data='gen:noop')])
         line: list[InlineKeyboardButton] = []
         selected = options.get(opt.key, opt.default)
         for value in opt.values:
@@ -96,7 +104,7 @@ def options_panel(
         if line:
             rows.append(line)
 
-    rows.append([InlineKeyboardButton(text='— Количество —', callback_data='gen:noop')])
+    rows.append([InlineKeyboardButton(text='— 🔢 Количество —', callback_data='gen:noop')])
     line = []
     for i in range(1, max_outputs + 1):
         marker = '✅ ' if i == outputs else ''
@@ -128,5 +136,26 @@ def confirm_menu() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text='✏️ Изменить промпт', callback_data='gen:edit:prompt')],
             [InlineKeyboardButton(text='⚙️ Изменить опции', callback_data='gen:edit:options')],
             [InlineKeyboardButton(text='❌ Отмена', callback_data='gen:cancel')],
+        ]
+    )
+
+
+def generation_result_menu(generation_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text='🆕 Начать заново', callback_data='gen:result:restart'),
+                InlineKeyboardButton(text='🔁 Повторить', callback_data=f'gen:result:repeat:{generation_id}'),
+            ],
+            [InlineKeyboardButton(text='❌ Завершить', callback_data='gen:result:finish')],
+        ]
+    )
+
+
+def repeat_confirm_menu(generation_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text='✅ Отправить', callback_data=f'gen:repeat:confirm:{generation_id}')],
+            [InlineKeyboardButton(text='❌ Отмена', callback_data='gen:repeat:cancel')],
         ]
     )
