@@ -26,6 +26,13 @@ class KieBalanceService:
         await self._update_level(new_balance)
         return new_balance
 
+    async def set_balance(self, amount: int) -> int:
+        if amount < 0:
+            amount = 0
+        await self.settings.set("kie_balance_credits", str(amount))
+        await self._update_level(amount)
+        return amount
+
     async def spend_credits(self, amount: int) -> Tuple[str, int, int, int, int, float] | None:
         if amount <= 0:
             return None

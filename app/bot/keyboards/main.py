@@ -10,6 +10,7 @@ def main_menu() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text='🎨 Сгенерировать', callback_data='gen:start')],
             [InlineKeyboardButton(text='💳 Купить кредиты', callback_data='pay:buy')],
+            [InlineKeyboardButton(text='🧮 Арифметика расхода', callback_data='prices:list')],
             [InlineKeyboardButton(text='🕘 История', callback_data='history:list')],
             [InlineKeyboardButton(text='ℹ️ Помощь', callback_data='help')],
         ]

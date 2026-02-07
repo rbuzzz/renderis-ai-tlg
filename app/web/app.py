@@ -194,7 +194,9 @@ def create_app() -> FastAPI:
             ref_has = price_map.get(("nano_banana_pro", "ref_has"))
             res_2k = price_map.get(("nano_banana_pro", "resolution_2k"))
             res_4k = price_map.get(("nano_banana_pro", "resolution_4k"))
-            bundle_no_refs = price_map.get(("nano_banana_pro", "bundle_no_refs"))
+            bundle_no_refs_1k = price_map.get(("nano_banana_pro", "bundle_no_refs_1k"))
+            bundle_no_refs_2k = price_map.get(("nano_banana_pro", "bundle_no_refs_2k"))
+            bundle_no_refs_4k = price_map.get(("nano_banana_pro", "bundle_no_refs_4k"))
             bundle_refs_1k = price_map.get(("nano_banana_pro", "bundle_refs_1k"))
             bundle_refs_2k = price_map.get(("nano_banana_pro", "bundle_refs_2k"))
             bundle_refs_4k = price_map.get(("nano_banana_pro", "bundle_refs_4k"))
@@ -218,8 +220,14 @@ def create_app() -> FastAPI:
                     return _get_price_value(bundle, "price_credits"), _get_price_value(bundle, "provider_credits")
                 return fallback_renderis, fallback_kie
 
-            pro_no_ref_renderis, pro_no_ref_kie = _bundle_values(
-                bundle_no_refs, base_pro_renderis, base_pro_kie
+            pro_no_ref_1k_renderis, pro_no_ref_1k_kie = _bundle_values(
+                bundle_no_refs_1k, base_pro_renderis, base_pro_kie
+            )
+            pro_no_ref_2k_renderis, pro_no_ref_2k_kie = _bundle_values(
+                bundle_no_refs_2k, base_pro_renderis + res2_renderis, base_pro_kie + res2_kie
+            )
+            pro_no_ref_4k_renderis, pro_no_ref_4k_kie = _bundle_values(
+                bundle_no_refs_4k, base_pro_renderis + res4_renderis, base_pro_kie + res4_kie
             )
             pro_ref_1k_renderis, pro_ref_1k_kie = _bundle_values(
                 bundle_refs_1k, base_pro_renderis + ref_renderis, base_pro_kie + ref_kie
@@ -245,10 +253,22 @@ def create_app() -> FastAPI:
                     "renderis_credits": base_edit_renderis,
                 },
                 {
-                    "row_id": "pro_base",
-                    "label": f"{names.get('nano_banana_pro', 'nano_banana_pro')} (без референсов)",
-                    "kie_credits": pro_no_ref_kie,
-                    "renderis_credits": pro_no_ref_renderis,
+                    "row_id": "pro_no_refs_1k",
+                    "label": f"{names.get('nano_banana_pro', 'nano_banana_pro')} (без референсов 1K)",
+                    "kie_credits": pro_no_ref_1k_kie,
+                    "renderis_credits": pro_no_ref_1k_renderis,
+                },
+                {
+                    "row_id": "pro_no_refs_2k",
+                    "label": f"{names.get('nano_banana_pro', 'nano_banana_pro')} (без референсов 2K)",
+                    "kie_credits": pro_no_ref_2k_kie,
+                    "renderis_credits": pro_no_ref_2k_renderis,
+                },
+                {
+                    "row_id": "pro_no_refs_4k",
+                    "label": f"{names.get('nano_banana_pro', 'nano_banana_pro')} (без референсов 4K)",
+                    "kie_credits": pro_no_ref_4k_kie,
+                    "renderis_credits": pro_no_ref_4k_renderis,
                 },
                 {
                     "row_id": "pro_refs_1k",
@@ -345,8 +365,12 @@ def create_app() -> FastAPI:
                 update_price("nano_banana", "base", parsed_renderis, parsed_kie)
             elif row_id == "nano_banana_edit":
                 update_price("nano_banana_edit", "base", parsed_renderis, parsed_kie)
-            elif row_id == "pro_base":
-                update_price("nano_banana_pro", "bundle_no_refs", parsed_renderis, parsed_kie)
+            elif row_id == "pro_no_refs_1k":
+                update_price("nano_banana_pro", "bundle_no_refs_1k", parsed_renderis, parsed_kie)
+            elif row_id == "pro_no_refs_2k":
+                update_price("nano_banana_pro", "bundle_no_refs_2k", parsed_renderis, parsed_kie)
+            elif row_id == "pro_no_refs_4k":
+                update_price("nano_banana_pro", "bundle_no_refs_4k", parsed_renderis, parsed_kie)
             elif row_id == "pro_refs_1k":
                 update_price("nano_banana_pro", "bundle_refs_1k", parsed_renderis, parsed_kie)
             elif row_id == "pro_refs_2k":
@@ -401,6 +425,7 @@ def create_app() -> FastAPI:
         stars_per_credit: str = Form(""),
         usd_per_star: str = Form(""),
         kie_usd_per_credit: str = Form(""),
+        set_kie_balance: str = Form(""),
         add_kie_credits: str = Form(""),
         kie_warn_green: str = Form(""),
         kie_warn_yellow: str = Form(""),
@@ -424,7 +449,11 @@ def create_app() -> FastAPI:
                 parsed = _parse_float(kie_usd_per_credit.strip())
                 if parsed is not None:
                     await settings_service.set("kie_usd_per_credit", str(parsed))
-            if add_kie_credits.strip():
+            if set_kie_balance.strip():
+                parsed = _parse_int(set_kie_balance.strip())
+                if parsed is not None:
+                    await kie_balance_service.set_balance(parsed)
+            if add_kie_credits.strip() and not set_kie_balance.strip():
                 parsed = _parse_int(add_kie_credits.strip())
                 if parsed is not None and parsed > 0:
                     await kie_balance_service.add_credits(parsed)

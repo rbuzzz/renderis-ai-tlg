@@ -57,8 +57,9 @@ class PricingService:
                 if bundle_key in provider_map:
                     return provider_map[bundle_key] * outputs
             else:
-                if "bundle_no_refs" in provider_map:
-                    return provider_map["bundle_no_refs"] * outputs
+                bundle_key = f"bundle_no_refs_{resolution.lower()}"
+                if bundle_key in provider_map:
+                    return provider_map[bundle_key] * outputs
         base = provider_map.get("base", 0)
         modifiers: List[int] = []
         for opt in model.options:
@@ -70,8 +71,6 @@ class PricingService:
                     break
             if price_key and price_key in provider_map:
                 if price_key.startswith("output_format_") or price_key.startswith("aspect_"):
-                    continue
-                if model.key == "nano_banana_pro" and opt.key == "resolution" and options.get("reference_images", "none") != "has":
                     continue
                 if model.key == "nano_banana_pro" and opt.key == "reference_images" and val == "none":
                     continue
@@ -102,7 +101,7 @@ class PricingService:
                         total=total,
                     )
             else:
-                bundle_key = "bundle_no_refs"
+                bundle_key = f"bundle_no_refs_{resolution.lower()}"
                 if bundle_key in price_map:
                     per_output = price_map[bundle_key]
                     subtotal = per_output * outputs
@@ -129,8 +128,6 @@ class PricingService:
                     break
             if price_key and price_key in price_map:
                 if price_key.startswith("output_format_") or price_key.startswith("aspect_"):
-                    continue
-                if model.key == "nano_banana_pro" and opt.key == "resolution" and options.get("reference_images", "none") != "has":
                     continue
                 if model.key == "nano_banana_pro" and opt.key == "reference_images" and val == "none":
                     continue

@@ -63,9 +63,10 @@ DEFAULT_PRICES = [
 ]
 
 DEFAULT_PRODUCTS = [
-    ('Стартовый', 100, 50, 1),
-    ('Популярный', 250, 150, 2),
-    ('Профи', 700, 500, 3),
+    ('50 кредитов', 100, 50, 1),
+    ('100 кредитов', 200, 100, 2),
+    ('250 кредитов', 500, 250, 3),
+    ('500 кредитов', 1000, 500, 4),
 ]
 
 
@@ -98,9 +99,15 @@ async def main() -> None:
                 )
             )
 
+        allowed_titles = {title for title, _, _, _ in DEFAULT_PRODUCTS}
         for title, stars, credits, order in DEFAULT_PRODUCTS:
             result = await session.execute(select(StarProduct).where(StarProduct.title == title))
-            if result.scalar_one_or_none():
+            existing = result.scalar_one_or_none()
+            if existing:
+                existing.stars_amount = stars
+                existing.credits_amount = credits
+                existing.active = True
+                existing.sort_order = order
                 continue
             session.add(
                 StarProduct(
@@ -111,6 +118,11 @@ async def main() -> None:
                     sort_order=order,
                 )
             )
+        extra_products = await session.execute(
+            select(StarProduct).where(StarProduct.title.not_in(allowed_titles))
+        )
+        for row in extra_products.scalars().all():
+            row.active = False
 
         await session.commit()
 
