@@ -12,6 +12,7 @@ from app.utils.time import utcnow
 DEFAULT_SETTINGS: Dict[str, str] = {
     'stars_per_credit': '2',
     'usd_per_star': '0.013',
+    'kie_usd_per_credit': '0.02',
 }
 
 

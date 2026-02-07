@@ -60,6 +60,13 @@ def _parse_float(value: str) -> float | None:
         return None
 
 
+def _get_price_value(price: Price | None, attr: str) -> int:
+    if not price:
+        return 0
+    value = getattr(price, attr)
+    return int(value or 0)
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="Renderis Admin")
@@ -164,35 +171,83 @@ def create_app() -> FastAPI:
             stars_per_credit = await settings_service.get_float("stars_per_credit", 2.0)
             usd_per_star = await settings_service.get_float("usd_per_star", 0.013)
             usd_per_credit = stars_per_credit * usd_per_star
+            kie_usd_per_credit = await settings_service.get_float("kie_usd_per_credit", 0.02)
 
             prices = (
                 await session.execute(
-                    select(Price).order_by(Price.model_key, Price.option_key)
+                    select(Price).where(
+                        Price.model_key.in_(["nano_banana", "nano_banana_edit", "nano_banana_pro"])
+                    )
                 )
             ).scalars().all()
 
+            price_map = {(p.model_key, p.option_key): p for p in prices}
             names = _model_name_map()
             products = []
-            for price in prices:
-                renderis_credits = int(price.price_credits or 0)
-                renderis_usd = round(renderis_credits * usd_per_credit, 4)
-                provider_credits = "" if price.provider_credits is None else price.provider_credits
-                provider_cost = "" if price.provider_cost_usd is None else float(price.provider_cost_usd)
-                renderis_vs_kie = ""
-                if provider_cost:
-                    renderis_vs_kie = round((renderis_usd / provider_cost) * 100, 1)
+
+            base_nb = price_map.get(("nano_banana", "base"))
+            base_edit = price_map.get(("nano_banana_edit", "base"))
+            base_pro = price_map.get(("nano_banana_pro", "base"))
+            ref_has = price_map.get(("nano_banana_pro", "ref_has"))
+            res_4k = price_map.get(("nano_banana_pro", "resolution_4k"))
+
+            base_nb_renderis = _get_price_value(base_nb, "price_credits")
+            base_nb_kie = _get_price_value(base_nb, "provider_credits")
+            base_edit_renderis = _get_price_value(base_edit, "price_credits")
+            base_edit_kie = _get_price_value(base_edit, "provider_credits")
+
+            base_pro_renderis = _get_price_value(base_pro, "price_credits")
+            base_pro_kie = _get_price_value(base_pro, "provider_credits")
+            ref_renderis = _get_price_value(ref_has, "price_credits")
+            ref_kie = _get_price_value(ref_has, "provider_credits")
+            res4_renderis = _get_price_value(res_4k, "price_credits")
+            res4_kie = _get_price_value(res_4k, "provider_credits")
+
+            rows = [
+                {
+                    "row_id": "nano_banana",
+                    "label": names.get("nano_banana", "nano_banana"),
+                    "kie_credits": base_nb_kie,
+                    "renderis_credits": base_nb_renderis,
+                },
+                {
+                    "row_id": "nano_banana_edit",
+                    "label": names.get("nano_banana_edit", "nano_banana_edit"),
+                    "kie_credits": base_edit_kie,
+                    "renderis_credits": base_edit_renderis,
+                },
+                {
+                    "row_id": "pro_base",
+                    "label": f"{names.get('nano_banana_pro', 'nano_banana_pro')} (без референсов)",
+                    "kie_credits": base_pro_kie,
+                    "renderis_credits": base_pro_renderis,
+                },
+                {
+                    "row_id": "pro_refs_1k2k",
+                    "label": f"{names.get('nano_banana_pro', 'nano_banana_pro')} (с референсами 1K/2K)",
+                    "kie_credits": base_pro_kie + ref_kie,
+                    "renderis_credits": base_pro_renderis + ref_renderis,
+                },
+                {
+                    "row_id": "pro_refs_4k",
+                    "label": f"{names.get('nano_banana_pro', 'nano_banana_pro')} (с референсами 4K)",
+                    "kie_credits": base_pro_kie + ref_kie + res4_kie,
+                    "renderis_credits": base_pro_renderis + ref_renderis + res4_renderis,
+                },
+            ]
+
+            for row in rows:
+                kie_usd = round(row["kie_credits"] * kie_usd_per_credit, 4)
+                renderis_usd = round(row["renderis_credits"] * usd_per_credit, 4)
+                profit_pct = ""
+                if kie_usd > 0:
+                    profit_pct = round((renderis_usd / kie_usd) * 100, 1)
                 products.append(
                     {
-                        "id": price.id,
-                        "model_key": price.model_key,
-                        "model_name": names.get(price.model_key, price.model_key),
-                        "option_key": price.option_key,
-                        "option_label": _option_label(price.option_key),
-                        "provider_credits": provider_credits,
-                        "provider_cost_usd": provider_cost,
-                        "renderis_credits": renderis_credits,
+                        **row,
+                        "kie_usd": kie_usd,
                         "renderis_usd": renderis_usd,
-                        "renderis_vs_kie": renderis_vs_kie,
+                        "profit_pct": profit_pct,
                     }
                 )
 
@@ -207,29 +262,71 @@ def create_app() -> FastAPI:
             },
         )
 
-    @app.post("/admin/products/{price_id}")
+    @app.post("/admin/products/{row_id}")
     async def admin_products_update(
         request: Request,
-        price_id: int,
+        row_id: str,
         provider_credits: str = Form(""),
-        provider_cost_usd: str = Form(""),
         renderis_credits: str = Form(""),
     ):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
 
         async with app.state.sessionmaker() as session:
-            price = await session.get(Price, price_id)
-            if not price:
-                return RedirectResponse(url="/admin/products", status_code=302)
+            prices = (
+                await session.execute(
+                    select(Price).where(
+                        Price.model_key.in_(["nano_banana", "nano_banana_edit", "nano_banana_pro"])
+                    )
+                )
+            ).scalars().all()
+            price_map = {(p.model_key, p.option_key): p for p in prices}
 
-            parsed_credits = _parse_int(provider_credits.strip()) if provider_credits.strip() else None
-            parsed_cost = _parse_float(provider_cost_usd.strip()) if provider_cost_usd.strip() else None
+            def update_price(model_key: str, option_key: str, renderis_val: int | None, kie_val: int | None) -> None:
+                row = price_map.get((model_key, option_key))
+                if not row:
+                    return
+                if renderis_val is not None:
+                    row.price_credits = renderis_val
+                if kie_val is not None:
+                    row.provider_credits = kie_val
+
+            def get_val(model_key: str, option_key: str, attr: str) -> int:
+                return _get_price_value(price_map.get((model_key, option_key)), attr)
+
+            parsed_kie = _parse_int(provider_credits.strip()) if provider_credits.strip() else None
             parsed_renderis = _parse_int(renderis_credits.strip()) if renderis_credits.strip() else None
-            price.provider_credits = parsed_credits
-            price.provider_cost_usd = parsed_cost
-            if parsed_renderis is not None:
-                price.price_credits = parsed_renderis
+
+            base_pro_renderis = get_val("nano_banana_pro", "base", "price_credits")
+            base_pro_kie = get_val("nano_banana_pro", "base", "provider_credits")
+            ref_renderis = get_val("nano_banana_pro", "ref_has", "price_credits")
+            ref_kie = get_val("nano_banana_pro", "ref_has", "provider_credits")
+
+            if row_id == "nano_banana":
+                update_price("nano_banana", "base", parsed_renderis, parsed_kie)
+            elif row_id == "nano_banana_edit":
+                update_price("nano_banana_edit", "base", parsed_renderis, parsed_kie)
+            elif row_id == "pro_base":
+                update_price("nano_banana_pro", "base", parsed_renderis, parsed_kie)
+                update_price("nano_banana_pro", "resolution_1k", 0, 0)
+                update_price("nano_banana_pro", "resolution_2k", 0, 0)
+            elif row_id == "pro_refs_1k2k":
+                target_renderis = parsed_renderis if parsed_renderis is not None else base_pro_renderis + ref_renderis
+                target_kie = parsed_kie if parsed_kie is not None else base_pro_kie + ref_kie
+                ref_renderis_new = max(0, target_renderis - base_pro_renderis)
+                ref_kie_new = max(0, target_kie - base_pro_kie)
+                update_price("nano_banana_pro", "ref_has", ref_renderis_new, ref_kie_new)
+                update_price("nano_banana_pro", "resolution_1k", 0, 0)
+                update_price("nano_banana_pro", "resolution_2k", 0, 0)
+            elif row_id == "pro_refs_4k":
+                target_renderis = parsed_renderis if parsed_renderis is not None else base_pro_renderis + ref_renderis + get_val("nano_banana_pro", "resolution_4k", "price_credits")
+                target_kie = parsed_kie if parsed_kie is not None else base_pro_kie + ref_kie + get_val("nano_banana_pro", "resolution_4k", "provider_credits")
+                res_renderis_new = max(0, target_renderis - base_pro_renderis - ref_renderis)
+                res_kie_new = max(0, target_kie - base_pro_kie - ref_kie)
+                update_price("nano_banana_pro", "resolution_4k", res_renderis_new, res_kie_new)
+                update_price("nano_banana_pro", "resolution_1k", 0, 0)
+                update_price("nano_banana_pro", "resolution_2k", 0, 0)
+
             await session.commit()
 
         return RedirectResponse(url="/admin/products?saved=1", status_code=302)
@@ -244,6 +341,7 @@ def create_app() -> FastAPI:
             stars_per_credit = await settings_service.get_float("stars_per_credit", 2.0)
             usd_per_star = await settings_service.get_float("usd_per_star", 0.013)
             usd_per_credit = round(stars_per_credit * usd_per_star, 6)
+            kie_usd_per_credit = await settings_service.get_float("kie_usd_per_credit", 0.02)
 
         return app.state.templates.TemplateResponse(
             "settings.html",
@@ -254,6 +352,7 @@ def create_app() -> FastAPI:
                 "stars_per_credit": stars_per_credit,
                 "usd_per_star": usd_per_star,
                 "usd_per_credit": usd_per_credit,
+                "kie_usd_per_credit": kie_usd_per_credit,
                 "saved": bool(saved),
             },
         )
@@ -263,6 +362,7 @@ def create_app() -> FastAPI:
         request: Request,
         stars_per_credit: str = Form(""),
         usd_per_star: str = Form(""),
+        kie_usd_per_credit: str = Form(""),
     ):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
@@ -277,6 +377,10 @@ def create_app() -> FastAPI:
                 parsed = _parse_float(usd_per_star.strip())
                 if parsed is not None:
                     await settings_service.set("usd_per_star", str(parsed))
+            if kie_usd_per_credit.strip():
+                parsed = _parse_float(kie_usd_per_credit.strip())
+                if parsed is not None:
+                    await settings_service.set("kie_usd_per_credit", str(parsed))
             await session.commit()
 
         return RedirectResponse(url="/admin/settings?saved=1", status_code=302)

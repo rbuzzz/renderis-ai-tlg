@@ -8,45 +8,43 @@
     <table>
       <thead>
         <tr>
-          <th>Модель</th>
-          <th>Опция</th>
+          <th>Категория</th>
           <th>Kie кредиты</th>
           <th>Kie $</th>
           <th>Renderis кредиты</th>
           <th>Renderis $</th>
-          <th>Renderis %</th>
+          <th>Прибыль %</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         {% for p in products %}
         <tr>
-          <td>{{ p.model_name }}</td>
-          <td>{{ p.option_label }}</td>
+          <td>{{ p.label }}</td>
           <td>
-            <input form="price-{{ p.id }}" name="provider_credits" value="{{ p.provider_credits }}" placeholder="—" />
+            <input form="price-{{ p.row_id }}" name="provider_credits" value="{{ p.kie_credits }}" />
           </td>
           <td>
-            <input form="price-{{ p.id }}" name="provider_cost_usd" value="{{ p.provider_cost_usd }}" placeholder="—" />
+            <input value="{{ p.kie_usd }}" readonly />
           </td>
           <td>
-            <input form="price-{{ p.id }}" name="renderis_credits" value="{{ p.renderis_credits }}" />
+            <input form="price-{{ p.row_id }}" name="renderis_credits" value="{{ p.renderis_credits }}" />
           </td>
           <td>{{ p.renderis_usd }}</td>
           <td>
-            {% if p.renderis_vs_kie == "" %}
+            {% if p.profit_pct == "" %}
               —
             {% else %}
-              {{ p.renderis_vs_kie }}%
+              {{ p.profit_pct }}%
             {% endif %}
           </td>
           <td>
-            <button form="price-{{ p.id }}" type="submit">Сохранить</button>
-            <form id="price-{{ p.id }}" method="post" action="/admin/products/{{ p.id }}"></form>
+            <button form="price-{{ p.row_id }}" type="submit">Сохранить</button>
+            <form id="price-{{ p.row_id }}" method="post" action="/admin/products/{{ p.row_id }}"></form>
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="8" class="muted">Нет данных</td></tr>
+        <tr><td colspan="7" class="muted">Нет данных</td></tr>
         {% endfor %}
       </tbody>
     </table>

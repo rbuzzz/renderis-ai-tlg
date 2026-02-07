@@ -44,6 +44,8 @@ class PricingService:
                     price_key = v.price_key
                     break
             if price_key and price_key in price_map:
+                if price_key.startswith("output_format_") or price_key.startswith("aspect_"):
+                    continue
                 modifiers.append((price_key, price_map[price_key]))
         per_output = base + sum(x[1] for x in modifiers)
         subtotal = per_output * outputs
