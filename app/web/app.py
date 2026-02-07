@@ -189,7 +189,12 @@ def create_app() -> FastAPI:
             base_edit = price_map.get(("nano_banana_edit", "base"))
             base_pro = price_map.get(("nano_banana_pro", "base"))
             ref_has = price_map.get(("nano_banana_pro", "ref_has"))
+            res_2k = price_map.get(("nano_banana_pro", "resolution_2k"))
             res_4k = price_map.get(("nano_banana_pro", "resolution_4k"))
+            bundle_no_refs = price_map.get(("nano_banana_pro", "bundle_no_refs"))
+            bundle_refs_1k = price_map.get(("nano_banana_pro", "bundle_refs_1k"))
+            bundle_refs_2k = price_map.get(("nano_banana_pro", "bundle_refs_2k"))
+            bundle_refs_4k = price_map.get(("nano_banana_pro", "bundle_refs_4k"))
 
             base_nb_renderis = _get_price_value(base_nb, "price_credits")
             base_nb_kie = _get_price_value(base_nb, "provider_credits")
@@ -200,8 +205,28 @@ def create_app() -> FastAPI:
             base_pro_kie = _get_price_value(base_pro, "provider_credits")
             ref_renderis = _get_price_value(ref_has, "price_credits")
             ref_kie = _get_price_value(ref_has, "provider_credits")
+            res2_renderis = _get_price_value(res_2k, "price_credits")
+            res2_kie = _get_price_value(res_2k, "provider_credits")
             res4_renderis = _get_price_value(res_4k, "price_credits")
             res4_kie = _get_price_value(res_4k, "provider_credits")
+
+            def _bundle_values(bundle: Price | None, fallback_renderis: int, fallback_kie: int) -> tuple[int, int]:
+                if bundle:
+                    return _get_price_value(bundle, "price_credits"), _get_price_value(bundle, "provider_credits")
+                return fallback_renderis, fallback_kie
+
+            pro_no_ref_renderis, pro_no_ref_kie = _bundle_values(
+                bundle_no_refs, base_pro_renderis, base_pro_kie
+            )
+            pro_ref_1k_renderis, pro_ref_1k_kie = _bundle_values(
+                bundle_refs_1k, base_pro_renderis + ref_renderis, base_pro_kie + ref_kie
+            )
+            pro_ref_2k_renderis, pro_ref_2k_kie = _bundle_values(
+                bundle_refs_2k, base_pro_renderis + ref_renderis + res2_renderis, base_pro_kie + ref_kie + res2_kie
+            )
+            pro_ref_4k_renderis, pro_ref_4k_kie = _bundle_values(
+                bundle_refs_4k, base_pro_renderis + ref_renderis + res4_renderis, base_pro_kie + ref_kie + res4_kie
+            )
 
             rows = [
                 {
@@ -219,30 +244,26 @@ def create_app() -> FastAPI:
                 {
                     "row_id": "pro_base",
                     "label": f"{names.get('nano_banana_pro', 'nano_banana_pro')} (без референсов)",
-                    "kie_credits": base_pro_kie,
-                    "renderis_credits": base_pro_renderis,
+                    "kie_credits": pro_no_ref_kie,
+                    "renderis_credits": pro_no_ref_renderis,
                 },
                 {
                     "row_id": "pro_refs_1k",
                     "label": f"{names.get('nano_banana_pro', 'nano_banana_pro')} (с референсами 1K)",
-                    "kie_credits": base_pro_kie + ref_kie,
-                    "renderis_credits": base_pro_renderis + ref_renderis,
+                    "kie_credits": pro_ref_1k_kie,
+                    "renderis_credits": pro_ref_1k_renderis,
                 },
                 {
                     "row_id": "pro_refs_2k",
                     "label": f"{names.get('nano_banana_pro', 'nano_banana_pro')} (с референсами 2K)",
-                    "kie_credits": base_pro_kie + ref_kie + _get_price_value(
-                        price_map.get(("nano_banana_pro", "resolution_2k")), "provider_credits"
-                    ),
-                    "renderis_credits": base_pro_renderis
-                    + ref_renderis
-                    + _get_price_value(price_map.get(("nano_banana_pro", "resolution_2k")), "price_credits"),
+                    "kie_credits": pro_ref_2k_kie,
+                    "renderis_credits": pro_ref_2k_renderis,
                 },
                 {
                     "row_id": "pro_refs_4k",
                     "label": f"{names.get('nano_banana_pro', 'nano_banana_pro')} (с референсами 4K)",
-                    "kie_credits": base_pro_kie + ref_kie + res4_kie,
-                    "renderis_credits": base_pro_renderis + ref_renderis + res4_renderis,
+                    "kie_credits": pro_ref_4k_kie,
+                    "renderis_credits": pro_ref_4k_renderis,
                 },
             ]
 
@@ -295,7 +316,17 @@ def create_app() -> FastAPI:
             def update_price(model_key: str, option_key: str, renderis_val: int | None, kie_val: int | None) -> None:
                 row = price_map.get((model_key, option_key))
                 if not row:
-                    return
+                    row = Price(
+                        model_key=model_key,
+                        option_key=option_key,
+                        price_credits=0,
+                        provider_credits=None,
+                        active=True,
+                        model_type="image",
+                        provider="kie",
+                    )
+                    session.add(row)
+                    price_map[(model_key, option_key)] = row
                 if renderis_val is not None:
                     row.price_credits = renderis_val
                 if kie_val is not None:
@@ -307,42 +338,18 @@ def create_app() -> FastAPI:
             parsed_kie = _parse_int(provider_credits.strip()) if provider_credits.strip() else None
             parsed_renderis = _parse_int(renderis_credits.strip()) if renderis_credits.strip() else None
 
-            base_pro_renderis = get_val("nano_banana_pro", "base", "price_credits")
-            base_pro_kie = get_val("nano_banana_pro", "base", "provider_credits")
-            ref_renderis = get_val("nano_banana_pro", "ref_has", "price_credits")
-            ref_kie = get_val("nano_banana_pro", "ref_has", "provider_credits")
-
             if row_id == "nano_banana":
                 update_price("nano_banana", "base", parsed_renderis, parsed_kie)
             elif row_id == "nano_banana_edit":
                 update_price("nano_banana_edit", "base", parsed_renderis, parsed_kie)
             elif row_id == "pro_base":
-                update_price("nano_banana_pro", "base", parsed_renderis, parsed_kie)
-                update_price("nano_banana_pro", "resolution_1k", 0, 0)
-                update_price("nano_banana_pro", "resolution_2k", 0, 0)
+                update_price("nano_banana_pro", "bundle_no_refs", parsed_renderis, parsed_kie)
             elif row_id == "pro_refs_1k":
-                target_renderis = parsed_renderis if parsed_renderis is not None else base_pro_renderis + ref_renderis
-                target_kie = parsed_kie if parsed_kie is not None else base_pro_kie + ref_kie
-                ref_renderis_new = max(0, target_renderis - base_pro_renderis)
-                ref_kie_new = max(0, target_kie - base_pro_kie)
-                update_price("nano_banana_pro", "ref_has", ref_renderis_new, ref_kie_new)
-                update_price("nano_banana_pro", "resolution_1k", 0, 0)
-                update_price("nano_banana_pro", "resolution_2k", 0, 0)
+                update_price("nano_banana_pro", "bundle_refs_1k", parsed_renderis, parsed_kie)
             elif row_id == "pro_refs_2k":
-                target_renderis = parsed_renderis if parsed_renderis is not None else base_pro_renderis + ref_renderis + get_val("nano_banana_pro", "resolution_2k", "price_credits")
-                target_kie = parsed_kie if parsed_kie is not None else base_pro_kie + ref_kie + get_val("nano_banana_pro", "resolution_2k", "provider_credits")
-                res_renderis_new = max(0, target_renderis - base_pro_renderis - ref_renderis)
-                res_kie_new = max(0, target_kie - base_pro_kie - ref_kie)
-                update_price("nano_banana_pro", "resolution_2k", res_renderis_new, res_kie_new)
-                update_price("nano_banana_pro", "resolution_1k", 0, 0)
+                update_price("nano_banana_pro", "bundle_refs_2k", parsed_renderis, parsed_kie)
             elif row_id == "pro_refs_4k":
-                target_renderis = parsed_renderis if parsed_renderis is not None else base_pro_renderis + ref_renderis + get_val("nano_banana_pro", "resolution_4k", "price_credits")
-                target_kie = parsed_kie if parsed_kie is not None else base_pro_kie + ref_kie + get_val("nano_banana_pro", "resolution_4k", "provider_credits")
-                res_renderis_new = max(0, target_renderis - base_pro_renderis - ref_renderis)
-                res_kie_new = max(0, target_kie - base_pro_kie - ref_kie)
-                update_price("nano_banana_pro", "resolution_4k", res_renderis_new, res_kie_new)
-                update_price("nano_banana_pro", "resolution_1k", 0, 0)
-                update_price("nano_banana_pro", "resolution_2k", 0, 0)
+                update_price("nano_banana_pro", "bundle_refs_4k", parsed_renderis, parsed_kie)
 
             await session.commit()
 

@@ -34,6 +34,43 @@ class PricingService:
 
     async def resolve_cost(self, model: ModelSpec, options: Dict[str, str], outputs: int, discount_pct: int = 0) -> PriceBreakdown:
         price_map = await self.get_price_map(model.key)
+        if model.key == "nano_banana_pro":
+            refs = options.get("reference_images", "none")
+            resolution = options.get("resolution", "1K")
+            if refs == "has":
+                bundle_key = f"bundle_refs_{resolution.lower()}"
+                if bundle_key in price_map:
+                    per_output = price_map[bundle_key]
+                    subtotal = per_output * outputs
+                    if discount_pct > 0:
+                        total = int((subtotal * (100 - discount_pct) + 99) // 100)
+                    else:
+                        total = subtotal
+                    return PriceBreakdown(
+                        base=per_output,
+                        modifiers=[],
+                        per_output=per_output,
+                        outputs=outputs,
+                        discount_pct=discount_pct,
+                        total=total,
+                    )
+            else:
+                bundle_key = "bundle_no_refs"
+                if bundle_key in price_map:
+                    per_output = price_map[bundle_key]
+                    subtotal = per_output * outputs
+                    if discount_pct > 0:
+                        total = int((subtotal * (100 - discount_pct) + 99) // 100)
+                    else:
+                        total = subtotal
+                    return PriceBreakdown(
+                        base=per_output,
+                        modifiers=[],
+                        per_output=per_output,
+                        outputs=outputs,
+                        discount_pct=discount_pct,
+                        total=total,
+                    )
         base = price_map.get('base', 0)
         modifiers: List[Tuple[str, int]] = []
         for opt in model.options:
@@ -45,6 +82,10 @@ class PricingService:
                     break
             if price_key and price_key in price_map:
                 if price_key.startswith("output_format_") or price_key.startswith("aspect_"):
+                    continue
+                if model.key == "nano_banana_pro" and opt.key == "resolution" and options.get("reference_images", "none") != "has":
+                    continue
+                if model.key == "nano_banana_pro" and opt.key == "reference_images" and val == "none":
                     continue
                 modifiers.append((price_key, price_map[price_key]))
         per_output = base + sum(x[1] for x in modifiers)
