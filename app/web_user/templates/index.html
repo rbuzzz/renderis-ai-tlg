@@ -571,8 +571,8 @@
         const deleteBtn = document.getElementById('deleteBtn');
         deleteBtn.onclick = async () => {
           if (!item.generation_id) return;
-          const res = await fetch(`/api/generations/${item.generation_id}`, {
-            method: 'DELETE',
+          const res = await fetch(`/api/generations/${item.generation_id}/delete`, {
+            method: 'POST',
             credentials: 'same-origin',
           });
           if (!res.ok) {

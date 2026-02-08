@@ -441,6 +441,10 @@ def create_app() -> FastAPI:
             await session.commit()
         return {"ok": True}
 
+    @app.post("/api/generations/{generation_id}/delete")
+    async def api_delete_generation_post(request: Request, generation_id: int):
+        return await api_delete_generation(request, generation_id)
+
     app.i18n_keys = [
         "site_title",
         "site_tagline",
