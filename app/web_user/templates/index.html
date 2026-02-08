@@ -573,7 +573,7 @@
           if (!item.generation_id) return;
           const res = await fetch(`/api/generations/${item.generation_id}/delete`, {
             method: 'POST',
-            credentials: 'same-origin',
+            credentials: 'include',
           });
           if (!res.ok) {
             alert(labels.error_prefix + ': delete_failed');
