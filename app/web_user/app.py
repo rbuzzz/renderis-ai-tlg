@@ -376,6 +376,26 @@ def create_app() -> FastAPI:
                 )
         return {"history": history}
 
+    @app.delete("/api/generations/{generation_id}")
+    async def api_delete_generation(request: Request, generation_id: int):
+        if not _is_logged_in(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        async with app.state.sessionmaker() as session:
+            generation = await session.get(Generation, generation_id)
+            if not generation:
+                return {"ok": True}
+            if generation.user_id != int(request.session["user_id"]):
+                return JSONResponse({"error": "forbidden"}, status_code=403)
+
+            tasks = await session.execute(
+                select(GenerationTask).where(GenerationTask.generation_id == generation_id)
+            )
+            for task in tasks.scalars().all():
+                await session.delete(task)
+            await session.delete(generation)
+            await session.commit()
+        return {"ok": True}
+
     app.i18n_keys = [
         "site_title",
         "site_tagline",
@@ -383,6 +403,8 @@ def create_app() -> FastAPI:
         "input_title",
         "output_title",
         "output_empty",
+        "download",
+        "delete",
         "history_title",
         "balance",
         "credits",

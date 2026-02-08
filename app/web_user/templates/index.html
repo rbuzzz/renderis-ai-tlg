@@ -161,34 +161,108 @@
         min-height: 220px;
         display: flex;
         flex-direction: column;
-        gap: 10px;
-      }
-      .output-preview img {
-        width: 100%;
-        border-radius: 12px;
-        border: 1px solid #243652;
-      }
-      .output-links a { color: var(--accent); text-decoration: none; word-break: break-all; font-size: 12px; }
-      .history-list {
-        display: flex;
-        flex-direction: column;
         gap: 12px;
-        margin-top: 16px;
       }
-      .history-item {
-        background: var(--card);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        padding: 12px;
+      .gallery {
+        position: relative;
+        border-radius: 16px;
+        border: 1px solid #243652;
+        background: #0c1626;
+        overflow: hidden;
+        min-height: 320px;
       }
-      .history-item img {
+      .gallery img {
         width: 100%;
-        border-radius: 10px;
-        border: 1px solid #233a56;
-        margin-top: 10px;
+        height: 100%;
+        object-fit: contain;
+        display: block;
       }
-      .history-item a { color: var(--accent); text-decoration: none; word-break: break-all; font-size: 12px; }
-      .file-deleted { color: var(--muted); font-size: 12px; }
+      .gallery-empty {
+        padding: 24px;
+        color: var(--muted);
+        text-align: center;
+      }
+      .gallery-badge {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        background: rgba(15, 27, 43, 0.85);
+        border: 1px solid #2b3f59;
+        color: var(--text);
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .gallery-count {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        background: rgba(15, 27, 43, 0.85);
+        border: 1px solid #2b3f59;
+        color: var(--text);
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .gallery-nav {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: 1px solid #2b3f59;
+        background: rgba(15, 27, 43, 0.85);
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+      .gallery-nav.prev { left: 12px; }
+      .gallery-nav.next { right: 12px; }
+      .gallery-actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .action-btn {
+        border-radius: 10px;
+        border: 1px solid #2b3f59;
+        background: #0f1b2b;
+        color: var(--text);
+        padding: 8px 12px;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .action-btn.danger {
+        border-color: rgba(255, 118, 118, 0.5);
+        color: var(--danger);
+      }
+      .thumbs {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .thumb {
+        width: 64px;
+        height: 64px;
+        border-radius: 10px;
+        border: 1px solid #2b3f59;
+        overflow: hidden;
+        cursor: pointer;
+        background: #0f1b2b;
+      }
+      .thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
       .redeem-row {
         display: grid;
         grid-template-columns: 1fr auto;
@@ -266,12 +340,16 @@
       <div class="panel">
         <h2>{{ labels['output_title'] }}</h2>
         <div class="output-preview" id="outputPreview">
-          <div class="status">{{ labels['output_empty'] }}</div>
-        </div>
-
-        <div style="margin-top: 18px;">
-          <div class="pill">{{ labels['history_title'] }}</div>
-          <div class="history-list" id="historyList"></div>
+          <div class="gallery" id="gallery">
+            <div class="gallery-empty">{{ labels['output_empty'] }}</div>
+          </div>
+          <div class="gallery-actions" id="galleryActions" style="display:none;">
+            <a class="action-btn" id="downloadBtn" href="#" download>
+              ⬇️ {{ labels['download'] }}
+            </a>
+            <button class="action-btn danger" id="deleteBtn">🗑️ {{ labels['delete'] }}</button>
+          </div>
+          <div class="thumbs" id="thumbs"></div>
         </div>
       </div>
     </div>
@@ -292,6 +370,9 @@
       let currentModel = null;
       let optionsState = {};
       let maxOutputs = 1;
+      let galleryItems = [];
+      let galleryIndex = 0;
+      let modelNames = {};
 
       function fmt(template, params = {}) {
         let out = template || '';
@@ -331,6 +412,8 @@
         if (!res.ok) return;
         const data = await res.json();
         models = data.models || [];
+        modelNames = {};
+        models.forEach((m) => { modelNames[m.key] = m.display_name; });
         renderModels();
       }
 
@@ -419,45 +502,100 @@
         container.appendChild(outputsGroup);
       }
 
-      function renderOutput(item) {
-        const container = document.getElementById('outputPreview');
-        container.innerHTML = '';
-        if (!item) {
-          container.innerHTML = `<div class="status">${labels.output_empty}</div>`;
-          return;
+      function firstValidIndex(start = 0) {
+        if (!galleryItems.length) return -1;
+        for (let i = 0; i < galleryItems.length; i++) {
+          const idx = (start + i) % galleryItems.length;
+          if (!galleryItems[idx].invalid) return idx;
         }
-        const title = document.createElement('div');
-        title.className = 'status';
-        title.textContent = `${item.model} · ${item.status}`;
-        container.appendChild(title);
+        return -1;
+      }
 
-        if (!item.urls || !item.urls.length) {
-          const empty = document.createElement('div');
-          empty.className = 'status';
-          empty.textContent = labels.history_deleted;
-          container.appendChild(empty);
+      function renderGallery() {
+        const gallery = document.getElementById('gallery');
+        const actions = document.getElementById('galleryActions');
+        const thumbs = document.getElementById('thumbs');
+        gallery.innerHTML = '';
+        thumbs.innerHTML = '';
+
+        const validIndex = firstValidIndex(galleryIndex);
+        if (validIndex === -1) {
+          actions.style.display = 'none';
+          gallery.innerHTML = `<div class="gallery-empty">${labels.output_empty}</div>`;
           return;
         }
-        const url = item.urls[0];
-        const linkWrap = document.createElement('div');
-        linkWrap.className = 'output-links';
-        const link = document.createElement('a');
-        link.href = url;
-        link.textContent = url;
-        link.target = '_blank';
-        linkWrap.appendChild(link);
-        container.appendChild(linkWrap);
+        galleryIndex = validIndex;
+        const item = galleryItems[galleryIndex];
 
         const img = document.createElement('img');
-        img.src = url;
+        img.src = item.url;
         img.onerror = () => {
-          img.remove();
-          const span = document.createElement('div');
-          span.className = 'file-deleted';
-          span.textContent = labels.history_deleted;
-          container.appendChild(span);
+          item.invalid = true;
+          renderGallery();
         };
-        container.appendChild(img);
+        gallery.appendChild(img);
+
+        const badge = document.createElement('div');
+        badge.className = 'gallery-badge';
+        badge.textContent = modelNames[item.model] || item.model;
+        gallery.appendChild(badge);
+
+        const count = document.createElement('div');
+        count.className = 'gallery-count';
+        count.textContent = `${galleryIndex + 1} / ${galleryItems.length}`;
+        gallery.appendChild(count);
+
+        const prev = document.createElement('div');
+        prev.className = 'gallery-nav prev';
+        prev.textContent = '‹';
+        prev.onclick = () => {
+          galleryIndex = (galleryIndex - 1 + galleryItems.length) % galleryItems.length;
+          renderGallery();
+        };
+        gallery.appendChild(prev);
+
+        const next = document.createElement('div');
+        next.className = 'gallery-nav next';
+        next.textContent = '›';
+        next.onclick = () => {
+          galleryIndex = (galleryIndex + 1) % galleryItems.length;
+          renderGallery();
+        };
+        gallery.appendChild(next);
+
+        const downloadBtn = document.getElementById('downloadBtn');
+        downloadBtn.href = item.url;
+        downloadBtn.setAttribute('download', '');
+        actions.style.display = 'flex';
+
+        const deleteBtn = document.getElementById('deleteBtn');
+        deleteBtn.onclick = async () => {
+          if (!item.generation_id) return;
+          const res = await fetch(`/api/generations/${item.generation_id}`, { method: 'DELETE' });
+          if (res.ok) {
+            galleryItems = galleryItems.filter((x) => x.generation_id !== item.generation_id);
+            renderGallery();
+          }
+        };
+
+        const maxThumbs = 12;
+        const thumbItems = galleryItems.filter((x) => !x.invalid).slice(0, maxThumbs);
+        thumbItems.forEach((thumbItem) => {
+          const wrap = document.createElement('div');
+          wrap.className = 'thumb';
+          const timg = document.createElement('img');
+          timg.src = thumbItem.url;
+          timg.onerror = () => {
+            thumbItem.invalid = true;
+            wrap.remove();
+          };
+          wrap.onclick = () => {
+            galleryIndex = galleryItems.indexOf(thumbItem);
+            renderGallery();
+          };
+          wrap.appendChild(timg);
+          thumbs.appendChild(wrap);
+        });
       }
 
       async function runGeneration() {
@@ -508,38 +646,26 @@
         const res = await fetch('/api/history');
         if (!res.ok) return;
         const data = await res.json();
-        const list = document.getElementById('historyList');
-        list.innerHTML = '';
         if (!data.history || data.history.length === 0) {
-          list.innerHTML = `<div class="status">${labels.history_empty}</div>`;
-          renderOutput(null);
+          galleryItems = [];
+          renderGallery();
           return;
         }
-        renderOutput(data.history[0]);
+        const items = [];
         data.history.forEach((item) => {
-          const card = document.createElement('div');
-          card.className = 'history-item';
-          card.innerHTML = `<div><strong>${item.model}</strong></div><div class="status">${item.prompt}</div>`;
-          if (item.urls && item.urls.length) {
-            const url = item.urls[0];
-            const link = document.createElement('a');
-            link.href = url;
-            link.textContent = url;
-            link.target = '_blank';
-            card.appendChild(link);
-            const img = document.createElement('img');
-            img.src = url;
-            img.onerror = () => {
-              img.remove();
-              const span = document.createElement('div');
-              span.className = 'file-deleted';
-              span.textContent = labels.history_deleted;
-              card.appendChild(span);
-            };
-            card.appendChild(img);
-          }
-          list.appendChild(card);
+          (item.urls || []).forEach((url) => {
+            items.push({
+              generation_id: item.id,
+              model: item.model,
+              created_at: item.created_at,
+              prompt: item.prompt,
+              url: url,
+            });
+          });
         });
+        galleryItems = items;
+        galleryIndex = 0;
+        renderGallery();
       }
 
       async function redeemPromo() {
