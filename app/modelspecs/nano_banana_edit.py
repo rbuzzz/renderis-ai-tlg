@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from app.modelspecs.base import ModelSpec, OptionSpec, OptionValue
 

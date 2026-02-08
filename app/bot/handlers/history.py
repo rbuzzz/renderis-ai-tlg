@@ -12,6 +12,7 @@ from app.services.generation import GenerationService
 from app.services.kie_client import KieClient
 from app.services.poller_runtime import get_poller
 from app.bot.utils import safe_cleanup_callback
+from app.bot.i18n import get_lang, t, tf
 from app.utils.text import escape_html
 
 
@@ -21,9 +22,10 @@ router = Router()
 @router.callback_query(F.data == 'history:list')
 async def history_list(callback: CallbackQuery, session: AsyncSession) -> None:
     credits = CreditsService(session)
+    lang = get_lang(callback.from_user)
     user = await credits.get_user(callback.from_user.id)
     if not user:
-        await callback.message.answer('Пользователь не найден.')
+        await callback.message.answer(t(lang, "history_user_not_found"))
         await callback.answer()
         return
 
@@ -35,7 +37,7 @@ async def history_list(callback: CallbackQuery, session: AsyncSession) -> None:
     )
     items = list(result.scalars().all())
     if not items:
-        await callback.message.answer('🕘 История пуста.')
+        await callback.message.answer(t(lang, "history_empty_bot"))
         await callback.answer()
         await safe_cleanup_callback(callback)
         return
@@ -43,14 +45,14 @@ async def history_list(callback: CallbackQuery, session: AsyncSession) -> None:
     for gen in items:
         text = (
             f'<b>{gen.model}</b> | {gen.status}\n'
-            f'Промпт: {escape_html(gen.prompt[:200])}\n'
-            f'Создано: {gen.created_at:%Y-%m-%d %H:%M}'
+            f'{t(lang, "prompt_label")}: {escape_html(gen.prompt[:200])}\n'
+            f'{t(lang, "history_created")}: {gen.created_at:%Y-%m-%d %H:%M}'
         )
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
-                    InlineKeyboardButton(text='Открыть результаты', callback_data=f'history:open:{gen.id}'),
-                    InlineKeyboardButton(text='Регенерировать', callback_data=f'history:regen:{gen.id}'),
+                    InlineKeyboardButton(text=t(lang, "history_open_results"), callback_data=f'history:open:{gen.id}'),
+                    InlineKeyboardButton(text=t(lang, "history_regen"), callback_data=f'history:regen:{gen.id}'),
                 ]
             ]
         )
@@ -63,14 +65,15 @@ async def history_list(callback: CallbackQuery, session: AsyncSession) -> None:
 async def history_open(callback: CallbackQuery, session: AsyncSession) -> None:
     gen_id = int(callback.data.split(':', 2)[2])
     gen = await session.get(Generation, gen_id)
+    lang = get_lang(callback.from_user)
     if not gen:
-        await callback.answer('Не найдено', show_alert=True)
+        await callback.answer(t(lang, "history_not_found"), show_alert=True)
         return
 
     credits = CreditsService(session)
     user = await credits.get_user(callback.from_user.id)
     if not user or gen.user_id != user.id:
-        await callback.answer('Недостаточно прав', show_alert=True)
+        await callback.answer(t(lang, "history_no_access"), show_alert=True)
         return
 
     result = await session.execute(
@@ -78,7 +81,7 @@ async def history_open(callback: CallbackQuery, session: AsyncSession) -> None:
     )
     tasks = list(result.scalars().all())
     if not tasks:
-        await callback.message.answer('⏳ Результаты еще не готовы.')
+        await callback.message.answer(t(lang, "history_not_ready"))
         await callback.answer()
         await safe_cleanup_callback(callback)
         return
@@ -87,7 +90,7 @@ async def history_open(callback: CallbackQuery, session: AsyncSession) -> None:
     for task in tasks:
         urls.extend(task.result_urls or [])
     if not urls:
-        await callback.message.answer('⚠️ Ссылки не найдены.')
+        await callback.message.answer(t(lang, "history_links_missing"))
         await callback.answer()
         await safe_cleanup_callback(callback)
         return
@@ -104,19 +107,20 @@ async def history_open(callback: CallbackQuery, session: AsyncSession) -> None:
 async def history_regen(callback: CallbackQuery, session: AsyncSession) -> None:
     gen_id = int(callback.data.split(':', 2)[2])
     gen = await session.get(Generation, gen_id)
+    lang = get_lang(callback.from_user)
     if not gen:
-        await callback.answer('Не найдено', show_alert=True)
+        await callback.answer(t(lang, "history_not_found"), show_alert=True)
         return
 
     credits = CreditsService(session)
     user = await credits.get_user(callback.from_user.id)
     if not user or gen.user_id != user.id:
-        await callback.answer('Недостаточно прав', show_alert=True)
+        await callback.answer(t(lang, "history_no_access"), show_alert=True)
         return
 
     model = get_model(gen.model)
     if not model:
-        await callback.answer('Модель не найдена', show_alert=True)
+        await callback.answer(t(lang, "model_not_found"), show_alert=True)
         return
 
     kie = KieClient()
@@ -134,6 +138,6 @@ async def history_regen(callback: CallbackQuery, session: AsyncSession) -> None:
         for task_id in task_ids:
             poller.schedule(task_id)
 
-    await callback.message.answer('✅ Регенерация запущена.')
+    await callback.message.answer(t(lang, "history_regen_started"))
     await callback.answer()
     await safe_cleanup_callback(callback)

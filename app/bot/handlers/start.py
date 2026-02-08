@@ -6,6 +6,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.i18n import get_lang, t, tf
 from app.bot.keyboards.main import main_menu
 from app.bot.utils import safe_cleanup_callback
 from app.config import get_settings
@@ -22,25 +23,25 @@ async def cmd_start(message: Message, session: AsyncSession) -> None:
     settings = get_settings()
     credits = CreditsService(session)
     user = await credits.ensure_user(message.from_user.id, message.from_user.username, message.from_user.id in settings.admin_ids())
+    lang = get_lang(message.from_user)
+    user.settings["lang"] = lang
     bonus_applied = await credits.apply_signup_bonus(user, settings.signup_bonus_credits)
     await session.commit()
 
     text = (
-        f"👋 Привет, {escape_html(message.from_user.full_name)}!\n"
-        f"💰 Баланс: <b>{user.balance_credits}</b> кредитов.\n"
-        "📜 Используя бот, вы подтверждаете соблюдение законов и правил сервиса."
+        f"{tf(lang, 'start_hello', name=escape_html(message.from_user.full_name))}\n"
+        f"{tf(lang, 'start_balance', credits=user.balance_credits)}\n"
+        f"{t(lang, 'start_terms')}"
     )
     if bonus_applied:
-        text += f"\nБонус за старт: +{settings.signup_bonus_credits} кредитов."
-    await message.answer(text, reply_markup=main_menu())
+        text += f"\n{tf(lang, 'start_bonus', credits=settings.signup_bonus_credits)}"
+    await message.answer(text, reply_markup=main_menu(lang))
 
 
 @router.callback_query(F.data == 'help')
 async def show_help(callback: CallbackQuery) -> None:
-    await callback.message.answer(
-        'ℹ️ Это бот для генерации изображений. Используйте меню ниже.\n'
-        'Команды: /start /ref CODE /promo CODE /admin (для админов).'
-    )
+    lang = get_lang(callback.from_user)
+    await callback.message.answer(t(lang, "help_text"))
     await callback.answer()
     await safe_cleanup_callback(callback)
 
@@ -48,7 +49,8 @@ async def show_help(callback: CallbackQuery) -> None:
 @router.callback_query(F.data == 'prices:list')
 async def show_prices(callback: CallbackQuery, session: AsyncSession) -> None:
     price_map = await _get_price_map(session)
-    lines = _format_price_list(price_map)
+    lang = get_lang(callback.from_user)
+    lines = _format_price_list(price_map, lang)
     await callback.message.answer(lines)
     await callback.answer()
     await safe_cleanup_callback(callback)
@@ -63,7 +65,7 @@ async def _get_price_map(session: AsyncSession) -> dict[tuple[str, str], int]:
     return {(row[0], row[1]): int(row[2] or 0) for row in result.all()}
 
 
-def _format_price_list(price_map: dict[tuple[str, str], int]) -> str:
+def _format_price_list(price_map: dict[tuple[str, str], int], lang: str) -> str:
     def get(model_key: str, option_key: str) -> int:
         return int(price_map.get((model_key, option_key), 0))
 
@@ -87,14 +89,14 @@ def _format_price_list(price_map: dict[tuple[str, str], int]) -> str:
     ref_4k = bundle("bundle_refs_4k", base + ref + res4)
 
     return (
-        "🧮 <b>Арифметика расхода кредитов</b>\n"
-        "Цены актуальны на момент запроса и меняются мгновенно после правок администратора.\n\n"
-        f"🍌 Nano Banana — <b>{nb}</b> кр.\n"
-        f"🛠️ Nano Banana Edit — <b>{edit}</b> кр.\n\n"
-        f"⭐ Pro без референсов 1K — <b>{no_ref_1k}</b> кр.\n"
-        f"⭐ Pro без референсов 2K — <b>{no_ref_2k}</b> кр.\n"
-        f"⭐ Pro без референсов 4K — <b>{no_ref_4k}</b> кр.\n\n"
-        f"📎 Pro с референсами 1K — <b>{ref_1k}</b> кр.\n"
-        f"📎 Pro с референсами 2K — <b>{ref_2k}</b> кр.\n"
-        f"📎 Pro с референсами 4K — <b>{ref_4k}</b> кр."
+        f"{t(lang, 'prices_title')}\n"
+        f"{t(lang, 'prices_note')}\n\n"
+        f"{tf(lang, 'prices_nb', cost=nb)}\n"
+        f"{tf(lang, 'prices_edit', cost=edit)}\n\n"
+        f"{tf(lang, 'prices_pro_no_refs_1k', cost=no_ref_1k)}\n"
+        f"{tf(lang, 'prices_pro_no_refs_2k', cost=no_ref_2k)}\n"
+        f"{tf(lang, 'prices_pro_no_refs_4k', cost=no_ref_4k)}\n\n"
+        f"{tf(lang, 'prices_pro_refs_1k', cost=ref_1k)}\n"
+        f"{tf(lang, 'prices_pro_refs_2k', cost=ref_2k)}\n"
+        f"{tf(lang, 'prices_pro_refs_4k', cost=ref_4k)}"
     )

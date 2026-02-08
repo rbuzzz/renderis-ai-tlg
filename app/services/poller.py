@@ -13,6 +13,7 @@ from app.config import get_settings
 from app.db.models import Generation, GenerationTask, User
 from app.services.credits import CreditsService
 from app.services.kie_client import KieClient, KieError
+from app.i18n import normalize_lang, t, tf
 from app.utils.logging import get_logger
 from app.utils.text import clamp_text, escape_html
 from app.utils.time import utcnow
@@ -32,6 +33,7 @@ class PollManager:
         self.settings = get_settings()
         self.global_sem = asyncio.Semaphore(self.settings.global_max_poll_concurrency)
         self.user_sems: Dict[int, asyncio.Semaphore] = {}
+        self._inflight: set[int] = set()
 
     def _user_sem(self, user_id: int) -> asyncio.Semaphore:
         if user_id not in self.user_sems:
@@ -50,61 +52,82 @@ class PollManager:
             self.schedule(task_id)
 
     def schedule(self, task_id: int) -> None:
+        if task_id in self._inflight:
+            return
+        self._inflight.add(task_id)
         asyncio.create_task(self._poll_task(task_id))
 
+    async def watch_pending(self, interval: int = 30) -> None:
+        while True:
+            try:
+                async with self.sessionmaker() as session:
+                    result = await session.execute(
+                        select(GenerationTask.id)
+                        .where(GenerationTask.state.in_(['queued', 'running', 'pending']))
+                    )
+                    ids = [row[0] for row in result.all()]
+                for task_id in ids:
+                    self.schedule(task_id)
+            except Exception as exc:
+                logger.warning('poll_watch_failed', error=str(exc))
+            await asyncio.sleep(interval)
+
     async def _poll_task(self, task_id: int) -> None:
-        async with self.global_sem:
-            async with self.sessionmaker() as session:
-                task = await session.get(GenerationTask, task_id)
-                if not task:
-                    return
-                generation = await session.get(Generation, task.generation_id)
-                if not generation:
-                    return
-                user = await session.get(User, generation.user_id)
-                if not user:
-                    return
-                if task.state in ('success', 'fail'):
-                    return
-                task.state = 'running'
-                await session.commit()
-
-            async with self._user_sem(user.id):
-                backoffs = self.settings.poll_backoff_list()
-                total_wait = 0
-                index = 0
-
-                while total_wait <= self.settings.poll_max_wait_seconds:
-                    wait_s = backoffs[min(index, len(backoffs) - 1)]
-                    await asyncio.sleep(wait_s)
-                    total_wait += wait_s
-                    index += 1
-
-                    try:
-                        record = await self.kie.get_task(task.task_id)
-                    except KieError as exc:
-                        if exc.status_code in (429, 500):
-                            continue
-                        await self._mark_fail(task_id, str(exc), 'KIE_ERROR')
+        try:
+            async with self.global_sem:
+                async with self.sessionmaker() as session:
+                    task = await session.get(GenerationTask, task_id)
+                    if not task:
                         return
-
-                    status = self.kie.get_status(record).lower()
-                    if status in SUCCESS_STATUSES:
-                        urls = self.kie.parse_result_urls(record)
-                        await self._mark_success(task_id, urls, record)
-                        await self._deliver_results(user.telegram_id, generation, urls)
-                        await self._update_generation_status(generation.id)
+                    generation = await session.get(Generation, task.generation_id)
+                    if not generation:
                         return
-                    if status in FAIL_STATUSES:
-                        fail_code, fail_msg = self.kie.get_fail_info(record)
-                        await self._mark_fail(task_id, fail_msg or 'Ошибка генерации', fail_code)
-                        await self._maybe_refund(generation.id)
-                        await self._notify_failure(user.telegram_id, fail_msg)
-                        await self._update_generation_status(generation.id)
+                    user = await session.get(User, generation.user_id)
+                    if not user:
                         return
+                    if task.state in ('success', 'fail'):
+                        return
+                    task.state = 'running'
+                    await session.commit()
 
-                await self._mark_pending(task_id)
-                asyncio.create_task(self._delayed_reschedule(task_id))
+                async with self._user_sem(user.id):
+                    backoffs = self.settings.poll_backoff_list()
+                    total_wait = 0
+                    index = 0
+
+                    while total_wait <= self.settings.poll_max_wait_seconds:
+                        wait_s = backoffs[min(index, len(backoffs) - 1)]
+                        await asyncio.sleep(wait_s)
+                        total_wait += wait_s
+                        index += 1
+
+                        try:
+                            record = await self.kie.get_task(task.task_id)
+                        except KieError as exc:
+                            if exc.status_code in (429, 500):
+                                continue
+                            await self._mark_fail(task_id, str(exc), 'KIE_ERROR')
+                            return
+
+                        status = self.kie.get_status(record).lower()
+                        if status in SUCCESS_STATUSES:
+                            urls = self.kie.parse_result_urls(record)
+                            await self._mark_success(task_id, urls, record)
+                            await self._deliver_results(user, generation, urls)
+                            await self._update_generation_status(generation.id)
+                            return
+                        if status in FAIL_STATUSES:
+                            fail_code, fail_msg = self.kie.get_fail_info(record)
+                            await self._mark_fail(task_id, fail_msg or 'Ошибка генерации', fail_code)
+                            await self._maybe_refund(generation.id)
+                            await self._notify_failure(user, fail_msg)
+                            await self._update_generation_status(generation.id)
+                            return
+
+                    await self._mark_pending(task_id)
+                    asyncio.create_task(self._delayed_reschedule(task_id))
+        finally:
+            self._inflight.discard(task_id)
 
     async def _delayed_reschedule(self, task_id: int) -> None:
         await asyncio.sleep(30)
@@ -186,45 +209,45 @@ class PollManager:
             except OSError:
                 pass
 
-    async def _deliver_results(self, telegram_id: int, generation: Generation, urls: List[str]) -> None:
+    async def _deliver_results(self, user: User, generation: Generation, urls: List[str]) -> None:
+        lang = normalize_lang((user.settings or {}).get("lang"))
         if not urls:
-            await self.bot.send_message(telegram_id, 'Генерация завершена, но ссылки не получены.')
+            await self.bot.send_message(user.telegram_id, t(lang, "result_no_urls"))
             return
         try:
             prompt_short = clamp_text(generation.prompt or '', 800)
-            caption = (
-                f'Промпт: {escape_html(prompt_short)}\n'
-                'Напишите в чат, если нужно изменить что-то еще.'
-            )
+            caption = tf(lang, "result_caption", prompt=escape_html(prompt_short))
             for url in urls:
                 try:
-                    await self.bot.send_document(telegram_id, url, caption='Изображение без сжатия')
+                    await self.bot.send_document(user.telegram_id, url, caption=t(lang, "result_original"))
                 except Exception as exc:
                     logger.warning('send_document_failed', url=url, error=str(exc))
                 if self._is_image_url(url):
                     try:
-                        await self.bot.send_photo(telegram_id, url, caption=caption)
+                        await self.bot.send_photo(user.telegram_id, url, caption=caption)
                     except Exception as exc:
                         logger.warning('send_photo_failed', url=url, error=str(exc))
             await self.bot.send_message(
-                telegram_id,
-                'Что дальше?',
-                reply_markup=generation_result_menu(generation.id),
+                user.telegram_id,
+                t(lang, "result_next"),
+                reply_markup=generation_result_menu(generation.id, lang=lang),
             )
         except Exception as exc:
             logger.warning('deliver_failed', error=str(exc))
-            await self.bot.send_message(telegram_id, 'Не удалось отправить результат. Попробуйте позже.')
+            await self.bot.send_message(user.telegram_id, t(lang, "result_send_failed"))
 
     @staticmethod
     def _is_image_url(url: str) -> bool:
         lowered = url.lower()
         return lowered.endswith(('.png', '.jpg', '.jpeg', '.webp'))
 
-    async def _notify_failure(self, telegram_id: int, msg: Optional[str]) -> None:
-        text = 'Генерация не удалась.'
+    async def _notify_failure(self, user: User, msg: Optional[str]) -> None:
+        lang = normalize_lang((user.settings or {}).get("lang"))
         if msg:
-            text += f' Причина: {msg}'
-        await self.bot.send_message(telegram_id, text)
+            text = tf(lang, "generation_failed_reason", reason=msg)
+        else:
+            text = t(lang, "generation_failed")
+        await self.bot.send_message(user.telegram_id, text)
 
     async def _maybe_refund(self, generation_id: int) -> None:
         if not self.settings.refund_on_fail:

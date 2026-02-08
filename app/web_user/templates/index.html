@@ -1,0 +1,559 @@
+﻿<!doctype html>
+<html lang="{{ lang }}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ labels['site_title'] }}</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Fraunces:wght@600&display=swap');
+      :root {
+        --bg: #0b1220;
+        --panel: #121d30;
+        --card: #15243a;
+        --line: #243652;
+        --text: #eef3fb;
+        --muted: #9fb3cc;
+        --accent: #f5b94f;
+        --accent-2: #40d49a;
+        --danger: #ff7676;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Space Grotesk", sans-serif;
+        background: radial-gradient(circle at 12% 12%, #2a4064 0%, #0b1220 52%, #0b1220 100%);
+        color: var(--text);
+        min-height: 100vh;
+        padding: 24px;
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+      .brand {
+        font-family: "Fraunces", serif;
+        font-size: 26px;
+      }
+      .subtitle { color: var(--muted); font-size: 14px; margin-top: 4px; }
+      .top-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .balance {
+        background: var(--card);
+        border: 1px solid var(--line);
+        padding: 8px 14px;
+        border-radius: 12px;
+        font-weight: 600;
+      }
+      .logout {
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 14px;
+      }
+      .notice {
+        background: #172741;
+        border: 1px solid #263a56;
+        color: var(--muted);
+        padding: 12px 16px;
+        border-radius: 12px;
+        margin-bottom: 18px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1.15fr 1fr;
+        gap: 20px;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 18px;
+      }
+      .panel h2 {
+        margin: 0 0 12px;
+        font-size: 18px;
+        color: var(--muted);
+      }
+      .model-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+      .model-btn {
+        border-radius: 12px;
+        border: 1px solid #2b3f59;
+        background: #0f1b2b;
+        color: var(--text);
+        padding: 10px 12px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .model-btn.active {
+        background: var(--accent);
+        color: #261a00;
+      }
+      .tagline { color: var(--muted); margin: 8px 0 0; font-size: 14px; }
+      .field { margin: 14px 0; }
+      label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px; }
+      input[type="text"], textarea {
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid #2b3f59;
+        background: #0f1b2b;
+        color: var(--text);
+        padding: 10px 12px;
+        font-family: inherit;
+        resize: vertical;
+      }
+      textarea { min-height: 120px; }
+      .options-group { margin-top: 12px; }
+      .option-title { font-size: 13px; color: var(--muted); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+      .option-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .option-btn {
+        padding: 8px 10px;
+        border-radius: 10px;
+        border: 1px solid #2b3f59;
+        background: #0f1b2b;
+        color: var(--text);
+        cursor: pointer;
+      }
+      .option-btn.active {
+        border-color: var(--accent-2);
+        background: rgba(64, 212, 154, 0.18);
+      }
+      .run-row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin-top: 16px;
+      }
+      .run-btn {
+        background: var(--accent);
+        color: #221600;
+        border: none;
+        padding: 10px 18px;
+        border-radius: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .status { font-size: 12px; color: var(--muted); margin-top: 8px; }
+      .output-preview {
+        border-radius: 14px;
+        border: 1px solid #2b3f59;
+        background: #0f1b2b;
+        padding: 14px;
+        min-height: 220px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .output-preview img {
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid #243652;
+      }
+      .output-links a { color: var(--accent); text-decoration: none; word-break: break-all; font-size: 12px; }
+      .history-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 16px;
+      }
+      .history-item {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px;
+      }
+      .history-item img {
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid #233a56;
+        margin-top: 10px;
+      }
+      .history-item a { color: var(--accent); text-decoration: none; word-break: break-all; font-size: 12px; }
+      .file-deleted { color: var(--muted); font-size: 12px; }
+      .redeem-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: #1a2b45;
+        border: 1px solid #2a3d57;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      @media (max-width: 980px) {
+        .grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <div>
+        <div class="brand">{{ labels['site_title'] }}</div>
+        <div class="subtitle">{{ labels['site_tagline'] }}</div>
+      </div>
+      <div class="top-actions">
+        <div class="balance" id="balanceLabel">--</div>
+        <a class="logout" href="/logout">{{ labels['logout'] }}</a>
+      </div>
+    </div>
+
+    <div class="notice">{{ labels['site_notice'] }}</div>
+
+    <div class="grid">
+      <div class="panel">
+        <h2>{{ labels['input_title'] }}</h2>
+        <div class="model-buttons" id="modelButtons"></div>
+        <div class="tagline" id="modelTagline"></div>
+
+        <div class="field">
+          <label>{{ labels['prompt_label'] }}</label>
+          <textarea id="prompt" placeholder="{{ labels['prompt_placeholder'] }}"></textarea>
+        </div>
+
+        <div class="field" id="uploadBlock">
+          <label>{{ labels['upload_label'] }}</label>
+          <input id="refFiles" type="file" multiple />
+          <div class="status" id="refHint"></div>
+        </div>
+
+        <div class="field" id="optionsContainer">
+          <label>{{ labels['options_label'] }}</label>
+        </div>
+
+        <div class="run-row">
+          <button class="run-btn" id="runBtn">{{ labels['run'] }}</button>
+          <div class="status" id="runStatus"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>{{ labels['output_title'] }}</h2>
+        <div class="output-preview" id="outputPreview">
+          <div class="status">{{ labels['output_empty'] }}</div>
+        </div>
+
+        <div style="margin-top: 18px;">
+          <div class="pill">{{ labels['history_title'] }}</div>
+          <div class="history-list" id="historyList"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top: 20px;">
+      <h2>{{ labels['redeem'] }}</h2>
+      <div class="redeem-row">
+        <input id="promoInput" placeholder="{{ labels['redeem_placeholder'] }}" />
+        <button id="promoBtn">{{ labels['redeem_button'] }}</button>
+      </div>
+      <div class="status" id="promoStatus"></div>
+    </div>
+
+    <script>
+      const labels = {{ labels | tojson }};
+      let models = [];
+      let currentModel = null;
+      let optionsState = {};
+      let maxOutputs = 1;
+
+      function fmt(template, params = {}) {
+        let out = template || '';
+        Object.keys(params).forEach((k) => {
+          out = out.replaceAll(`{${k}}`, params[k]);
+        });
+        return out;
+      }
+
+      function setBalance(balance) {
+        const label = `${labels.balance}: ${balance} ${labels.credits}`;
+        document.getElementById('balanceLabel').textContent = label;
+      }
+
+      function updateRefHint() {
+        const hint = document.getElementById('refHint');
+        if (!currentModel) return;
+        if (currentModel.requires_reference_images) {
+          hint.textContent = fmt(labels.upload_hint_required, { max: currentModel.max_reference_images });
+        } else if (currentModel.supports_reference_images) {
+          hint.textContent = fmt(labels.upload_hint_optional, { max: currentModel.max_reference_images });
+        } else {
+          hint.textContent = '';
+        }
+      }
+
+      async function loadMe() {
+        const res = await fetch('/api/me');
+        if (!res.ok) return;
+        const data = await res.json();
+        setBalance(data.balance);
+        maxOutputs = data.max_outputs || 1;
+      }
+
+      async function loadModels() {
+        const res = await fetch('/api/models');
+        if (!res.ok) return;
+        const data = await res.json();
+        models = data.models || [];
+        renderModels();
+      }
+
+      function renderModels() {
+        const container = document.getElementById('modelButtons');
+        container.innerHTML = '';
+        models.forEach((m) => {
+          const btn = document.createElement('button');
+          btn.className = 'model-btn' + (currentModel && currentModel.key === m.key ? ' active' : '');
+          btn.textContent = m.display_name;
+          btn.onclick = () => selectModel(m.key);
+          container.appendChild(btn);
+        });
+        if (!currentModel && models.length) selectModel(models[0].key);
+      }
+
+      function selectModel(key) {
+        currentModel = models.find((m) => m.key === key);
+        document.getElementById('modelTagline').textContent = currentModel.tagline || '';
+        optionsState = {};
+        currentModel.options.forEach((opt) => optionsState[opt.key] = opt.default);
+        optionsState.outputs = 1;
+        document.getElementById('uploadBlock').style.display =
+          (currentModel.supports_reference_images || currentModel.requires_reference_images) ? 'block' : 'none';
+        updateRefHint();
+        renderModels();
+        renderOptions();
+      }
+
+      function optionIcon(key) {
+        const map = {
+          output_format: '🖼️',
+          image_size: '📐',
+          aspect_ratio: '📐',
+          resolution: '🧩',
+        };
+        return map[key] || '⚙️';
+      }
+
+      function renderOptions() {
+        const container = document.getElementById('optionsContainer');
+        container.innerHTML = '';
+        currentModel.options.forEach((opt) => {
+          const group = document.createElement('div');
+          group.className = 'options-group';
+          const title = document.createElement('div');
+          title.className = 'option-title';
+          title.textContent = `${optionIcon(opt.key)} ${opt.label}`;
+          group.appendChild(title);
+
+          const buttons = document.createElement('div');
+          buttons.className = 'option-buttons';
+          opt.values.forEach((v) => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn' + (optionsState[opt.key] === v.value ? ' active' : '');
+            btn.textContent = v.label;
+            btn.onclick = () => {
+              optionsState[opt.key] = v.value;
+              renderOptions();
+            };
+            buttons.appendChild(btn);
+          });
+          group.appendChild(buttons);
+          container.appendChild(group);
+        });
+
+        const outputsGroup = document.createElement('div');
+        outputsGroup.className = 'options-group';
+        const outputsTitle = document.createElement('div');
+        outputsTitle.className = 'option-title';
+        outputsTitle.textContent = `🔢 ${labels.outputs}`;
+        outputsGroup.appendChild(outputsTitle);
+        const outputsButtons = document.createElement('div');
+        outputsButtons.className = 'option-buttons';
+        for (let i = 1; i <= maxOutputs; i++) {
+          const btn = document.createElement('button');
+          btn.className = 'option-btn' + (optionsState.outputs === i ? ' active' : '');
+          btn.textContent = i;
+          btn.onclick = () => {
+            optionsState.outputs = i;
+            renderOptions();
+          };
+          outputsButtons.appendChild(btn);
+        }
+        outputsGroup.appendChild(outputsButtons);
+        container.appendChild(outputsGroup);
+      }
+
+      function renderOutput(item) {
+        const container = document.getElementById('outputPreview');
+        container.innerHTML = '';
+        if (!item) {
+          container.innerHTML = `<div class="status">${labels.output_empty}</div>`;
+          return;
+        }
+        const title = document.createElement('div');
+        title.className = 'status';
+        title.textContent = `${item.model} · ${item.status}`;
+        container.appendChild(title);
+
+        if (!item.urls || !item.urls.length) {
+          const empty = document.createElement('div');
+          empty.className = 'status';
+          empty.textContent = labels.history_deleted;
+          container.appendChild(empty);
+          return;
+        }
+        const url = item.urls[0];
+        const linkWrap = document.createElement('div');
+        linkWrap.className = 'output-links';
+        const link = document.createElement('a');
+        link.href = url;
+        link.textContent = url;
+        link.target = '_blank';
+        linkWrap.appendChild(link);
+        container.appendChild(linkWrap);
+
+        const img = document.createElement('img');
+        img.src = url;
+        img.onerror = () => {
+          img.remove();
+          const span = document.createElement('div');
+          span.className = 'file-deleted';
+          span.textContent = labels.history_deleted;
+          container.appendChild(span);
+        };
+        container.appendChild(img);
+      }
+
+      async function runGeneration() {
+        if (!currentModel) return;
+        const prompt = document.getElementById('prompt').value.trim();
+        if (!prompt) {
+          document.getElementById('runStatus').textContent = labels.prompt_required;
+          return;
+        }
+        const files = document.getElementById('refFiles').files;
+        if (currentModel.requires_reference_images && (!files || files.length === 0)) {
+          document.getElementById('runStatus').textContent = labels.upload_required;
+          return;
+        }
+        if (currentModel.key === 'nano_banana_pro') {
+          optionsState.reference_images = (files && files.length > 0) ? 'has' : 'none';
+        }
+        const form = new FormData();
+        form.append('model_key', currentModel.key);
+        form.append('prompt', prompt);
+        const outputs = optionsState.outputs || 1;
+        form.append('outputs', outputs);
+        form.append('options', JSON.stringify(optionsState));
+
+        for (const file of files) {
+          form.append('files', file);
+        }
+        document.getElementById('runStatus').textContent = labels.run_pending;
+        const res = await fetch('/api/generate', { method: 'POST', body: form });
+        if (res.ok) {
+          document.getElementById('runStatus').textContent = labels.request_sent;
+          document.getElementById('prompt').value = '';
+          document.getElementById('refFiles').value = '';
+          updateRefHint();
+          await loadMe();
+          await loadHistory();
+        } else {
+          const data = await res.json();
+          document.getElementById('runStatus').textContent = `${labels.error_prefix}: ${data.error || 'unknown'}`;
+        }
+      }
+
+      async function loadHistory() {
+        const res = await fetch('/api/history');
+        if (!res.ok) return;
+        const data = await res.json();
+        const list = document.getElementById('historyList');
+        list.innerHTML = '';
+        if (!data.history || data.history.length === 0) {
+          list.innerHTML = `<div class="status">${labels.history_empty}</div>`;
+          renderOutput(null);
+          return;
+        }
+        renderOutput(data.history[0]);
+        data.history.forEach((item) => {
+          const card = document.createElement('div');
+          card.className = 'history-item';
+          card.innerHTML = `<div><strong>${item.model}</strong></div><div class="status">${item.prompt}</div>`;
+          if (item.urls && item.urls.length) {
+            const url = item.urls[0];
+            const link = document.createElement('a');
+            link.href = url;
+            link.textContent = url;
+            link.target = '_blank';
+            card.appendChild(link);
+            const img = document.createElement('img');
+            img.src = url;
+            img.onerror = () => {
+              img.remove();
+              const span = document.createElement('div');
+              span.className = 'file-deleted';
+              span.textContent = labels.history_deleted;
+              card.appendChild(span);
+            };
+            card.appendChild(img);
+          }
+          list.appendChild(card);
+        });
+      }
+
+      async function redeemPromo() {
+        const input = document.getElementById('promoInput');
+        const code = input.value.trim();
+        if (!code) return;
+        const form = new FormData();
+        form.append('code', code);
+        const res = await fetch('/api/redeem', { method: 'POST', body: form });
+        const status = document.getElementById('promoStatus');
+        if (res.ok) {
+          const data = await res.json();
+          status.textContent = `${labels.promo_added}: ${data.added || 0}`;
+          input.value = '';
+          await loadMe();
+        } else {
+          const data = await res.json();
+          status.textContent = `${labels.promo_error}: ${data.error || 'unknown'}`;
+        }
+      }
+
+      document.getElementById('runBtn').onclick = runGeneration;
+      document.getElementById('promoBtn').onclick = redeemPromo;
+      document.getElementById('refFiles').addEventListener('change', () => {
+        if (!currentModel) return;
+        const files = document.getElementById('refFiles').files;
+        if (files && files.length > 0) {
+          const label = fmt(labels.upload_count, { count: files.length, max: currentModel.max_reference_images });
+          document.getElementById('refHint').textContent = label;
+        } else {
+          updateRefHint();
+        }
+      });
+
+      loadMe();
+      loadModels();
+      loadHistory();
+      setInterval(loadHistory, 15000);
+    </script>
+  </body>
+</html>

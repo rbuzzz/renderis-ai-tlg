@@ -1,0 +1,15 @@
+[Unit]
+Description=Renderis User Web
+After=network.target
+
+[Service]
+Type=simple
+User=renderisbot
+WorkingDirectory=/opt/renderis-ai-telegram-bot
+EnvironmentFile=/etc/renderis-bot.env
+ExecStart=/opt/renderis-ai-telegram-bot/.venv/bin/python -m app.web_user.main
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

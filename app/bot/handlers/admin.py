@@ -3,10 +3,12 @@
 import tempfile
 import uuid
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +23,7 @@ from app.services.credits import CreditsService
 from app.services.pricing import PricingService
 from app.services.promos import PromoService
 from app.services.referrals import ReferralService
+from app.services.support import SupportService
 
 
 router = Router()
@@ -280,3 +283,99 @@ async def admin_free_mode(callback: CallbackQuery, session: AsyncSession) -> Non
     await callback.message.answer(f'Admin free-mode теперь: {"ON" if not current else "OFF"}')
     await callback.answer()
     await safe_cleanup_callback(callback)
+
+
+@router.callback_query(F.data.startswith('support:templates:'))
+async def support_templates(callback: CallbackQuery, session: AsyncSession) -> None:
+    if not await _is_admin(session, callback.from_user.id):
+        await callback.answer('Недостаточно прав', show_alert=True)
+        return
+    await callback.message.answer('Шаблоны пока не настроены.')
+    await callback.answer()
+    await safe_cleanup_callback(callback)
+
+
+@router.callback_query(F.data == 'support:reply_cancel')
+async def support_reply_cancel(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    prompt_id = data.get('support_prompt_id')
+    await state.clear()
+    if prompt_id:
+        try:
+            await callback.message.bot.delete_message(callback.message.chat.id, prompt_id)
+        except Exception:
+            pass
+    await callback.answer('Отменено', show_alert=False)
+
+
+@router.callback_query(F.data.startswith('support:reply:'))
+async def support_reply(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    if not await _is_admin(session, callback.from_user.id):
+        await callback.answer('Недостаточно прав', show_alert=True)
+        return
+    parts = (callback.data or '').split(':')
+    if len(parts) != 3:
+        await callback.answer('Некорректные данные', show_alert=True)
+        return
+    thread_id = int(parts[2])
+    await state.set_state(AdminFlow.support_reply)
+    prompt = await callback.message.answer(
+        'Напишите ответ одним сообщением.',
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text='Отмена', callback_data='support:reply_cancel')]]
+        ),
+    )
+    await state.update_data(support_thread_id=thread_id, support_prompt_id=prompt.message_id)
+    await callback.answer()
+    await safe_cleanup_callback(callback)
+
+
+@router.message(AdminFlow.support_reply)
+async def support_reply_send(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    data = await state.get_data()
+    thread_id = data.get('support_thread_id')
+    prompt_id = data.get('support_prompt_id')
+    if not thread_id:
+        await message.answer('Чат не найден.')
+        await state.clear()
+        return
+
+    settings = get_settings()
+    if not settings.support_bot_token:
+        await message.answer('SUPPORT_BOT_TOKEN не задан.')
+        await state.clear()
+        return
+
+    support = SupportService(session)
+    thread = await support.get_thread(int(thread_id))
+    if not thread:
+        await message.answer('Чат не найден.')
+        await state.clear()
+        return
+
+    result = await session.execute(select(User).where(User.id == thread.user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        await message.answer('Пользователь не найден.')
+        await state.clear()
+        return
+
+    bot = Bot(
+        token=settings.support_bot_token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        sent = await bot.send_message(user.telegram_id, message.text or '')
+    finally:
+        await bot.session.close()
+
+    await support.add_message(thread, 'admin', message.text or '', sender_admin_id=message.from_user.id, tg_message_id=sent.message_id)
+    await session.commit()
+
+    await state.clear()
+    if prompt_id:
+        try:
+            await message.bot.delete_message(message.chat.id, prompt_id)
+        except Exception:
+            pass
+    await message.answer('Ответ отправлен.')

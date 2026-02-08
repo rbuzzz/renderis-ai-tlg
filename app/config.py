@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     # Telegram
     bot_token: str = Field(..., alias='BOT_TOKEN')
+    bot_username: str = Field('', alias='BOT_USERNAME')
     telegram_admin_ids: str = Field('', alias='TELEGRAM_ADMIN_IDS')
 
     # Database
@@ -47,6 +48,17 @@ class Settings(BaseSettings):
     admin_web_username: str = Field('admin', alias='ADMIN_WEB_USERNAME')
     admin_web_password: str = Field('', alias='ADMIN_WEB_PASSWORD')
     admin_web_secret: str = Field('change-me', alias='ADMIN_WEB_SECRET')
+    admin_web_public_url: str = Field('', alias='ADMIN_WEB_PUBLIC_URL')
+
+    # User web
+    user_web_enabled: bool = Field(False, alias='USER_WEB_ENABLED')
+    user_web_host: str = Field('127.0.0.1', alias='USER_WEB_HOST')
+    user_web_port: int = Field(9010, alias='USER_WEB_PORT')
+    user_web_secret: str = Field('change-me', alias='USER_WEB_SECRET')
+    user_web_public_url: str = Field('', alias='USER_WEB_PUBLIC_URL')
+
+    # Support bot
+    support_bot_token: str = Field('', alias='SUPPORT_BOT_TOKEN')
 
     # Polling
     poll_max_wait_seconds: int = Field(180, alias='POLL_MAX_WAIT_SECONDS')

@@ -163,3 +163,31 @@ class GenerationTask(Base):
     raw_response: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     generation: Mapped['Generation'] = relationship(back_populates='tasks')
+
+
+class SupportThread(Base):
+    __tablename__ = 'support_threads'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(16), default='open')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_message_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped['User'] = relationship()
+    messages: Mapped[list['SupportMessage']] = relationship(back_populates='thread')
+
+
+class SupportMessage(Base):
+    __tablename__ = 'support_messages'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    thread_id: Mapped[int] = mapped_column(ForeignKey('support_threads.id'), index=True)
+    sender_type: Mapped[str] = mapped_column(String(16))
+    sender_admin_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    text: Mapped[str] = mapped_column(Text)
+    tg_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    thread: Mapped['SupportThread'] = relationship(back_populates='messages')

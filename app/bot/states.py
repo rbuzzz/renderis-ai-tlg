@@ -17,3 +17,4 @@ class AdminFlow(StatesGroup):
     create_promo = State()
     grant_credits = State()
     ban_user = State()
+    support_reply = State()

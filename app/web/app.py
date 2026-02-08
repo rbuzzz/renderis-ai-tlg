@@ -4,19 +4,23 @@ import secrets
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import Body, FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from starlette.middleware.sessions import SessionMiddleware
+from aiogram import Bot
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 
 from app.config import get_settings
-from app.db.models import CreditLedger, Generation, Order, Price, PromoCode, User
+from app.db.models import CreditLedger, Generation, Order, Price, PromoCode, SupportMessage, SupportThread, User
 from app.db.session import create_sessionmaker
 from app.modelspecs.registry import list_models
 from app.services.app_settings import AppSettingsService
 from app.services.kie_balance import KieBalanceService
 from app.services.promos import PromoService
+from app.services.support import SupportService
 
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
@@ -472,6 +476,98 @@ def create_app() -> FastAPI:
             await session.commit()
 
         return RedirectResponse(url="/admin/settings?saved=1", status_code=302)
+
+    @app.get("/admin/chats", response_class=HTMLResponse)
+    async def admin_chats(request: Request):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+        return app.state.templates.TemplateResponse(
+            "chats.html",
+            {
+                "request": request,
+                "title": "Renderis Admin — Чаты",
+                "active_tab": "chats",
+            },
+        )
+
+    @app.get("/admin/api/chats")
+    async def admin_chats_list(request: Request):
+        if not _is_logged_in(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        async with app.state.sessionmaker() as session:
+            rows = await session.execute(
+                select(SupportThread, User)
+                .join(User, SupportThread.user_id == User.id)
+                .order_by(SupportThread.last_message_at.desc())
+            )
+            threads = []
+            for thread, user in rows.all():
+                label = user.username or str(user.telegram_id)
+                threads.append(
+                    {
+                        "id": thread.id,
+                        "user_label": label,
+                        "last_message_at": thread.last_message_at.isoformat(),
+                        "status": thread.status,
+                    }
+                )
+        return {"threads": threads}
+
+    @app.get("/admin/api/chats/{thread_id}/messages")
+    async def admin_chats_messages(request: Request, thread_id: int):
+        if not _is_logged_in(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        async with app.state.sessionmaker() as session:
+            rows = await session.execute(
+                select(SupportMessage)
+                .where(SupportMessage.thread_id == thread_id)
+                .order_by(SupportMessage.id)
+            )
+            messages = [
+                {
+                    "id": msg.id,
+                    "sender_type": msg.sender_type,
+                    "text": msg.text,
+                    "created_at": msg.created_at.isoformat(),
+                }
+                for msg in rows.scalars().all()
+            ]
+        return {"messages": messages}
+
+    @app.post("/admin/api/chats/{thread_id}/send")
+    async def admin_chats_send(request: Request, thread_id: int, payload: dict = Body(...)):
+        if not _is_logged_in(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        text = (payload.get("text") or "").strip()
+        if not text:
+            return JSONResponse({"error": "empty"}, status_code=400)
+
+        settings = get_settings()
+        if not settings.support_bot_token:
+            return JSONResponse({"error": "support_bot_missing"}, status_code=400)
+
+        async with app.state.sessionmaker() as session:
+            support = SupportService(session)
+            thread = await support.get_thread(thread_id)
+            if not thread:
+                return JSONResponse({"error": "not_found"}, status_code=404)
+            user = await session.get(User, thread.user_id)
+            if not user:
+                return JSONResponse({"error": "user_not_found"}, status_code=404)
+
+            bot = Bot(
+                token=settings.support_bot_token,
+                default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+            )
+            try:
+                sent = await bot.send_message(user.telegram_id, text)
+            finally:
+                await bot.session.close()
+
+            await support.add_message(thread, "admin", text, sender_admin_id=0, tg_message_id=sent.message_id)
+            await session.commit()
+
+        return {"ok": True}
 
     @app.get("/admin/promos", response_class=HTMLResponse)
     async def admin_promos(request: Request, code: str | None = None, saved: int | None = None):

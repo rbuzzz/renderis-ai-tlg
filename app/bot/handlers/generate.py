@@ -11,6 +11,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.i18n import get_lang, t, tf
 from app.bot.keyboards.main import (
     confirm_menu,
     generate_category_menu,
@@ -36,57 +37,51 @@ router = Router()
 rate_limiter = RateLimiter(get_settings().per_user_generate_cooldown_seconds)
 
 
-def _refs_menu(allow_skip: bool) -> InlineKeyboardMarkup:
-    rows = [[InlineKeyboardButton(text='✅ Готово', callback_data='gen:refs:done')]]
+def _refs_menu(allow_skip: bool, lang: str) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(text=t(lang, "ref_done_btn"), callback_data='gen:refs:done')]]
     if allow_skip:
-        rows.append([InlineKeyboardButton(text='⏭️ Пропустить', callback_data='gen:refs:skip')])
-    rows.append([InlineKeyboardButton(text='⬅️ Назад', callback_data='gen:back')])
+        rows.append([InlineKeyboardButton(text=t(lang, "ref_skip_btn"), callback_data='gen:refs:skip')])
+    rows.append([InlineKeyboardButton(text=t(lang, "ref_back_btn"), callback_data='gen:back')])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _model_intro_text(models: list[Any]) -> str:
+def _model_intro_text(models: list[Any], lang: str) -> str:
     lines = [
-        '🖼️ <b>Gemini Images</b>',
-        'Создавайте и редактируйте изображения прямо в чате.',
-        '',
-        f'Для вас работают {len(models)} модели:',
+        t(lang, "model_intro_title"),
+        t(lang, "model_intro_desc"),
+        "",
+        tf(lang, "model_intro_models", count=len(models)),
     ]
     for model in models:
         tagline = f' — {model.tagline}' if model.tagline else ''
         lines.append(f'• {model.display_name}{tagline}')
-    lines.append('')
-    lines.append('Выберите модель ниже:')
+    lines.append("")
+    lines.append(t(lang, "model_intro_select"))
     return '\n'.join(lines)
 
 
-def _options_text(model, prompt: str, ref_count: int) -> str:
+def _options_text(model, prompt: str, ref_count: int, lang: str) -> str:
     return (
-        '⚙️ <b>Параметры генерации</b>\n'
-        f'🧠 Модель: {model.display_name}\n'
-        f'✍️ Промпт: {escape_html(prompt)}\n'
-        f'📎 Референсов: {ref_count}\n\n'
-        'Отметьте нужные параметры и нажмите «Далее».'
+        f"{t(lang, 'options_title')}\n"
+        f"{tf(lang, 'options_model', model=model.display_name)}\n"
+        f"{tf(lang, 'options_prompt', prompt=escape_html(prompt))}\n"
+        f"{tf(lang, 'options_refs', count=ref_count)}\n\n"
+        f"{t(lang, 'options_instruction')}"
     )
 
 
-def _ref_label_for_model(model) -> str:
+def _ref_label_for_model(model, lang: str) -> str:
     if model.requires_reference_images:
-        return 'фото'
-    return 'референс-фото'
+        return t(lang, "ref_label_photo")
+    return t(lang, "ref_label_ref")
 
 
-def _refs_prompt_text(count: int, max_refs: int, label: str) -> str:
+def _refs_prompt_text(count: int, max_refs: int, label: str, lang: str) -> str:
     if count <= 0:
-        return (
-            f'📎 Отправьте до {max_refs} {label}.\n'
-            'Когда закончите, нажмите «Готово».'
-        )
+        return tf(lang, "ref_prompt_initial", max=max_refs, label=label)
     if count < max_refs:
-        return (
-            f'✅ Добавлено {count} из {max_refs} фото.\n'
-            f'Пришлите еще {label} или нажмите «Готово».'
-        )
-    return f'✅ Добавлено {count} из {max_refs} фото.\nНажмите «Готово».'
+        return tf(lang, "ref_prompt_more", count=count, max=max_refs, label=label)
+    return tf(lang, "ref_prompt_done", count=count, max=max_refs)
 
 
 async def _safe_delete_by_id(chat_id: int, message_id: int, message: Message) -> None:
@@ -98,15 +93,16 @@ async def _safe_delete_by_id(chat_id: int, message_id: int, message: Message) ->
         return
 
 
-def _render_options_panel(model, options: Dict[str, Any], outputs: int) -> InlineKeyboardMarkup:
+def _render_options_panel(model, options: Dict[str, Any], outputs: int, lang: str) -> InlineKeyboardMarkup:
     settings = get_settings()
-    return options_panel(model, options, outputs, settings.max_outputs_per_request)
+    return options_panel(model, options, outputs, settings.max_outputs_per_request, lang=lang)
 
 
 @router.callback_query(F.data == 'gen:start')
 async def gen_start(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
-    await callback.message.answer('📂 Выберите категорию:', reply_markup=generate_category_menu())
+    lang = get_lang(callback.from_user)
+    await callback.message.answer(t(lang, "category_choose"), reply_markup=generate_category_menu(lang))
     await callback.answer()
     await safe_cleanup_callback(callback)
 
@@ -115,14 +111,16 @@ async def gen_start(callback: CallbackQuery, state: FSMContext) -> None:
 async def gen_category(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(GenerateFlow.choosing_model)
     models = [m for m in list_models() if m.model_type == 'image']
-    await callback.message.answer(_model_intro_text(models), reply_markup=model_menu(models))
+    lang = get_lang(callback.from_user)
+    await callback.message.answer(_model_intro_text(models, lang), reply_markup=model_menu(models, lang))
     await callback.answer()
     await safe_cleanup_callback(callback)
 
 
 @router.callback_query(F.data == 'gen:category:video')
 async def gen_category_video(callback: CallbackQuery) -> None:
-    await callback.message.answer('🎬 Видео пока недоступно. Скоро добавим.')
+    lang = get_lang(callback.from_user)
+    await callback.message.answer(t(lang, "video_soon"))
     await callback.answer()
     await safe_cleanup_callback(callback)
 
@@ -130,7 +128,8 @@ async def gen_category_video(callback: CallbackQuery) -> None:
 @router.callback_query(F.data == 'gen:back')
 async def gen_back(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
-    await callback.message.answer('🏠 Главное меню', reply_markup=generate_category_menu())
+    lang = get_lang(callback.from_user)
+    await callback.message.answer(t(lang, "category_choose"), reply_markup=generate_category_menu(lang))
     await callback.answer()
     await safe_cleanup_callback(callback)
 
@@ -140,8 +139,9 @@ async def gen_model(callback: CallbackQuery, state: FSMContext) -> None:
     model_key = callback.data.split(':', 2)[2]
     model = get_model(model_key)
     if not model:
-        await callback.answer('Модель не найдена', show_alert=True)
+        await callback.answer(t(get_lang(callback.from_user), "model_not_found"), show_alert=True)
         return
+    lang = get_lang(callback.from_user)
     await state.update_data(
         model_key=model_key,
         options={},
@@ -156,9 +156,9 @@ async def gen_model(callback: CallbackQuery, state: FSMContext) -> None:
     if model.requires_reference_images:
         await state.set_state(GenerateFlow.collecting_refs)
         await state.update_data(ref_required=True)
-        label = _ref_label_for_model(model)
-        text = _refs_prompt_text(0, model.max_reference_images, label)
-        msg = await callback.message.answer(text, reply_markup=_refs_menu(allow_skip=False))
+        label = _ref_label_for_model(model, lang)
+        text = _refs_prompt_text(0, model.max_reference_images, label, lang)
+        msg = await callback.message.answer(text, reply_markup=_refs_menu(allow_skip=False, lang=lang))
         await state.update_data(ref_help_msg_id=msg.message_id)
         await callback.answer()
         await safe_cleanup_callback(callback)
@@ -166,17 +166,13 @@ async def gen_model(callback: CallbackQuery, state: FSMContext) -> None:
 
     if model.supports_reference_images:
         await state.set_state(GenerateFlow.choosing_ref_mode)
-        await callback.message.answer(
-            '📎 Можно добавить референсы для более точного результата.\n'
-            'Хотите использовать референсы?',
-            reply_markup=ref_mode_menu(),
-        )
+        await callback.message.answer(t(lang, "ref_optional"), reply_markup=ref_mode_menu(lang))
         await callback.answer()
         await safe_cleanup_callback(callback)
         return
 
     await state.set_state(GenerateFlow.entering_prompt)
-    await callback.message.answer(f'✍️ Введите промпт для {model.display_name}:')
+    await callback.message.answer(tf(lang, "prompt_enter", model=model.display_name))
     await callback.answer()
     await safe_cleanup_callback(callback)
 
@@ -187,17 +183,18 @@ async def gen_ref_mode(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     model = get_model(data.get('model_key', ''))
     if not model:
-        await callback.answer('Модель не найдена', show_alert=True)
+        await callback.answer(t(get_lang(callback.from_user), "model_not_found"), show_alert=True)
         return
+    lang = get_lang(callback.from_user)
     options: Dict[str, Any] = data.get('options', {})
 
     if choice == 'has':
         options['reference_images'] = 'has'
         await state.update_data(options=options, ref_required=False, ref_urls=[], ref_files=[], ref_token=None)
         await state.set_state(GenerateFlow.collecting_refs)
-        label = _ref_label_for_model(model)
-        text = _refs_prompt_text(0, model.max_reference_images, label)
-        msg = await callback.message.answer(text, reply_markup=_refs_menu(allow_skip=True))
+        label = _ref_label_for_model(model, lang)
+        text = _refs_prompt_text(0, model.max_reference_images, label, lang)
+        msg = await callback.message.answer(text, reply_markup=_refs_menu(allow_skip=True, lang=lang))
         await state.update_data(ref_help_msg_id=msg.message_id)
         await callback.answer()
         await safe_cleanup_callback(callback)
@@ -206,7 +203,7 @@ async def gen_ref_mode(callback: CallbackQuery, state: FSMContext) -> None:
     options['reference_images'] = 'none'
     await state.update_data(options=options, ref_urls=[], ref_files=[], ref_token=None)
     await state.set_state(GenerateFlow.entering_prompt)
-    await callback.message.answer(f'✍️ Введите промпт для {model.display_name}:')
+    await callback.message.answer(tf(lang, "prompt_enter", model=model.display_name))
     await callback.answer()
     await safe_cleanup_callback(callback)
 
@@ -214,20 +211,21 @@ async def gen_ref_mode(callback: CallbackQuery, state: FSMContext) -> None:
 @router.message(GenerateFlow.entering_prompt)
 async def gen_prompt(message: Message, state: FSMContext) -> None:
     settings = get_settings()
+    lang = get_lang(message.from_user)
     prompt = clamp_text(message.text or '', settings.max_prompt_length)
     if not prompt.strip():
-        await message.answer('Промпт не может быть пустым. Попробуйте еще раз.')
+        await message.answer(t(lang, "prompt_empty_bot"))
         return
     prompt_lower = prompt.lower()
     for term in settings.nsfw_terms():
         if term and term in prompt_lower:
-            await message.answer('Запрос содержит запрещенные слова. Измените промпт.')
+            await message.answer(t(lang, "prompt_banned"))
             return
 
     data = await state.get_data()
     model = get_model(data.get('model_key', ''))
     if not model:
-        await message.answer('Модель не найдена. Начните заново /start.')
+        await message.answer(t(lang, "model_not_found"))
         return
 
     options = data.get('options', {})
@@ -238,8 +236,8 @@ async def gen_prompt(message: Message, state: FSMContext) -> None:
     await state.update_data(prompt=prompt, options=options)
     await state.set_state(GenerateFlow.choosing_options)
 
-    text = _options_text(model, prompt, len(data.get('ref_urls', [])))
-    await message.answer(text, reply_markup=_render_options_panel(model, options, int(data.get('outputs', 1))))
+    text = _options_text(model, prompt, len(data.get('ref_urls', [])), lang)
+    await message.answer(text, reply_markup=_render_options_panel(model, options, int(data.get('outputs', 1)), lang))
 
 
 @router.message(GenerateFlow.collecting_refs, F.photo)
@@ -247,8 +245,9 @@ async def collect_refs(message: Message, state: FSMContext) -> None:
     settings = get_settings()
     data = await state.get_data()
     model = get_model(data.get('model_key', ''))
+    lang = get_lang(message.from_user)
     if not model:
-        await message.answer('Модель не найдена. Начните заново /start.')
+        await message.answer(t(lang, "model_not_found"))
         return
 
     ref_urls: List[str] = data.get('ref_urls', [])
@@ -257,7 +256,7 @@ async def collect_refs(message: Message, state: FSMContext) -> None:
 
     max_refs = model.max_reference_images or settings.max_reference_images
     if len(ref_urls) >= max_refs:
-        await message.answer('Достигнут лимит референс-изображений.')
+        await message.answer(t(lang, "ref_limit"))
         return
 
     if not ref_token:
@@ -283,9 +282,9 @@ async def collect_refs(message: Message, state: FSMContext) -> None:
     if previous_id:
         await _safe_delete_by_id(message.chat.id, previous_id, message)
 
-    label = _ref_label_for_model(model)
-    text = _refs_prompt_text(len(ref_urls), max_refs, label)
-    msg = await message.answer(text, reply_markup=_refs_menu(allow_skip=not data.get('ref_required')))
+    label = _ref_label_for_model(model, lang)
+    text = _refs_prompt_text(len(ref_urls), max_refs, label, lang)
+    msg = await message.answer(text, reply_markup=_refs_menu(allow_skip=not data.get('ref_required'), lang=lang))
     await state.update_data(ref_help_msg_id=msg.message_id)
 
 
@@ -293,17 +292,18 @@ async def collect_refs(message: Message, state: FSMContext) -> None:
 async def collect_refs_text(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     model = get_model(data.get('model_key', ''))
+    lang = get_lang(message.from_user)
     if not model:
-        await message.answer('Пожалуйста, отправьте фото или нажмите «Готово».')
+        await message.answer(t(lang, "ref_send_photo"))
         return
 
     previous_id = data.get('ref_help_msg_id')
     if previous_id:
         await _safe_delete_by_id(message.chat.id, previous_id, message)
 
-    label = _ref_label_for_model(model)
-    text = _refs_prompt_text(len(data.get('ref_urls', [])), model.max_reference_images, label)
-    msg = await message.answer(text, reply_markup=_refs_menu(allow_skip=not data.get('ref_required')))
+    label = _ref_label_for_model(model, lang)
+    text = _refs_prompt_text(len(data.get('ref_urls', [])), model.max_reference_images, label, lang)
+    msg = await message.answer(text, reply_markup=_refs_menu(allow_skip=not data.get('ref_required'), lang=lang))
     await state.update_data(ref_help_msg_id=msg.message_id)
 
 
@@ -312,11 +312,12 @@ async def refs_done(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     model = get_model(data.get('model_key', ''))
     if not model:
-        await callback.answer('Модель не найдена', show_alert=True)
+        await callback.answer(t(get_lang(callback.from_user), "model_not_found"), show_alert=True)
         return
+    lang = get_lang(callback.from_user)
 
     if data.get('ref_required') and not data.get('ref_urls'):
-        await callback.answer('Нужно добавить хотя бы одно фото.', show_alert=True)
+        await callback.answer(t(lang, "ref_required"), show_alert=True)
         return
 
     ref_help_id = data.get('ref_help_msg_id')
@@ -325,7 +326,7 @@ async def refs_done(callback: CallbackQuery, state: FSMContext) -> None:
         await state.update_data(ref_help_msg_id=None)
 
     await state.set_state(GenerateFlow.entering_prompt)
-    await callback.message.answer(f'✍️ Введите промпт для {model.display_name}:')
+    await callback.message.answer(tf(lang, "prompt_enter", model=model.display_name))
     await callback.answer()
     await safe_cleanup_callback(callback)
 
@@ -334,13 +335,14 @@ async def refs_done(callback: CallbackQuery, state: FSMContext) -> None:
 async def refs_skip(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     if data.get('ref_required'):
-        await callback.answer('Для этого режима нужны референсы.', show_alert=True)
+        await callback.answer(t(get_lang(callback.from_user), "ref_required_mode"), show_alert=True)
         return
 
     model = get_model(data.get('model_key', ''))
     if not model:
-        await callback.answer('Модель не найдена', show_alert=True)
+        await callback.answer(t(get_lang(callback.from_user), "model_not_found"), show_alert=True)
         return
+    lang = get_lang(callback.from_user)
 
     ref_help_id = data.get('ref_help_msg_id')
     if ref_help_id:
@@ -351,7 +353,7 @@ async def refs_skip(callback: CallbackQuery, state: FSMContext) -> None:
     options['reference_images'] = 'none'
     await state.update_data(options=options, ref_urls=[], ref_files=[], ref_token=None)
     await state.set_state(GenerateFlow.entering_prompt)
-    await callback.message.answer(f'✍️ Введите промпт для {model.display_name}:')
+    await callback.message.answer(tf(lang, "prompt_enter", model=model.display_name))
     await callback.answer()
     await safe_cleanup_callback(callback)
 
@@ -371,13 +373,14 @@ async def gen_option(callback: CallbackQuery, state: FSMContext) -> None:
 
     model = get_model(data.get('model_key', ''))
     if not model:
-        await callback.answer('Модель не найдена', show_alert=True)
+        await callback.answer(t(get_lang(callback.from_user), "model_not_found"), show_alert=True)
         return
+    lang = get_lang(callback.from_user)
 
-    text = _options_text(model, data.get('prompt', ''), len(data.get('ref_urls', [])))
+    text = _options_text(model, data.get('prompt', ''), len(data.get('ref_urls', [])), lang)
     await callback.message.edit_text(
         text,
-        reply_markup=_render_options_panel(model, options, int(data.get('outputs', 1))),
+        reply_markup=_render_options_panel(model, options, int(data.get('outputs', 1)), lang),
     )
     await callback.answer()
 
@@ -390,13 +393,14 @@ async def gen_outputs(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     model = get_model(data.get('model_key', ''))
     if not model:
-        await callback.answer('Модель не найдена', show_alert=True)
+        await callback.answer(t(get_lang(callback.from_user), "model_not_found"), show_alert=True)
         return
+    lang = get_lang(callback.from_user)
 
-    text = _options_text(model, data.get('prompt', ''), len(data.get('ref_urls', [])))
+    text = _options_text(model, data.get('prompt', ''), len(data.get('ref_urls', [])), lang)
     await callback.message.edit_text(
         text,
-        reply_markup=_render_options_panel(model, data.get('options', {}), outputs),
+        reply_markup=_render_options_panel(model, data.get('options', {}), outputs, lang),
     )
     await callback.answer()
 
@@ -410,7 +414,7 @@ async def gen_options_next(callback: CallbackQuery, state: FSMContext, session: 
 @router.callback_query(GenerateFlow.choosing_options, F.data == 'gen:options:back')
 async def gen_options_back(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(GenerateFlow.entering_prompt)
-    await callback.message.answer('✍️ Введите новый промпт:')
+    await callback.message.answer(t(get_lang(callback.from_user), "prompt_enter_new"))
     await callback.answer()
     await safe_cleanup_callback(callback)
 
@@ -419,8 +423,9 @@ async def _show_preview(callback: CallbackQuery, state: FSMContext, session: Asy
     data = await state.get_data()
     model = get_model(data.get('model_key', ''))
     if not model:
-        await callback.answer('Модель не найдена', show_alert=True)
+        await callback.answer(t(get_lang(callback.from_user), "model_not_found"), show_alert=True)
         return
+    lang = get_lang(callback.from_user)
     prompt = data.get('prompt', '')
     options = model.validate_options(data.get('options', {}))
     outputs = int(data.get('outputs', 1))
@@ -431,22 +436,22 @@ async def _show_preview(callback: CallbackQuery, state: FSMContext, session: Asy
     pricing = PricingService(session)
     breakdown = await pricing.resolve_cost(model, options, outputs, discount)
 
-    option_lines = _format_option_lines(model, options)
+    option_lines = _format_option_lines(model, options, lang)
     text = (
-        f'✅ <b>Проверьте стоимость</b>\n'
-        f'🧠 Модель: {model.display_name}\n'
-        f'✍️ Промпт: {escape_html(prompt)}\n'
-        f'{option_lines}'
-        f'📎 Референсов: {len(ref_urls)}\n'
-        f'🔢 Выходов: {outputs}\n'
-        f'💳 Цена за 1: {breakdown.per_output} кр.\n'
-        f'🧾 Итого: {breakdown.total} кр.\n'
+        f"{t(lang, 'preview_title')}\n"
+        f"{tf(lang, 'preview_model', model=model.display_name)}\n"
+        f"{tf(lang, 'preview_prompt', prompt=escape_html(prompt))}\n"
+        f"{option_lines}"
+        f"{tf(lang, 'preview_refs', count=len(ref_urls))}\n"
+        f"{tf(lang, 'preview_outputs', count=outputs)}\n"
+        f"{tf(lang, 'preview_cost_per', cost=breakdown.per_output)}\n"
+        f"{tf(lang, 'preview_total', total=breakdown.total)}\n"
     )
     if discount:
-        text += f'Скидка: {discount}%\n'
-    text += '\nПодтверждая, вы соглашаетесь соблюдать закон и правила сервиса.'
+        text += f"{tf(lang, 'preview_discount', pct=discount)}\n"
+    text += f"\n{t(lang, 'preview_notice')}"
     await state.set_state(GenerateFlow.confirming)
-    await callback.message.answer(text, reply_markup=confirm_menu())
+    await callback.message.answer(text, reply_markup=confirm_menu(lang))
     await callback.answer()
 
 
@@ -455,8 +460,9 @@ async def gen_confirm(callback: CallbackQuery, state: FSMContext, session: Async
     data = await state.get_data()
     model = get_model(data.get('model_key', ''))
     if not model:
-        await callback.answer('Модель не найдена', show_alert=True)
+        await callback.answer(t(get_lang(callback.from_user), "model_not_found"), show_alert=True)
         return
+    lang = get_lang(callback.from_user)
     prompt = data.get('prompt', '')
     options = model.validate_options(data.get('options', {}))
     outputs = int(data.get('outputs', 1))
@@ -464,12 +470,12 @@ async def gen_confirm(callback: CallbackQuery, state: FSMContext, session: Async
     ref_files: List[str] = data.get('ref_files', [])
 
     if not rate_limiter.allow(callback.from_user.id):
-        await callback.answer('Слишком часто. Подождите пару секунд.', show_alert=True)
+        await callback.answer(t(lang, "error_too_many"), show_alert=True)
         return
 
     user = await _get_user(session, callback.from_user.id)
     if not user:
-        await callback.answer('Пользователь не найден', show_alert=True)
+        await callback.answer(t(lang, "error_generic"), show_alert=True)
         return
 
     kie = KieClient()
@@ -479,7 +485,7 @@ async def gen_confirm(callback: CallbackQuery, state: FSMContext, session: Async
         await session.commit()
     except ValueError as exc:
         await session.rollback()
-        msg = _error_text(str(exc))
+        msg = _error_text(str(exc), lang)
         await callback.message.answer(msg)
         await callback.answer()
         await safe_cleanup_callback(callback)
@@ -488,13 +494,11 @@ async def gen_confirm(callback: CallbackQuery, state: FSMContext, session: Async
         await session.commit()
         if exc.status_code == 429:
             queue_pos = await _queue_position(session)
-            await callback.message.answer(
-                f'Сервис перегружен, задача поставлена в очередь. Примерная позиция: {queue_pos}.'
-            )
+            await callback.message.answer(tf(lang, "queued", pos=queue_pos))
         elif exc.status_code in (401, 402):
-            await callback.message.answer('Ошибка доступа к API. Проверьте ключ Kie.ai.')
+            await callback.message.answer(t(lang, "api_auth_error"))
         else:
-            await callback.message.answer('Не удалось создать задачу. Попробуйте позже.')
+            await callback.message.answer(t(lang, "create_failed"))
         await callback.answer()
         await safe_cleanup_callback(callback)
         return
@@ -510,7 +514,7 @@ async def gen_confirm(callback: CallbackQuery, state: FSMContext, session: Async
         for task_id in task_ids:
             poller.schedule(task_id)
 
-    await callback.message.answer('Задача запущена. Как только будет готово - отправлю результат.')
+    await callback.message.answer(t(lang, "task_started"))
     await state.clear()
     await callback.answer()
     await safe_cleanup_callback(callback)
@@ -519,7 +523,7 @@ async def gen_confirm(callback: CallbackQuery, state: FSMContext, session: Async
 @router.callback_query(GenerateFlow.confirming, F.data == 'gen:edit:prompt')
 async def gen_edit_prompt(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(GenerateFlow.entering_prompt)
-    await callback.message.answer('✍️ Введите новый промпт:')
+    await callback.message.answer(t(get_lang(callback.from_user), "prompt_enter_new"))
     await callback.answer()
     await safe_cleanup_callback(callback)
 
@@ -529,13 +533,14 @@ async def gen_edit_options(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     model = get_model(data.get('model_key', ''))
     if not model:
-        await callback.answer('Модель не найдена', show_alert=True)
+        await callback.answer(t(get_lang(callback.from_user), "model_not_found"), show_alert=True)
         return
     await state.set_state(GenerateFlow.choosing_options)
-    text = _options_text(model, data.get('prompt', ''), len(data.get('ref_urls', [])))
+    lang = get_lang(callback.from_user)
+    text = _options_text(model, data.get('prompt', ''), len(data.get('ref_urls', [])), lang)
     await callback.message.answer(
         text,
-        reply_markup=_render_options_panel(model, data.get('options', {}), int(data.get('outputs', 1))),
+        reply_markup=_render_options_panel(model, data.get('options', {}), int(data.get('outputs', 1)), lang),
     )
     await callback.answer()
     await safe_cleanup_callback(callback)
@@ -544,7 +549,7 @@ async def gen_edit_options(callback: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data == 'gen:cancel')
 async def gen_cancel(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
-    await callback.message.answer('❌ Отменено.')
+    await callback.message.answer(t(get_lang(callback.from_user), "cancelled"))
     await callback.answer()
     await safe_cleanup_callback(callback)
 
@@ -554,13 +559,14 @@ async def gen_result_restart(callback: CallbackQuery, state: FSMContext) -> None
     await state.clear()
     await state.set_state(GenerateFlow.choosing_model)
     models = [m for m in list_models() if m.model_type == 'image']
-    await callback.message.answer(_model_intro_text(models), reply_markup=model_menu(models))
+    lang = get_lang(callback.from_user)
+    await callback.message.answer(_model_intro_text(models, lang), reply_markup=model_menu(models, lang))
     await callback.answer()
 
 
 @router.callback_query(F.data == 'gen:result:finish')
 async def gen_result_finish(callback: CallbackQuery) -> None:
-    await callback.message.answer('✅ Завершено. Если хотите еще — нажмите /start.')
+    await callback.message.answer(t(get_lang(callback.from_user), "result_done"))
     await callback.answer()
 
 
@@ -569,15 +575,15 @@ async def gen_result_repeat(callback: CallbackQuery, session: AsyncSession) -> N
     gen_id = int(callback.data.split(':', 3)[3])
     gen = await session.get(Generation, gen_id)
     if not gen:
-        await callback.answer('Не найдено', show_alert=True)
+        await callback.answer(t(get_lang(callback.from_user), "error_generic"), show_alert=True)
         return
     user = await _get_user(session, callback.from_user.id)
     if not user or gen.user_id != user.id:
-        await callback.answer('Недостаточно прав', show_alert=True)
+        await callback.answer(t(get_lang(callback.from_user), "error_generic"), show_alert=True)
         return
     model = get_model(gen.model)
     if not model:
-        await callback.answer('Модель не найдена', show_alert=True)
+        await callback.answer(t(get_lang(callback.from_user), "model_not_found"), show_alert=True)
         return
 
     raw_options: Dict[str, Any] = dict(gen.options or {})
@@ -590,8 +596,8 @@ async def gen_result_repeat(callback: CallbackQuery, session: AsyncSession) -> N
     pricing = PricingService(session)
     breakdown = await pricing.resolve_cost(model, options, outputs, discount)
     await callback.message.answer(
-        f'Отправить запрос повторно?\nБудет списано {breakdown.total} кредитов.',
-        reply_markup=repeat_confirm_menu(gen_id),
+        tf(get_lang(callback.from_user), "repeat_prompt", cost=breakdown.total),
+        reply_markup=repeat_confirm_menu(gen_id, get_lang(callback.from_user)),
     )
     await callback.answer()
 
@@ -601,18 +607,18 @@ async def gen_repeat_confirm(callback: CallbackQuery, session: AsyncSession) -> 
     gen_id = int(callback.data.split(':', 3)[3])
     gen = await session.get(Generation, gen_id)
     if not gen:
-        await callback.answer('Не найдено', show_alert=True)
+        await callback.answer(t(get_lang(callback.from_user), "error_generic"), show_alert=True)
         return
     user = await _get_user(session, callback.from_user.id)
     if not user or gen.user_id != user.id:
-        await callback.answer('Недостаточно прав', show_alert=True)
+        await callback.answer(t(get_lang(callback.from_user), "error_generic"), show_alert=True)
         return
     model = get_model(gen.model)
     if not model:
-        await callback.answer('Модель не найдена', show_alert=True)
+        await callback.answer(t(get_lang(callback.from_user), "model_not_found"), show_alert=True)
         return
     if not rate_limiter.allow(callback.from_user.id):
-        await callback.answer('Слишком часто. Подождите пару секунд.', show_alert=True)
+        await callback.answer(t(get_lang(callback.from_user), "error_too_many"), show_alert=True)
         return
 
     raw_options: Dict[str, Any] = dict(gen.options or {})
@@ -636,7 +642,7 @@ async def gen_repeat_confirm(callback: CallbackQuery, session: AsyncSession) -> 
         await session.commit()
     except ValueError as exc:
         await session.rollback()
-        msg = _error_text(str(exc))
+        msg = _error_text(str(exc), get_lang(callback.from_user))
         await callback.message.answer(msg)
         await callback.answer()
         return
@@ -644,13 +650,11 @@ async def gen_repeat_confirm(callback: CallbackQuery, session: AsyncSession) -> 
         await session.commit()
         if exc.status_code == 429:
             queue_pos = await _queue_position(session)
-            await callback.message.answer(
-                f'Сервис перегружен, задача поставлена в очередь. Примерная позиция: {queue_pos}.'
-            )
+            await callback.message.answer(tf(get_lang(callback.from_user), "queued", pos=queue_pos))
         elif exc.status_code in (401, 402):
-            await callback.message.answer('Ошибка доступа к API. Проверьте ключ Kie.ai.')
+            await callback.message.answer(t(get_lang(callback.from_user), "api_auth_error"))
         else:
-            await callback.message.answer('Не удалось создать задачу. Попробуйте позже.')
+            await callback.message.answer(t(get_lang(callback.from_user), "create_failed"))
         await callback.answer()
         return
     finally:
@@ -665,16 +669,16 @@ async def gen_repeat_confirm(callback: CallbackQuery, session: AsyncSession) -> 
         for task_id in task_ids:
             poller.schedule(task_id)
 
-    await callback.message.answer('Задача запущена. Как только будет готово - отправлю результат.')
+    await callback.message.answer(t(get_lang(callback.from_user), "task_started"))
     await callback.answer()
 
 
 @router.callback_query(F.data == 'gen:repeat:cancel')
 async def gen_repeat_cancel(callback: CallbackQuery) -> None:
-    await callback.answer('Отменено.')
+    await callback.answer(t(get_lang(callback.from_user), "repeat_cancelled"))
 
 
-def _format_option_lines(model, options: Dict[str, Any]) -> str:
+def _format_option_lines(model, options: Dict[str, Any], lang: str) -> str:
     lines = []
     icon_map = {
         'output_format': '🖼️',
@@ -686,11 +690,42 @@ def _format_option_lines(model, options: Dict[str, Any]) -> str:
         if opt.ui_hidden:
             continue
         selected = options.get(opt.key, opt.default)
-        label = next((v.label for v in opt.values if v.value == selected), selected)
+        fallback_label = next((v.label for v in opt.values if v.value == selected), selected)
+        label = _value_label(opt.key, str(selected), str(fallback_label), lang)
         label = escape_html(str(label))
+        opt_label = _option_label(opt.key, opt.label, lang)
         icon = icon_map.get(opt.key, '⚙️')
-        lines.append(f'{icon} {opt.label}: {label}\n')
+        lines.append(f'{icon} {opt_label}: {label}\n')
     return ''.join(lines)
+
+
+def _option_label(key: str, fallback: str, lang: str) -> str:
+    if key in ("image_size", "aspect_ratio"):
+        return t(lang, "aspect_ratio")
+    if key == "output_format":
+        return t(lang, "output_format")
+    if key == "resolution":
+        return t(lang, "resolution")
+    if key == "reference_images":
+        return t(lang, "upload_label")
+    return fallback
+
+
+def _value_label(key: str, value: str, fallback: str, lang: str) -> str:
+    if key in ("image_size", "aspect_ratio"):
+        ratio_key = value.replace(":", "_").lower()
+        return t(lang, f"ratio_{ratio_key}")
+    if key == "resolution":
+        res_key = value.lower()
+        return t(lang, f"res_{res_key}")
+    if key == "output_format":
+        return value.upper()
+    if key == "reference_images":
+        if value == "none":
+            return t(lang, "ref_mode_none")
+        if value == "has":
+            return t(lang, "ref_mode_has")
+    return fallback
 
 
 async def _queue_position(session: AsyncSession) -> int:
@@ -709,14 +744,15 @@ async def _get_user(session: AsyncSession, telegram_id: int):
     return await credits.get_user(telegram_id)
 
 
-def _error_text(code: str) -> str:
+def _error_text(code: str, lang: str) -> str:
     mapping = {
-        'banned': 'Доступ запрещен.',
-        'outputs': 'Недопустимое число вариантов.',
-        'too_many': 'Слишком много активных задач. Подождите завершения текущих.',
-        'daily_cap': 'Достигнут дневной лимит расходов.',
-        'no_credits': 'Недостаточно кредитов. Купите пакет.',
-        'refs_required': 'Для этого режима нужно добавить хотя бы одно фото.',
+        'banned': 'error_banned',
+        'outputs': 'error_outputs',
+        'too_many': 'error_too_many',
+        'daily_cap': 'error_daily_cap',
+        'no_credits': 'error_no_credits',
+        'refs_required': 'error_refs_required',
     }
-    return mapping.get(code, 'Не удалось запустить генерацию.')
+    key = mapping.get(code, 'error_generic')
+    return t(lang, key)
 

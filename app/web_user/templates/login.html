@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="{{ lang }}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title }}</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap');
+      :root {
+        --bg: #0d1420;
+        --card: #121c2a;
+        --line: #1e2d42;
+        --text: #e7edf5;
+        --muted: #9ab0c8;
+        --accent: #f1b651;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Space Grotesk", sans-serif;
+        background: radial-gradient(circle at 20% 20%, #24385a 0%, #0d1420 55%);
+        color: var(--text);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 28px;
+        max-width: 520px;
+        width: 100%;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+      }
+      h1 { margin: 0 0 8px; font-size: 28px; }
+      p { margin: 0 0 20px; color: var(--muted); }
+      .login-box {
+        display: flex;
+        justify-content: center;
+        padding: 16px;
+        border-radius: 14px;
+        background: #0f1b2b;
+        border: 1px dashed #2a3d57;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>{{ title }}</h1>
+      <p>{{ subtitle }}</p>
+      <div class="login-box">
+        <script
+          async
+          src="https://telegram.org/js/telegram-widget.js?22"
+          data-telegram-login="{{ bot_username }}"
+          data-size="large"
+          data-onauth="onTelegramAuth(user)"
+          data-request-access="write">
+        </script>
+      </div>
+    </div>
+    <script>
+      async function onTelegramAuth(user) {
+        const res = await fetch('/auth/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(user),
+        });
+        if (res.ok) {
+          window.location.href = '/';
+        } else {
+          alert('{{ login_failed }}');
+        }
+      }
+    </script>
+  </body>
+</html>

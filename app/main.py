@@ -45,6 +45,7 @@ async def main() -> None:
     set_poller(poller)
 
     await poller.restore_pending()
+    asyncio.create_task(poller.watch_pending())
 
     try:
         await dp.start_polling(bot)
