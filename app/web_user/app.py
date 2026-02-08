@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -9,6 +10,9 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List
 
+from aiogram import Bot
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -23,6 +27,7 @@ from app.modelspecs.registry import get_model, list_models
 from app.services.credits import CreditsService
 from app.services.generation import GenerationService
 from app.services.kie_client import KieClient, KieError
+from app.services.poller import PollManager
 from app.services.promos import PromoService
 from app.utils.text import clamp_text
 
@@ -94,6 +99,38 @@ def create_app() -> FastAPI:
     app.add_middleware(SessionMiddleware, secret_key=settings.user_web_secret)
     app.state.templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
     app.state.sessionmaker = create_sessionmaker()
+    app.state.user_web_poller = None
+    app.state.user_web_poller_task = None
+
+    @app.on_event("startup")
+    async def startup() -> None:
+        if not settings.user_web_poll_enabled:
+            return
+        bot = Bot(
+            token=settings.bot_token,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        )
+        kie_client = KieClient()
+        poller = PollManager(bot, app.state.sessionmaker, kie_client)
+        app.state.user_web_poller = poller
+        await poller.restore_pending()
+        app.state.user_web_poller_task = asyncio.create_task(poller.watch_pending())
+
+    @app.on_event("shutdown")
+    async def shutdown() -> None:
+        task = app.state.user_web_poller_task
+        if task:
+            task.cancel()
+        poller = app.state.user_web_poller
+        if poller:
+            try:
+                await poller.kie.close()
+            except Exception:
+                pass
+            try:
+                await poller.bot.session.close()
+            except Exception:
+                pass
 
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request):

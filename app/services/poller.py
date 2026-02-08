@@ -2,10 +2,11 @@
 
 import asyncio
 import os
+from datetime import timedelta
 from typing import Dict, List, Optional
 
 from aiogram import Bot
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.bot.keyboards.main import generation_result_menu
@@ -40,12 +41,27 @@ class PollManager:
             self.user_sems[user_id] = asyncio.Semaphore(self.settings.per_user_max_concurrent_jobs)
         return self.user_sems[user_id]
 
+    def _stale_cutoff(self):
+        return utcnow() - timedelta(seconds=self.settings.poll_stale_running_seconds)
+
     async def restore_pending(self) -> None:
         async with self.sessionmaker() as session:
+            stale_cutoff = self._stale_cutoff()
             result = await session.execute(
                 select(GenerationTask.id)
                 .join(Generation, Generation.id == GenerationTask.generation_id)
-                .where(GenerationTask.state.in_(['queued', 'running', 'pending']))
+                .where(
+                    or_(
+                        GenerationTask.state.in_(['queued', 'pending']),
+                        and_(
+                            GenerationTask.state == 'running',
+                            or_(
+                                GenerationTask.started_at.is_(None),
+                                GenerationTask.started_at <= stale_cutoff,
+                            ),
+                        ),
+                    )
+                )
             )
             ids = [row[0] for row in result.all()]
         for task_id in ids:
@@ -61,9 +77,21 @@ class PollManager:
         while True:
             try:
                 async with self.sessionmaker() as session:
+                    stale_cutoff = self._stale_cutoff()
                     result = await session.execute(
                         select(GenerationTask.id)
-                        .where(GenerationTask.state.in_(['queued', 'running', 'pending']))
+                        .where(
+                            or_(
+                                GenerationTask.state.in_(['queued', 'pending']),
+                                and_(
+                                    GenerationTask.state == 'running',
+                                    or_(
+                                        GenerationTask.started_at.is_(None),
+                                        GenerationTask.started_at <= stale_cutoff,
+                                    ),
+                                ),
+                            )
+                        )
                     )
                     ids = [row[0] for row in result.all()]
                 for task_id in ids:
@@ -71,6 +99,34 @@ class PollManager:
             except Exception as exc:
                 logger.warning('poll_watch_failed', error=str(exc))
             await asyncio.sleep(interval)
+
+    async def _claim_task(self, session: AsyncSession, task_id: int) -> bool:
+        stale_cutoff = self._stale_cutoff()
+        stmt = (
+            update(GenerationTask)
+            .where(
+                GenerationTask.id == task_id,
+                or_(
+                    GenerationTask.state.in_(['queued', 'pending']),
+                    and_(
+                        GenerationTask.state == 'running',
+                        or_(
+                            GenerationTask.started_at.is_(None),
+                            GenerationTask.started_at <= stale_cutoff,
+                        ),
+                    ),
+                ),
+            )
+            .values(state='running', started_at=utcnow())
+            .returning(GenerationTask.id)
+        )
+        result = await session.execute(stmt)
+        claimed = result.scalar_one_or_none()
+        if not claimed:
+            await session.rollback()
+            return False
+        await session.commit()
+        return True
 
     async def _poll_task(self, task_id: int) -> None:
         try:
@@ -87,8 +143,9 @@ class PollManager:
                         return
                     if task.state in ('success', 'fail'):
                         return
-                    task.state = 'running'
-                    await session.commit()
+                    claimed = await self._claim_task(session, task_id)
+                    if not claimed:
+                        return
 
                 async with self._user_sem(user.id):
                     backoffs = self.settings.poll_backoff_list()

@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     user_web_port: int = Field(9010, alias='USER_WEB_PORT')
     user_web_secret: str = Field('change-me', alias='USER_WEB_SECRET')
     user_web_public_url: str = Field('', alias='USER_WEB_PUBLIC_URL')
+    user_web_poll_enabled: bool = Field(True, alias='USER_WEB_POLL_ENABLED')
 
     # Support bot
     support_bot_token: str = Field('', alias='SUPPORT_BOT_TOKEN')
@@ -63,6 +64,7 @@ class Settings(BaseSettings):
     # Polling
     poll_max_wait_seconds: int = Field(180, alias='POLL_MAX_WAIT_SECONDS')
     poll_backoff_sequence: str = Field('1,2,3,5,8,13,20', alias='POLL_BACKOFF_SEQUENCE')
+    poll_stale_running_seconds: int = Field(600, alias='POLL_STALE_RUNNING_SECONDS')
 
     # Safety
     nsfw_blocklist: str = Field('', alias='NSFW_BLOCKLIST')
