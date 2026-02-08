@@ -98,18 +98,6 @@ def create_app() -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request):
         lang = _get_lang(request)
-        if not _is_logged_in(request):
-            return app.state.templates.TemplateResponse(
-                "login.html",
-                {
-                    "request": request,
-                    "title": t(lang, "login_title"),
-                    "subtitle": t(lang, "login_subtitle"),
-                    "login_failed": t(lang, "login_failed"),
-                    "lang": lang,
-                    "bot_username": settings.bot_username,
-                },
-            )
         return app.state.templates.TemplateResponse(
             "index.html",
             {
@@ -117,6 +105,8 @@ def create_app() -> FastAPI:
                 "title": t(lang, "site_title"),
                 "lang": lang,
                 "labels": {key: t(lang, key) for key in app.i18n_keys},
+                "logged_in": _is_logged_in(request),
+                "bot_username": settings.bot_username,
             },
         )
 
@@ -384,6 +374,7 @@ def create_app() -> FastAPI:
         "history_deleted",
         "logout",
         "prompt_required",
+        "login_required",
         "request_sent",
         "error_prefix",
         "promo_added",
