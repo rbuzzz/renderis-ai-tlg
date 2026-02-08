@@ -169,7 +169,8 @@
         border: 1px solid #243652;
         background: #0c1626;
         overflow: hidden;
-        min-height: 320px;
+        min-height: 360px;
+        aspect-ratio: 1 / 1;
       }
       .gallery img {
         width: 100%;
@@ -268,6 +269,89 @@
         grid-template-columns: 1fr auto;
         gap: 8px;
       }
+      .ref-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .ref-title {
+        font-weight: 600;
+        color: var(--text);
+      }
+      .ref-sub {
+        color: var(--muted);
+      }
+      .ref-input {
+        display: none;
+      }
+      .ref-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+      .ref-tile {
+        min-height: 150px;
+        border-radius: 16px;
+        border: 1px dashed #f5b94f;
+        background: #0f1b2b;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        text-align: center;
+        color: var(--muted);
+        cursor: pointer;
+      }
+      .ref-add-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        background: rgba(245, 185, 79, 0.18);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--accent);
+        font-size: 18px;
+      }
+      .ref-tile strong {
+        color: var(--text);
+      }
+      .ref-thumb {
+        position: relative;
+        border-radius: 16px;
+        border: 1px solid #2b3f59;
+        overflow: hidden;
+        background: #0f1b2b;
+        min-height: 150px;
+      }
+      .ref-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .ref-remove {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(15, 27, 43, 0.9);
+        color: var(--text);
+        cursor: pointer;
+        font-weight: 700;
+      }
+      .ref-note {
+        color: var(--muted);
+        font-size: 12px;
+      }
       .pill {
         display: inline-flex;
         align-items: center;
@@ -322,9 +406,13 @@
         </div>
 
         <div class="field" id="uploadBlock">
-          <label>{{ labels['upload_label'] }}</label>
-          <input id="refFiles" type="file" multiple />
-          <div class="status" id="refHint"></div>
+          <div class="ref-header">
+            <div class="ref-title" id="refTitle"></div>
+            <div class="ref-sub" id="refSub"></div>
+          </div>
+          <input id="refFiles" class="ref-input" type="file" multiple accept="image/*" />
+          <div class="ref-grid" id="refGrid"></div>
+          <div class="ref-note" id="refNote"></div>
         </div>
 
         <div class="field" id="optionsContainer">
@@ -373,6 +461,8 @@
       let galleryItems = [];
       let galleryIndex = 0;
       let modelNames = {};
+      let selectedFiles = [];
+      let refPreviews = [];
 
       function fmt(template, params = {}) {
         let out = template || '';
@@ -388,15 +478,21 @@
       }
 
       function updateRefHint() {
-        const hint = document.getElementById('refHint');
+        const refTitle = document.getElementById('refTitle');
+        const refSub = document.getElementById('refSub');
+        const refNote = document.getElementById('refNote');
         if (!currentModel) return;
+        const max = currentModel.max_reference_images || 0;
+        const count = selectedFiles.length;
+        refTitle.textContent = fmt(labels.ref_images_title, { count, max });
         if (currentModel.requires_reference_images) {
-          hint.textContent = fmt(labels.upload_hint_required, { max: currentModel.max_reference_images });
+          refSub.textContent = fmt(labels.upload_hint_required, { max });
         } else if (currentModel.supports_reference_images) {
-          hint.textContent = fmt(labels.upload_hint_optional, { max: currentModel.max_reference_images });
+          refSub.textContent = fmt(labels.upload_hint_optional, { max });
         } else {
-          hint.textContent = '';
+          refSub.textContent = '';
         }
+        refNote.textContent = fmt(labels.ref_images_note, { max });
       }
 
       async function loadMe() {
@@ -438,7 +534,7 @@
         optionsState.outputs = 1;
         document.getElementById('uploadBlock').style.display =
           (currentModel.supports_reference_images || currentModel.requires_reference_images) ? 'block' : 'none';
-        updateRefHint();
+        resetRefSelection();
         renderModels();
         renderOptions();
       }
@@ -614,13 +710,12 @@
           document.getElementById('runStatus').textContent = labels.prompt_required;
           return;
         }
-        const files = document.getElementById('refFiles').files;
-        if (currentModel.requires_reference_images && (!files || files.length === 0)) {
+        if (currentModel.requires_reference_images && selectedFiles.length === 0) {
           document.getElementById('runStatus').textContent = labels.upload_required;
           return;
         }
         if (currentModel.key === 'nano_banana_pro') {
-          optionsState.reference_images = (files && files.length > 0) ? 'has' : 'none';
+          optionsState.reference_images = selectedFiles.length > 0 ? 'has' : 'none';
         }
         const form = new FormData();
         form.append('model_key', currentModel.key);
@@ -629,7 +724,7 @@
         form.append('outputs', outputs);
         form.append('options', JSON.stringify(optionsState));
 
-        for (const file of files) {
+        for (const file of selectedFiles) {
           form.append('files', file);
         }
         document.getElementById('runStatus').textContent = labels.run_pending;
@@ -637,8 +732,7 @@
         if (res.ok) {
           document.getElementById('runStatus').textContent = labels.request_sent;
           document.getElementById('prompt').value = '';
-          document.getElementById('refFiles').value = '';
-          updateRefHint();
+          resetRefSelection();
           await loadMe();
           await loadHistory();
         } else {
@@ -694,15 +788,68 @@
 
       document.getElementById('runBtn').onclick = runGeneration;
       document.getElementById('promoBtn').onclick = redeemPromo;
-      document.getElementById('refFiles').addEventListener('change', () => {
+      const refInput = document.getElementById('refFiles');
+      const refGrid = document.getElementById('refGrid');
+
+      function syncRefInput() {
+        const dt = new DataTransfer();
+        selectedFiles.forEach((file) => dt.items.add(file));
+        refInput.files = dt.files;
+      }
+
+      function resetRefSelection() {
+        refPreviews.forEach((url) => URL.revokeObjectURL(url));
+        refPreviews = [];
+        selectedFiles = [];
+        syncRefInput();
+        renderRefGrid();
+      }
+
+      function renderRefGrid() {
+        refGrid.innerHTML = '';
         if (!currentModel) return;
-        const files = document.getElementById('refFiles').files;
-        if (files && files.length > 0) {
-          const label = fmt(labels.upload_count, { count: files.length, max: currentModel.max_reference_images });
-          document.getElementById('refHint').textContent = label;
-        } else {
-          updateRefHint();
+        const max = currentModel.max_reference_images || 0;
+        selectedFiles.forEach((file, idx) => {
+          const tile = document.createElement('div');
+          tile.className = 'ref-thumb';
+          const img = document.createElement('img');
+          img.src = refPreviews[idx];
+          tile.appendChild(img);
+          const remove = document.createElement('button');
+          remove.className = 'ref-remove';
+          remove.textContent = '×';
+          remove.onclick = () => {
+            URL.revokeObjectURL(refPreviews[idx]);
+            refPreviews.splice(idx, 1);
+            selectedFiles.splice(idx, 1);
+            syncRefInput();
+            renderRefGrid();
+          };
+          tile.appendChild(remove);
+          refGrid.appendChild(tile);
+        });
+
+        if (selectedFiles.length < max) {
+          const add = document.createElement('div');
+          add.className = 'ref-tile';
+          add.innerHTML = `<div class="ref-add-icon">⬆️</div><strong>${labels.ref_add}</strong><div>${labels.ref_add_sub}</div>`;
+          add.onclick = () => refInput.click();
+          refGrid.appendChild(add);
         }
+        updateRefHint();
+      }
+
+      refInput.addEventListener('change', () => {
+        if (!currentModel) return;
+        const incoming = Array.from(refInput.files || []);
+        const max = currentModel.max_reference_images || 0;
+        for (const file of incoming) {
+          if (selectedFiles.length >= max) break;
+          selectedFiles.push(file);
+          refPreviews.push(URL.createObjectURL(file));
+        }
+        syncRefInput();
+        renderRefGrid();
       });
 
       loadMe();
