@@ -35,7 +35,6 @@ class Settings(BaseSettings):
     daily_spend_cap_credits: int = Field(500, alias='DAILY_SPEND_CAP_CREDITS')
     refund_on_fail: bool = Field(True, alias='REFUND_ON_FAIL')
     max_prompt_length: int = Field(20000, alias='MAX_PROMPT_LENGTH')
-    model_latency_default_seconds: int = Field(25, alias='MODEL_LATENCY_DEFAULT_SECONDS')
 
     # Reference images
     reference_storage_path: str = Field('/var/www/tonmd.cloud/ref', alias='REFERENCE_STORAGE_PATH')

@@ -13,7 +13,6 @@ from app.bot.keyboards.main import generation_result_menu
 from app.config import get_settings
 from app.db.models import Generation, GenerationTask, User
 from app.services.credits import CreditsService
-from app.services.latency import ModelLatencyService
 from app.services.kie_client import KieClient, KieError
 from app.i18n import normalize_lang, t, tf
 from app.utils.logging import get_logger
@@ -200,12 +199,6 @@ class PollManager:
             task.result_urls = urls
             task.finished_at = utcnow()
             task.raw_response = record
-            if task.started_at:
-                duration = (task.finished_at - task.started_at).total_seconds()
-                generation = await session.get(Generation, task.generation_id)
-                if generation and duration > 0:
-                    latency = ModelLatencyService(session)
-                    await latency.update(generation.model, duration)
             await session.commit()
 
     async def _mark_fail(self, task_id: int, msg: str, code: Optional[str]) -> None:
@@ -251,16 +244,6 @@ class PollManager:
 
             if generation.status in ('success', 'fail', 'partial'):
                 await self._cleanup_reference_files(generation)
-                if generation.progress_message_id:
-                    user = await session.get(User, generation.user_id)
-                    if user:
-                        try:
-                            await self.bot.delete_message(user.telegram_id, generation.progress_message_id)
-                        except Exception:
-                            pass
-                    generation.progress_message_id = None
-                    generation.updated_at = utcnow()
-                    await session.commit()
 
     async def _cleanup_reference_files(self, generation: Generation) -> None:
         options = generation.options or {}

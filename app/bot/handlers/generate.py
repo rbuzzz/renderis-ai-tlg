@@ -24,16 +24,13 @@ from app.bot.states import GenerateFlow
 from app.bot.utils import safe_cleanup_callback
 from app.config import get_settings
 from app.db.models import Generation, GenerationTask
-from app.db.session import create_sessionmaker
 from app.modelspecs.registry import get_model, list_models
 from app.services.generation import GenerationService
 from app.services.kie_client import KieClient, KieError
 from app.services.poller_runtime import get_poller
-from app.services.progress import ProgressService
 from app.services.pricing import PricingService
 from app.services.rate_limit import RateLimiter
 from app.utils.text import escape_html, clamp_text
-from app.utils.time import utcnow
 
 
 router = Router()
@@ -517,7 +514,6 @@ async def gen_confirm(callback: CallbackQuery, state: FSMContext, session: Async
         for task_id in task_ids:
             poller.schedule(task_id)
 
-    await _start_progress_message(session, generation, model.key, callback.message, lang)
     await callback.message.answer(t(lang, "task_started"))
     await state.clear()
     await callback.answer()
@@ -673,7 +669,6 @@ async def gen_repeat_confirm(callback: CallbackQuery, session: AsyncSession) -> 
         for task_id in task_ids:
             poller.schedule(task_id)
 
-    await _start_progress_message(session, new_gen, model.key, callback.message, get_lang(callback.from_user))
     await callback.message.answer(t(get_lang(callback.from_user), "task_started"))
     await callback.answer()
 
@@ -760,33 +755,4 @@ def _error_text(code: str, lang: str) -> str:
     }
     key = mapping.get(code, 'error_generic')
     return t(lang, key)
-
-
-async def _start_progress_message(
-    session: AsyncSession,
-    generation: Generation,
-    model_key: str,
-    message: Message,
-    lang: str,
-) -> None:
-    try:
-        progress_msg = await message.answer(tf(lang, "progress_label", pct=0))
-    except Exception:
-        return
-
-    generation.progress_message_id = progress_msg.message_id
-    generation.updated_at = utcnow()
-    await session.commit()
-
-    poller = get_poller()
-    sessionmaker = poller.sessionmaker if poller else create_sessionmaker()
-    bot = poller.bot if poller else message.bot
-    progress = ProgressService(bot, sessionmaker)
-    progress.start(
-        generation_id=generation.id,
-        chat_id=message.chat.id,
-        message_id=progress_msg.message_id,
-        model_key=model_key,
-        lang=lang,
-    )
 

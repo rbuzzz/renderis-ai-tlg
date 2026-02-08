@@ -163,32 +163,6 @@
         flex-direction: column;
         gap: 12px;
       }
-      .progress-box {
-        display: none;
-        padding: 12px;
-        border-radius: 12px;
-        border: 1px solid #2b3f59;
-        background: #0f1b2b;
-      }
-      .progress-text {
-        font-size: 13px;
-        color: var(--muted);
-        margin-bottom: 8px;
-      }
-      .progress-bar {
-        height: 8px;
-        border-radius: 999px;
-        background: #142238;
-        border: 1px solid #243652;
-        overflow: hidden;
-      }
-      .progress-fill {
-        height: 100%;
-        width: 0%;
-        border-radius: 999px;
-        background: linear-gradient(90deg, #40d49a, #f5b94f);
-        transition: width 0.4s ease;
-      }
       .gallery {
         position: relative;
         border-radius: 16px;
@@ -366,12 +340,6 @@
       <div class="panel">
         <h2>{{ labels['output_title'] }}</h2>
         <div class="output-preview" id="outputPreview">
-          <div class="progress-box" id="progressBox">
-            <div class="progress-text" id="progressText">{{ labels['progress_label'] }}</div>
-            <div class="progress-bar">
-              <div class="progress-fill" id="progressFill"></div>
-            </div>
-          </div>
           <div class="gallery" id="gallery">
             <div class="gallery-empty">{{ labels['output_empty'] }}</div>
           </div>
@@ -405,10 +373,6 @@
       let galleryItems = [];
       let galleryIndex = 0;
       let modelNames = {};
-      let progressTimer = null;
-      let progressStart = 0;
-      let progressEstimate = 0;
-      let activeGenerationId = null;
 
       function fmt(template, params = {}) {
         let out = template || '';
@@ -639,48 +603,6 @@
         });
       }
 
-      function setProgress(pct) {
-        const progressBox = document.getElementById('progressBox');
-        const progressText = document.getElementById('progressText');
-        const progressFill = document.getElementById('progressFill');
-        progressBox.style.display = 'block';
-        progressText.textContent = fmt(labels.progress_label, { pct: pct });
-        progressFill.style.width = `${pct}%`;
-      }
-
-      function stopProgress() {
-        const progressBox = document.getElementById('progressBox');
-        progressBox.style.display = 'none';
-        document.getElementById('progressFill').style.width = '0%';
-        if (progressTimer) {
-          clearInterval(progressTimer);
-          progressTimer = null;
-        }
-      }
-
-      function startProgress(estimateSec) {
-        if (progressTimer) {
-          clearInterval(progressTimer);
-          progressTimer = null;
-        }
-        progressStart = Date.now();
-        progressEstimate = Math.max(estimateSec || 0, 8);
-        setProgress(1);
-        progressTimer = setInterval(() => {
-          const elapsed = (Date.now() - progressStart) / 1000;
-          const t = Math.min(elapsed / progressEstimate, 1);
-          const eased = 1 - Math.pow(1 - t, 2);
-          let pct = Math.floor(90 * eased);
-          pct = Math.max(1, Math.min(90, pct));
-          setProgress(pct);
-        }, 600);
-      }
-
-      function completeProgress() {
-        setProgress(100);
-        setTimeout(() => stopProgress(), 800);
-      }
-
       async function runGeneration() {
         if (!currentModel) return;
         if (!loggedIn) {
@@ -713,13 +635,10 @@
         document.getElementById('runStatus').textContent = labels.run_pending;
         const res = await fetch('/api/generate', { method: 'POST', body: form });
         if (res.ok) {
-          const data = await res.json();
           document.getElementById('runStatus').textContent = labels.request_sent;
           document.getElementById('prompt').value = '';
           document.getElementById('refFiles').value = '';
           updateRefHint();
-          activeGenerationId = data.generation_id || null;
-          startProgress(currentModel.avg_latency_sec || null);
           await loadMe();
           await loadHistory();
         } else {
@@ -738,11 +657,7 @@
           return;
         }
         const items = [];
-        let activeStatus = null;
         data.history.forEach((item) => {
-          if (activeGenerationId && item.id === activeGenerationId) {
-            activeStatus = item.status;
-          }
           (item.urls || []).forEach((url) => {
             items.push({
               generation_id: item.id,
@@ -756,10 +671,6 @@
         galleryItems = items;
         galleryIndex = 0;
         renderGallery();
-        if (activeGenerationId && activeStatus && !['queued', 'pending', 'running'].includes(activeStatus)) {
-          completeProgress();
-          activeGenerationId = null;
-        }
       }
 
       async function redeemPromo() {

@@ -81,7 +81,6 @@ BASE_RU: Dict[str, str] = {
     "promo_added": "Начислено",
     "promo_error": "Ошибка",
     "delete_failed": "Не удалось удалить",
-    "progress_label": "⏳ Прогресс: {pct}%",
     # Ratios / resolutions
     "ratio_1_1": "1:1 (квадрат)",
     "ratio_2_3": "2:3 (портрет)",
@@ -277,7 +276,6 @@ BASE_EN: Dict[str, str] = {
     "promo_added": "Added",
     "promo_error": "Error",
     "delete_failed": "Delete failed",
-    "progress_label": "⏳ Progress: {pct}%",
     "ratio_1_1": "1:1 (square)",
     "ratio_2_3": "2:3 (portrait)",
     "ratio_3_4": "3:4 (portrait)",
