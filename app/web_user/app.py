@@ -29,6 +29,7 @@ from app.modelspecs.registry import get_model, list_models
 from app.services.credits import CreditsService
 from app.services.generation import GenerationService
 from app.services.kie_client import KieClient, KieError
+from app.services.latency import ModelLatencyService
 from app.services.poller import PollManager
 from app.services.promos import PromoService
 from app.utils.text import clamp_text
@@ -214,6 +215,9 @@ def create_app() -> FastAPI:
     @app.get("/api/models")
     async def api_models(request: Request):
         lang = _get_lang(request)
+        async with app.state.sessionmaker() as session:
+            latency = ModelLatencyService(session)
+            latency_map = await latency.get_all()
         models_payload = []
         for model in list_models():
             if model.model_type != "image":
@@ -241,6 +245,7 @@ def create_app() -> FastAPI:
                     "requires_reference_images": model.requires_reference_images,
                     "max_reference_images": model.max_reference_images,
                     "options": options,
+                    "avg_latency_sec": latency_map.get(model.key),
                 }
             )
         return {"models": models_payload}
@@ -492,6 +497,7 @@ def create_app() -> FastAPI:
         "promo_added",
         "promo_error",
         "delete_failed",
+        "progress_label",
     ]
 
     return app

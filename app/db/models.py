@@ -141,6 +141,7 @@ class Generation(Base):
     discount_pct: Mapped[int] = mapped_column(Integer, default=0)
     final_cost_credits: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(16))
+    progress_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
@@ -163,6 +164,15 @@ class GenerationTask(Base):
     raw_response: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     generation: Mapped['Generation'] = relationship(back_populates='tasks')
+
+
+class ModelLatencyStat(Base):
+    __tablename__ = 'model_latency_stats'
+
+    model_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    avg_seconds: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+    sample_count: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class SupportThread(Base):
