@@ -426,10 +426,14 @@ def create_app() -> FastAPI:
         if not _is_logged_in(request):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         async with app.state.sessionmaker() as session:
+            credits = CreditsService(session)
+            user = await credits.get_user(int(request.session["user_id"]))
+            if not user:
+                return JSONResponse({"error": "user_not_found"}, status_code=404)
             generation = await session.get(Generation, generation_id)
             if not generation:
                 return {"ok": True}
-            if generation.user_id != int(request.session["user_id"]):
+            if generation.user_id != user.id:
                 return JSONResponse({"error": "forbidden"}, status_code=403)
 
             tasks = await session.execute(
