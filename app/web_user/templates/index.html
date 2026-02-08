@@ -564,18 +564,23 @@
         gallery.appendChild(next);
 
         const downloadBtn = document.getElementById('downloadBtn');
-        downloadBtn.href = item.url;
+        downloadBtn.href = `/api/download?url=${encodeURIComponent(item.url)}`;
         downloadBtn.setAttribute('download', '');
         actions.style.display = 'flex';
 
         const deleteBtn = document.getElementById('deleteBtn');
         deleteBtn.onclick = async () => {
           if (!item.generation_id) return;
-          const res = await fetch(`/api/generations/${item.generation_id}`, { method: 'DELETE' });
-          if (res.ok) {
-            galleryItems = galleryItems.filter((x) => x.generation_id !== item.generation_id);
-            renderGallery();
+          const res = await fetch(`/api/generations/${item.generation_id}`, {
+            method: 'DELETE',
+            credentials: 'same-origin',
+          });
+          if (!res.ok) {
+            alert(labels.error_prefix + ': delete_failed');
+            return;
           }
+          galleryItems = galleryItems.filter((x) => x.generation_id !== item.generation_id);
+          renderGallery();
         };
 
         const maxThumbs = 12;

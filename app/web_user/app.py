@@ -7,14 +7,16 @@ import json
 import os
 import time
 import uuid
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Any, Dict, List
 
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+import httpx
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy import select
@@ -91,6 +93,26 @@ def _value_label(lang: str, opt_key: str, value: str) -> str:
     if opt_key == "output_format":
         return value.upper()
     return value
+
+
+def _is_allowed_download(url: str) -> bool:
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        return False
+    host = (parsed.hostname or "").lower()
+    allowed_hosts = {
+        "tempfile.aiquickdraw.com",
+        "file.aiquickdraw.com",
+        "static.aiquickdraw.com",
+        "aiquickdraw.com",
+    }
+    return host in allowed_hosts or host.endswith(".aiquickdraw.com")
+
+
+def _filename_from_url(url: str) -> str:
+    parsed = urlparse(url)
+    name = os.path.basename(parsed.path) or "renderis-result"
+    return name
 
 
 def create_app() -> FastAPI:
@@ -376,6 +398,29 @@ def create_app() -> FastAPI:
                 )
         return {"history": history}
 
+    @app.get("/api/download")
+    async def api_download(request: Request, url: str):
+        if not _is_logged_in(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        if not _is_allowed_download(url):
+            return JSONResponse({"error": "forbidden"}, status_code=403)
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                resp = await client.get(url, follow_redirects=True)
+            except httpx.RequestError:
+                return JSONResponse({"error": "fetch_failed"}, status_code=502)
+
+        if resp.status_code >= 400:
+            return JSONResponse({"error": "not_found"}, status_code=404)
+
+        filename = _filename_from_url(url)
+        headers = {
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        }
+        content_type = resp.headers.get("content-type", "application/octet-stream")
+        return StreamingResponse(iter([resp.content]), media_type=content_type, headers=headers)
+
     @app.delete("/api/generations/{generation_id}")
     async def api_delete_generation(request: Request, generation_id: int):
         if not _is_logged_in(request):
@@ -438,6 +483,7 @@ def create_app() -> FastAPI:
         "error_prefix",
         "promo_added",
         "promo_error",
+        "delete_failed",
     ]
 
     return app
