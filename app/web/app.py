@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import Body, FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from starlette.middleware.sessions import SessionMiddleware
@@ -86,14 +86,24 @@ def _clear_site_logo_files(storage_root: str) -> None:
                 continue
 
 
-async def _save_site_logo(upload: UploadFile, storage_root: str, public_file_base_url: str) -> str | None:
+def _find_site_logo_file(storage_root: str) -> Path | None:
+    assets_dir = _site_assets_dir(storage_root)
+    if not assets_dir.exists():
+        return None
+    files = [f for f in assets_dir.glob("logo.*") if f.is_file() and f.suffix.lower() in LOGO_EXTENSIONS]
+    if not files:
+        return None
+    return sorted(files, key=lambda f: f.name)[0]
+
+
+async def _save_site_logo(upload: UploadFile, storage_root: str) -> bool:
     ext = Path(upload.filename or "").suffix.lower()
     if ext not in LOGO_EXTENSIONS:
-        return None
+        return False
 
     content = await upload.read()
     if not content or len(content) > MAX_LOGO_SIZE_BYTES:
-        return None
+        return False
 
     assets_dir = _site_assets_dir(storage_root)
     assets_dir.mkdir(parents=True, exist_ok=True)
@@ -102,7 +112,7 @@ async def _save_site_logo(upload: UploadFile, storage_root: str, public_file_bas
     filename = f"logo{ext}"
     file_path = assets_dir / filename
     file_path.write_bytes(content)
-    return f"{public_file_base_url.rstrip('/')}/_site/{filename}"
+    return True
 
 
 def _get_price_value(price: Price | None, attr: str) -> int:
@@ -160,6 +170,13 @@ def create_app() -> FastAPI:
     async def logout(request: Request):
         request.session.clear()
         return RedirectResponse(url="/login", status_code=302)
+
+    @app.get("/assets/site-logo")
+    async def admin_site_logo():
+        logo_path = _find_site_logo_file(settings.reference_storage_path)
+        if not logo_path:
+            return JSONResponse({"error": "not_found"}, status_code=404)
+        return FileResponse(path=str(logo_path))
 
     @app.get("/admin", response_class=HTMLResponse)
     async def admin_dashboard(request: Request):
@@ -441,11 +458,11 @@ def create_app() -> FastAPI:
             kie_warn_green = await settings_service.get("kie_warn_green", "1000")
             kie_warn_yellow = await settings_service.get("kie_warn_yellow", "500")
             kie_warn_red = await settings_service.get("kie_warn_red", "200")
-            site_logo_url = (await settings_service.get("site_logo_url")) or ""
-            site_logo_version = (await settings_service.get("site_logo_version")) or ""
-            if site_logo_url and site_logo_version:
-                sep = "&" if "?" in site_logo_url else "?"
-                site_logo_url = f"{site_logo_url}{sep}v={site_logo_version}"
+            site_logo_url = ""
+            logo_path = _find_site_logo_file(settings.reference_storage_path)
+            if logo_path:
+                logo_version = (await settings_service.get("site_logo_version")) or str(int(logo_path.stat().st_mtime_ns))
+                site_logo_url = f"/assets/site-logo?v={logo_version}"
 
         return app.state.templates.TemplateResponse(
             "settings.html",
@@ -525,13 +542,9 @@ def create_app() -> FastAPI:
                 await settings_service.set("site_logo_url", "")
                 await settings_service.set("site_logo_version", str(int(time.time())))
             elif logo_file and (logo_file.filename or "").strip():
-                logo_url = await _save_site_logo(
-                    logo_file,
-                    settings.reference_storage_path,
-                    settings.public_file_base_url,
-                )
-                if logo_url:
-                    await settings_service.set("site_logo_url", logo_url)
+                logo_saved = await _save_site_logo(logo_file, settings.reference_storage_path)
+                if logo_saved:
+                    await settings_service.set("site_logo_url", "/assets/site-logo")
                     await settings_service.set("site_logo_version", str(int(time.time())))
             await session.commit()
 

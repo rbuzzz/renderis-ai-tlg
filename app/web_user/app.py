@@ -16,7 +16,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 import httpx
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy import select
@@ -32,11 +32,11 @@ from app.services.generation import GenerationService
 from app.services.kie_client import KieClient, KieError
 from app.services.poller import PollManager
 from app.services.promos import PromoService
-from app.services.app_settings import AppSettingsService
 from app.utils.text import clamp_text
 
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
 
 
 def _is_logged_in(request: Request) -> bool:
@@ -117,6 +117,20 @@ def _filename_from_url(url: str) -> str:
     return name
 
 
+def _site_assets_dir(storage_root: str) -> Path:
+    return Path(storage_root) / "_site"
+
+
+def _find_site_logo_file(storage_root: str) -> Path | None:
+    assets_dir = _site_assets_dir(storage_root)
+    if not assets_dir.exists():
+        return None
+    files = [f for f in assets_dir.glob("logo.*") if f.is_file() and f.suffix.lower() in LOGO_EXTENSIONS]
+    if not files:
+        return None
+    return sorted(files, key=lambda f: f.name)[0]
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="Renderis User")
@@ -160,15 +174,9 @@ def create_app() -> FastAPI:
     async def index(request: Request):
         lang = _get_lang(request)
         site_logo_url = ""
-        async with app.state.sessionmaker() as session:
-            settings_service = AppSettingsService(session)
-            raw_logo_url = (await settings_service.get("site_logo_url")) or ""
-            logo_version = (await settings_service.get("site_logo_version")) or ""
-            if raw_logo_url and logo_version:
-                sep = "&" if "?" in raw_logo_url else "?"
-                site_logo_url = f"{raw_logo_url}{sep}v={logo_version}"
-            else:
-                site_logo_url = raw_logo_url
+        logo_path = _find_site_logo_file(settings.reference_storage_path)
+        if logo_path:
+            site_logo_url = f"/assets/site-logo?v={int(logo_path.stat().st_mtime_ns)}"
         return app.state.templates.TemplateResponse(
             "index.html",
             {
@@ -181,6 +189,13 @@ def create_app() -> FastAPI:
                 "site_logo_url": site_logo_url,
             },
         )
+
+    @app.get("/assets/site-logo")
+    async def user_site_logo():
+        logo_path = _find_site_logo_file(settings.reference_storage_path)
+        if not logo_path:
+            return JSONResponse({"error": "not_found"}, status_code=404)
+        return FileResponse(path=str(logo_path))
 
     @app.post("/auth/telegram")
     async def auth_telegram(request: Request):
