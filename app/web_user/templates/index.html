@@ -967,6 +967,19 @@
         return Math.max(1, Math.floor((width + gap) / (minThumb + gap)));
       }
 
+      function snakeRows(items, cols) {
+        const out = [];
+        for (let i = 0; i < items.length; i += cols) {
+          const rowIndex = Math.floor(i / cols);
+          const row = items.slice(i, i + cols);
+          if (rowIndex % 2 === 1) {
+            row.reverse();
+          }
+          out.push(...row);
+        }
+        return out;
+      }
+
       function renderThumbs(currentItem, focusCurrent) {
         const thumbs = document.getElementById('thumbs');
         const prevBtn = document.getElementById('thumbsPrev');
@@ -996,8 +1009,9 @@
 
         const start = thumbsPage * pageSize;
         const pageItems = thumbItems.slice(start, start + pageSize);
+        const displayItems = snakeRows(pageItems, cols);
 
-        pageItems.forEach((thumbItem) => {
+        displayItems.forEach((thumbItem) => {
           const wrap = document.createElement('div');
           wrap.className = 'thumb' + (currentItem && thumbItem.url === currentItem.url ? ' active' : '');
           const timg = document.createElement('img');
@@ -1006,9 +1020,13 @@
             thumbItem.invalid = true;
             wrap.remove();
           };
-          wrap.onclick = () => {
+          wrap.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const currentScrollY = window.scrollY;
             galleryIndex = galleryItems.indexOf(thumbItem);
             renderGallery();
+            window.requestAnimationFrame(() => window.scrollTo({ top: currentScrollY, left: 0 }));
           };
           wrap.appendChild(timg);
           thumbs.appendChild(wrap);
@@ -1134,14 +1152,20 @@
 
       document.getElementById('runBtn').onclick = runGeneration;
       document.getElementById('promoBtn').onclick = redeemPromo;
-      document.getElementById('thumbsPrev').onclick = () => {
+      document.getElementById('thumbsPrev').onclick = (e) => {
+        e.preventDefault();
         if (thumbsPage <= 0) return;
+        const currentScrollY = window.scrollY;
         thumbsPage -= 1;
         renderThumbs(galleryItems[galleryIndex] || null, false);
+        window.requestAnimationFrame(() => window.scrollTo({ top: currentScrollY, left: 0 }));
       };
-      document.getElementById('thumbsNext').onclick = () => {
+      document.getElementById('thumbsNext').onclick = (e) => {
+        e.preventDefault();
+        const currentScrollY = window.scrollY;
         thumbsPage += 1;
         renderThumbs(galleryItems[galleryIndex] || null, false);
+        window.requestAnimationFrame(() => window.scrollTo({ top: currentScrollY, left: 0 }));
       };
       document.getElementById('promoInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
