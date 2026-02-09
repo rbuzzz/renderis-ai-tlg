@@ -180,7 +180,11 @@ BASE_RU: Dict[str, str] = {
     "result_repeat": "🔁 Повторить",
     "result_finish": "❌ Завершить",
     "result_done": "✅ Завершено. Если хотите еще — нажмите /start.",
-    "repeat_prompt": "Отправить запрос повторно?\nБудет списано {cost} кредитов.",
+    "repeat_prompt": (
+        "Отправить запрос повторно?\n"
+        "Будет списано {cost} "
+        "{cost, plural, one {кредит} few {кредита} many {кредитов} other {кредита}}."
+    ),
     "repeat_send": "✅ Отправить",
     "repeat_cancel": "❌ Отмена",
     "repeat_cancelled": "Отменено.",
@@ -394,7 +398,10 @@ BASE_EN: Dict[str, str] = {
     "result_repeat": "🔁 Repeat",
     "result_finish": "❌ Finish",
     "result_done": "✅ Done. To create more, use /start.",
-    "repeat_prompt": "Repeat this request?\nCredits to charge: {cost}.",
+    "repeat_prompt": (
+        "Repeat this request?\n"
+        "Credits to charge: {cost} {cost, plural, one {credit} other {credits}}."
+    ),
     "repeat_send": "✅ Send",
     "repeat_cancel": "❌ Cancel",
     "repeat_cancelled": "Cancelled.",
