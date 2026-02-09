@@ -33,6 +33,24 @@
         gap: 16px;
         margin-bottom: 18px;
       }
+      .brand-wrap {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+      .brand-text {
+        min-width: 0;
+      }
+      .site-logo {
+        width: 46px;
+        height: 46px;
+        border-radius: 12px;
+        border: 1px solid #2a3d57;
+        object-fit: cover;
+        background: #0f1b2b;
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
+      }
       .brand {
         font-family: "Fraunces", serif;
         font-size: 26px;
@@ -522,14 +540,23 @@
         .redeem-row { grid-template-columns: 1fr; }
         .promo-btn { width: 100%; }
         .redeem-content.open { max-height: 280px; }
+        .site-logo {
+          width: 40px;
+          height: 40px;
+        }
       }
     </style>
   </head>
   <body>
     <div class="topbar">
-      <div>
-        <div class="brand">{{ labels['site_title'] }}</div>
-        <div class="subtitle">{{ labels['site_tagline'] }}</div>
+      <div class="brand-wrap">
+        {% if site_logo_url %}
+        <img class="site-logo" src="{{ site_logo_url }}" alt="{{ labels['site_title'] }} logo" />
+        {% endif %}
+        <div class="brand-text">
+          <div class="brand">{{ labels['site_title'] }}</div>
+          <div class="subtitle">{{ labels['site_tagline'] }}</div>
+        </div>
       </div>
       <div class="top-actions">
         {% if logged_in %}

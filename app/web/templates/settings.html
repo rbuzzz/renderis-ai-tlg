@@ -5,7 +5,7 @@
     {% if saved %}
     <div class="notice">Настройки сохранены.</div>
     {% endif %}
-    <form method="post" action="/admin/settings">
+    <form method="post" action="/admin/settings" enctype="multipart/form-data">
       <p class="muted" style="margin-top: 6px;">
         Формула: стоимость 1 кредита Renderis (USD) = стоимость 1 звезды (USD) × звезд за 1 кредит.
       </p>
@@ -67,6 +67,37 @@
           <label>Красный порог (кредиты)</label>
           <input name="kie_warn_red" value="{{ kie_warn_red }}" />
         </div>
+      </div>
+
+      <div style="height: 16px;"></div>
+      <h3 style="margin: 0 0 8px;">Логотип сайта</h3>
+      <p class="muted" style="margin-top: 6px;">
+        Поддержка PNG/JPG/WEBP/SVG, до {{ logo_max_size_mb }} MB.
+      </p>
+      <div class="form-row">
+        <div>
+          <label>Загрузить новый логотип</label>
+          <input type="file" name="logo_file" accept=".png,.jpg,.jpeg,.webp,.svg,image/*" />
+        </div>
+        <div>
+          <label>Удалить текущий логотип</label>
+          <label style="display: inline-flex; align-items: center; gap: 8px; margin-top: 8px;">
+            <input type="checkbox" name="remove_logo" value="1" style="width: auto;" />
+            <span class="muted" style="font-size: 13px;">Удалить лого при сохранении</span>
+          </label>
+        </div>
+        {% if site_logo_url %}
+        <div style="grid-column: 1 / -1;">
+          <label>Текущий логотип</label>
+          <div style="border: 1px solid #2b3f59; background: #0f1b2b; border-radius: 12px; padding: 12px;">
+            <img
+              src="{{ site_logo_url }}"
+              alt="Site logo"
+              style="display: block; max-height: 64px; width: auto; border-radius: 8px;"
+            />
+          </div>
+        </div>
+        {% endif %}
       </div>
       <div style="margin-top: 12px;">
         <button type="submit">Сохранить</button>

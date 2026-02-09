@@ -32,6 +32,7 @@ from app.services.generation import GenerationService
 from app.services.kie_client import KieClient, KieError
 from app.services.poller import PollManager
 from app.services.promos import PromoService
+from app.services.app_settings import AppSettingsService
 from app.utils.text import clamp_text
 
 
@@ -158,6 +159,16 @@ def create_app() -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request):
         lang = _get_lang(request)
+        site_logo_url = ""
+        async with app.state.sessionmaker() as session:
+            settings_service = AppSettingsService(session)
+            raw_logo_url = (await settings_service.get("site_logo_url")) or ""
+            logo_version = (await settings_service.get("site_logo_version")) or ""
+            if raw_logo_url and logo_version:
+                sep = "&" if "?" in raw_logo_url else "?"
+                site_logo_url = f"{raw_logo_url}{sep}v={logo_version}"
+            else:
+                site_logo_url = raw_logo_url
         return app.state.templates.TemplateResponse(
             "index.html",
             {
@@ -167,6 +178,7 @@ def create_app() -> FastAPI:
                 "labels": {key: t(lang, key) for key in app.i18n_keys},
                 "logged_in": _is_logged_in(request),
                 "bot_username": settings.bot_username,
+                "site_logo_url": site_logo_url,
             },
         )
 

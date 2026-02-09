@@ -1,10 +1,11 @@
 ﻿from __future__ import annotations
 
 import secrets
+import time
 import uuid
 from pathlib import Path
 
-from fastapi import Body, FastAPI, Form, Request
+from fastapi import Body, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
@@ -24,6 +25,8 @@ from app.services.support import SupportService
 
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
+MAX_LOGO_SIZE_BYTES = 5 * 1024 * 1024
 
 
 def _is_logged_in(request: Request) -> bool:
@@ -65,6 +68,41 @@ def _parse_float(value: str) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _site_assets_dir(storage_root: str) -> Path:
+    return Path(storage_root) / "_site"
+
+
+def _clear_site_logo_files(storage_root: str) -> None:
+    assets_dir = _site_assets_dir(storage_root)
+    if not assets_dir.exists():
+        return
+    for file in assets_dir.glob("logo.*"):
+        if file.is_file():
+            try:
+                file.unlink()
+            except OSError:
+                continue
+
+
+async def _save_site_logo(upload: UploadFile, storage_root: str, public_file_base_url: str) -> str | None:
+    ext = Path(upload.filename or "").suffix.lower()
+    if ext not in LOGO_EXTENSIONS:
+        return None
+
+    content = await upload.read()
+    if not content or len(content) > MAX_LOGO_SIZE_BYTES:
+        return None
+
+    assets_dir = _site_assets_dir(storage_root)
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    _clear_site_logo_files(storage_root)
+
+    filename = f"logo{ext}"
+    file_path = assets_dir / filename
+    file_path.write_bytes(content)
+    return f"{public_file_base_url.rstrip('/')}/_site/{filename}"
 
 
 def _get_price_value(price: Price | None, attr: str) -> int:
@@ -403,6 +441,11 @@ def create_app() -> FastAPI:
             kie_warn_green = await settings_service.get("kie_warn_green", "1000")
             kie_warn_yellow = await settings_service.get("kie_warn_yellow", "500")
             kie_warn_red = await settings_service.get("kie_warn_red", "200")
+            site_logo_url = (await settings_service.get("site_logo_url")) or ""
+            site_logo_version = (await settings_service.get("site_logo_version")) or ""
+            if site_logo_url and site_logo_version:
+                sep = "&" if "?" in site_logo_url else "?"
+                site_logo_url = f"{site_logo_url}{sep}v={site_logo_version}"
 
         return app.state.templates.TemplateResponse(
             "settings.html",
@@ -419,6 +462,8 @@ def create_app() -> FastAPI:
                 "kie_warn_green": kie_warn_green,
                 "kie_warn_yellow": kie_warn_yellow,
                 "kie_warn_red": kie_warn_red,
+                "site_logo_url": site_logo_url,
+                "logo_max_size_mb": int(MAX_LOGO_SIZE_BYTES / 1024 / 1024),
                 "saved": bool(saved),
             },
         )
@@ -434,6 +479,8 @@ def create_app() -> FastAPI:
         kie_warn_green: str = Form(""),
         kie_warn_yellow: str = Form(""),
         kie_warn_red: str = Form(""),
+        logo_file: UploadFile | None = File(default=None),
+        remove_logo: str = Form(""),
     ):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
@@ -473,6 +520,19 @@ def create_app() -> FastAPI:
                 parsed = _parse_int(kie_warn_red.strip())
                 if parsed is not None:
                     await settings_service.set("kie_warn_red", str(parsed))
+            if remove_logo.strip() == "1":
+                _clear_site_logo_files(settings.reference_storage_path)
+                await settings_service.set("site_logo_url", "")
+                await settings_service.set("site_logo_version", str(int(time.time())))
+            elif logo_file and (logo_file.filename or "").strip():
+                logo_url = await _save_site_logo(
+                    logo_file,
+                    settings.reference_storage_path,
+                    settings.public_file_base_url,
+                )
+                if logo_url:
+                    await settings_service.set("site_logo_url", logo_url)
+                    await settings_service.set("site_logo_version", str(int(time.time())))
             await session.commit()
 
         return RedirectResponse(url="/admin/settings?saved=1", status_code=302)
