@@ -214,9 +214,28 @@ def create_app() -> FastAPI:
                 )
             )
 
-            recent_orders = (
-                await session.execute(select(Order).order_by(Order.created_at.desc()).limit(10))
-            ).scalars().all()
+            recent_orders_rows = await session.execute(
+                select(Order, User)
+                .outerjoin(User, Order.user_id == User.id)
+                .order_by(Order.created_at.desc())
+                .limit(10)
+            )
+            recent_orders = []
+            for order_row, user_row in recent_orders_rows.all():
+                username = user_row.username if user_row and user_row.username else "-"
+                user_label = f"{order_row.user_id}"
+                if user_row:
+                    user_label = f"{user_row.telegram_id} ({username})"
+                recent_orders.append(
+                    {
+                        "id": order_row.id,
+                        "user_label": user_label,
+                        "stars_amount": order_row.stars_amount,
+                        "credits_amount": order_row.credits_amount,
+                        "status": order_row.status,
+                        "created_at_msk": _format_msk(order_row.created_at) or "—",
+                    }
+                )
             recent_gens = (
                 await session.execute(select(Generation).order_by(Generation.created_at.desc()).limit(10))
             ).scalars().all()

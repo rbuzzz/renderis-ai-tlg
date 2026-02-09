@@ -44,11 +44,11 @@
         {% for o in recent_orders %}
         <tr>
           <td>{{ o.id }}</td>
-          <td class="muted">{{ o.user_id }}</td>
+          <td class="muted">{{ o.user_label }}</td>
           <td>{{ o.stars_amount }}</td>
           <td>{{ o.credits_amount }}</td>
           <td>{{ o.status }}</td>
-          <td class="muted">{{ o.created_at }}</td>
+          <td class="muted">{{ o.created_at_msk }}</td>
         </tr>
         {% else %}
         <tr><td colspan="6" class="muted">Нет данных</td></tr>
