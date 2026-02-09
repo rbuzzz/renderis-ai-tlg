@@ -741,6 +741,7 @@
       }
 
       async function loadHistory() {
+        const prevUrls = new Set(galleryItems.map((item) => item.url));
         const res = await fetch('/api/history');
         if (!res.ok) return;
         const data = await res.json();
@@ -764,7 +765,10 @@
           });
         });
         galleryItems = items;
-        if (prevUrl) {
+        const newIndex = galleryItems.findIndex((item) => !prevUrls.has(item.url));
+        if (newIndex >= 0) {
+          galleryIndex = newIndex;
+        } else if (prevUrl) {
           const idx = galleryItems.findIndex((x) => x.url === prevUrl);
           if (idx >= 0) {
             galleryIndex = idx;
