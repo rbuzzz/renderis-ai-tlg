@@ -347,10 +347,35 @@
         border-color: rgba(255, 118, 118, 0.5);
         color: var(--danger);
       }
+      .thumbs-wrap {
+        position: relative;
+        padding: 0 40px;
+      }
       .thumbs {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+        grid-template-columns: repeat(1, minmax(0, 1fr));
         gap: 8px;
+      }
+      .thumbs-nav {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: 1px solid #2b3f59;
+        background: rgba(15, 27, 43, 0.9);
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+      .thumbs-nav.prev { left: 0; }
+      .thumbs-nav.next { right: 0; }
+      .thumbs-nav:disabled {
+        opacity: 0.4;
+        cursor: default;
       }
       .thumb {
         width: 100%;
@@ -374,6 +399,12 @@
         width: 100%;
         height: 100%;
         object-fit: cover;
+      }
+      .thumbs-pages {
+        margin-top: 6px;
+        text-align: right;
+        color: var(--muted);
+        font-size: 12px;
       }
       .redeem-panel {
         padding: 0;
@@ -642,7 +673,12 @@
             </a>
             <button class="action-btn danger" id="deleteBtn">🗑️ {{ labels['delete'] }}</button>
           </div>
-          <div class="thumbs" id="thumbs"></div>
+          <div class="thumbs-wrap" id="thumbsWrap">
+            <button class="thumbs-nav prev" id="thumbsPrev" type="button" aria-label="Previous thumbnails">‹</button>
+            <div class="thumbs" id="thumbs"></div>
+            <button class="thumbs-nav next" id="thumbsNext" type="button" aria-label="Next thumbnails">›</button>
+          </div>
+          <div class="thumbs-pages" id="thumbsPages" style="display:none;"></div>
         </div>
       </div>
     </div>
@@ -672,9 +708,11 @@
       let maxOutputs = 1;
       let galleryItems = [];
       let galleryIndex = 0;
+      let thumbsPage = 0;
       let modelNames = {};
       let selectedFiles = [];
       let refPreviews = [];
+      const THUMB_ROWS = 3;
 
       function fmt(template, params = {}) {
         let out = template || '';
@@ -850,14 +888,13 @@
       function renderGallery() {
         const gallery = document.getElementById('gallery');
         const actions = document.getElementById('galleryActions');
-        const thumbs = document.getElementById('thumbs');
         gallery.innerHTML = '';
-        thumbs.innerHTML = '';
 
         const validIndex = firstValidIndex(galleryIndex);
         if (validIndex === -1) {
           actions.style.display = 'none';
           gallery.innerHTML = `<div class="gallery-empty">${labels.output_empty}</div>`;
+          renderThumbs(null, true);
           return;
         }
         galleryIndex = validIndex;
@@ -919,10 +956,50 @@
           renderGallery();
         };
 
+        renderThumbs(item, true);
+      }
+
+      function thumbColumns() {
+        const thumbs = document.getElementById('thumbs');
+        const minThumb = 78;
+        const gap = 8;
+        const width = thumbs.clientWidth || thumbs.offsetWidth || 0;
+        return Math.max(1, Math.floor((width + gap) / (minThumb + gap)));
+      }
+
+      function renderThumbs(currentItem, focusCurrent) {
+        const thumbs = document.getElementById('thumbs');
+        const prevBtn = document.getElementById('thumbsPrev');
+        const nextBtn = document.getElementById('thumbsNext');
+        const pages = document.getElementById('thumbsPages');
+        thumbs.innerHTML = '';
+
         const thumbItems = galleryItems.filter((x) => !x.invalid);
-        thumbItems.forEach((thumbItem) => {
+        if (!thumbItems.length) {
+          prevBtn.style.display = 'none';
+          nextBtn.style.display = 'none';
+          pages.style.display = 'none';
+          return;
+        }
+
+        const cols = thumbColumns();
+        thumbs.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+        const pageSize = Math.max(1, cols * THUMB_ROWS);
+        const totalPages = Math.max(1, Math.ceil(thumbItems.length / pageSize));
+        const currentIdx = currentItem ? thumbItems.findIndex((x) => x.url === currentItem.url) : -1;
+
+        if (focusCurrent && currentIdx >= 0) {
+          thumbsPage = Math.floor(currentIdx / pageSize);
+        }
+        if (thumbsPage >= totalPages) thumbsPage = totalPages - 1;
+        if (thumbsPage < 0) thumbsPage = 0;
+
+        const start = thumbsPage * pageSize;
+        const pageItems = thumbItems.slice(start, start + pageSize);
+
+        pageItems.forEach((thumbItem) => {
           const wrap = document.createElement('div');
-          wrap.className = 'thumb' + (thumbItem.url === item.url ? ' active' : '');
+          wrap.className = 'thumb' + (currentItem && thumbItem.url === currentItem.url ? ' active' : '');
           const timg = document.createElement('img');
           timg.src = thumbItem.url;
           timg.onerror = () => {
@@ -936,6 +1013,14 @@
           wrap.appendChild(timg);
           thumbs.appendChild(wrap);
         });
+
+        const manyPages = totalPages > 1;
+        prevBtn.style.display = manyPages ? 'flex' : 'none';
+        nextBtn.style.display = manyPages ? 'flex' : 'none';
+        prevBtn.disabled = thumbsPage === 0;
+        nextBtn.disabled = thumbsPage >= totalPages - 1;
+        pages.style.display = manyPages ? 'block' : 'none';
+        pages.textContent = `${thumbsPage + 1} / ${totalPages}`;
       }
 
       async function runGeneration() {
@@ -1049,11 +1134,24 @@
 
       document.getElementById('runBtn').onclick = runGeneration;
       document.getElementById('promoBtn').onclick = redeemPromo;
+      document.getElementById('thumbsPrev').onclick = () => {
+        if (thumbsPage <= 0) return;
+        thumbsPage -= 1;
+        renderThumbs(galleryItems[galleryIndex] || null, false);
+      };
+      document.getElementById('thumbsNext').onclick = () => {
+        thumbsPage += 1;
+        renderThumbs(galleryItems[galleryIndex] || null, false);
+      };
       document.getElementById('promoInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
           redeemPromo();
         }
+      });
+      window.addEventListener('resize', () => {
+        if (!galleryItems.length) return;
+        renderThumbs(galleryItems[galleryIndex] || null, false);
       });
       const refInput = document.getElementById('refFiles');
       const refGrid = document.getElementById('refGrid');
