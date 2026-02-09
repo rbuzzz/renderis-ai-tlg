@@ -234,6 +234,7 @@ def create_app() -> FastAPI:
     async def index(request: Request):
         lang = _get_lang(request)
         site_logo_url = ""
+        logo_version = ""
         async with app.state.sessionmaker() as session:
             settings_service = AppSettingsService(session)
             raw_logo_url = ((await settings_service.get("site_logo_url")) or "").strip()
@@ -248,6 +249,11 @@ def create_app() -> FastAPI:
             logo_path = _find_site_logo_file(settings.reference_storage_path)
             if logo_path:
                 site_logo_url = f"/assets/site-logo?v={int(logo_path.stat().st_mtime_ns)}"
+            elif settings.admin_web_public_url:
+                if logo_version:
+                    site_logo_url = f"/assets/site-logo?v={logo_version}"
+                else:
+                    site_logo_url = "/assets/site-logo"
         lang_options = [{"code": code, "label": LANGUAGE_LABELS.get(code, code.upper())} for code in SUPPORTED_LANGS]
         current_lang_label = LANGUAGE_LABELS.get(lang, lang.upper())
         return app.state.templates.TemplateResponse(
@@ -296,9 +302,13 @@ def create_app() -> FastAPI:
     @app.api_route("/favicon.svg", methods=["GET", "HEAD"])
     async def user_favicon_svg():
         svg = _rounded_favicon_svg(settings.reference_storage_path)
-        if not svg:
-            return Response(status_code=404)
-        return Response(content=svg, media_type="image/svg+xml", headers={"Cache-Control": "no-cache"})
+        if svg:
+            return Response(content=svg, media_type="image/svg+xml", headers={"Cache-Control": "no-cache"})
+        if settings.admin_web_public_url:
+            base = _base_public_url(settings.admin_web_public_url)
+            if base:
+                return RedirectResponse(url=f"{base}/favicon.svg", status_code=307)
+        return Response(status_code=404)
 
     @app.api_route("/favicon.ico", methods=["GET", "HEAD"])
     async def user_favicon():
