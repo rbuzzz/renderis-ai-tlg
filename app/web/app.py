@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import Body, FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from starlette.middleware.sessions import SessionMiddleware
@@ -193,6 +193,13 @@ def create_app() -> FastAPI:
         logo_path = _find_site_logo_file(settings.reference_storage_path)
         if not logo_path:
             return JSONResponse({"error": "not_found"}, status_code=404)
+        return FileResponse(path=str(logo_path))
+
+    @app.api_route("/favicon.ico", methods=["GET", "HEAD"])
+    async def admin_favicon():
+        logo_path = _find_site_logo_file(settings.reference_storage_path)
+        if not logo_path:
+            return Response(status_code=404)
         return FileResponse(path=str(logo_path))
 
     @app.get("/admin", response_class=HTMLResponse)

@@ -16,7 +16,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 import httpx
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy import select
@@ -234,6 +234,13 @@ def create_app() -> FastAPI:
         logo_path = _find_site_logo_file(settings.reference_storage_path)
         if not logo_path:
             return JSONResponse({"error": "not_found"}, status_code=404)
+        return FileResponse(path=str(logo_path))
+
+    @app.api_route("/favicon.ico", methods=["GET", "HEAD"])
+    async def user_favicon():
+        logo_path = _find_site_logo_file(settings.reference_storage_path)
+        if not logo_path:
+            return Response(status_code=404)
         return FileResponse(path=str(logo_path))
 
     @app.post("/auth/telegram")
