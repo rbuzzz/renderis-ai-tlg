@@ -36,7 +36,7 @@ from app.utils.text import clamp_text
 
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
-LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
+LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico"}
 
 
 def _is_logged_in(request: Request) -> bool:
@@ -190,7 +190,7 @@ def create_app() -> FastAPI:
             },
         )
 
-    @app.get("/assets/site-logo")
+    @app.api_route("/assets/site-logo", methods=["GET", "HEAD"])
     async def user_site_logo():
         logo_path = _find_site_logo_file(settings.reference_storage_path)
         if not logo_path:

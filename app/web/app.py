@@ -25,7 +25,7 @@ from app.services.support import SupportService
 
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
-LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
+LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico"}
 MAX_LOGO_SIZE_BYTES = 5 * 1024 * 1024
 
 
@@ -171,7 +171,7 @@ def create_app() -> FastAPI:
         request.session.clear()
         return RedirectResponse(url="/login", status_code=302)
 
-    @app.get("/assets/site-logo")
+    @app.api_route("/assets/site-logo", methods=["GET", "HEAD"])
     async def admin_site_logo():
         logo_path = _find_site_logo_file(settings.reference_storage_path)
         if not logo_path:
