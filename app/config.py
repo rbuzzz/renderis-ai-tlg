@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     reference_storage_path: str = Field('/var/www/tonmd.cloud/ref', alias='REFERENCE_STORAGE_PATH')
     public_file_base_url: str = Field('https://tonmd.cloud/ref', alias='PUBLIC_FILE_BASE_URL')
     max_reference_images: int = Field(8, alias='MAX_REFERENCE_IMAGES')
+    reference_files_ttl_hours: int = Field(24, alias='REFERENCE_FILES_TTL_HOURS')
 
     # Admin web
     admin_web_enabled: bool = Field(False, alias='ADMIN_WEB_ENABLED')

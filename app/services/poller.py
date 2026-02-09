@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import time
 from datetime import timedelta
 from typing import Dict, List, Optional
 
@@ -35,6 +36,7 @@ class PollManager:
         self.global_sem = asyncio.Semaphore(self.settings.global_max_poll_concurrency)
         self.user_sems: Dict[int, asyncio.Semaphore] = {}
         self._inflight: set[int] = set()
+        self._last_ref_cleanup = 0.0
 
     def _user_sem(self, user_id: int) -> asyncio.Semaphore:
         if user_id not in self.user_sems:
@@ -96,6 +98,7 @@ class PollManager:
                     ids = [row[0] for row in result.all()]
                 for task_id in ids:
                     self.schedule(task_id)
+                await self._maybe_cleanup_reference_files()
             except Exception as exc:
                 logger.warning('poll_watch_failed', error=str(exc))
             await asyncio.sleep(interval)
@@ -242,29 +245,37 @@ class PollManager:
             generation.updated_at = utcnow()
             await session.commit()
 
-            if generation.status in ('success', 'fail', 'partial'):
-                await self._cleanup_reference_files(generation)
-
-    async def _cleanup_reference_files(self, generation: Generation) -> None:
-        options = generation.options or {}
-        files = options.get('reference_files') or []
-        if not files:
+    async def _maybe_cleanup_reference_files(self) -> None:
+        ttl_hours = self.settings.reference_files_ttl_hours
+        if ttl_hours <= 0:
             return
-        parents = set()
-        for path in files:
+        now = time.time()
+        if now - self._last_ref_cleanup < 3600:
+            return
+        self._last_ref_cleanup = now
+        base = self.settings.reference_storage_path
+        cutoff = now - ttl_hours * 3600
+        if not os.path.isdir(base):
+            return
+        for entry in os.scandir(base):
+            if not entry.is_dir():
+                continue
             try:
-                os.remove(path)
-            except FileNotFoundError:
-                pass
+                newest = 0.0
+                for child in os.scandir(entry.path):
+                    if child.is_file():
+                        newest = max(newest, child.stat().st_mtime)
+                if newest and newest > cutoff:
+                    continue
+                for child in os.scandir(entry.path):
+                    if child.is_file():
+                        os.remove(child.path)
+                try:
+                    os.rmdir(entry.path)
+                except OSError:
+                    pass
             except Exception as exc:
-                logger.warning('ref_delete_failed', path=path, error=str(exc))
-            parents.add(os.path.dirname(path))
-
-        for parent in parents:
-            try:
-                os.rmdir(parent)
-            except OSError:
-                pass
+                logger.warning('ref_cleanup_failed', path=entry.path, error=str(exc))
 
     async def _deliver_results(self, user: User, generation: Generation, urls: List[str]) -> None:
         lang = normalize_lang((user.settings or {}).get("lang"))

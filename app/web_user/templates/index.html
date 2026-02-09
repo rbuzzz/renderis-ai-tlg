@@ -739,7 +739,6 @@
         const res = await fetch('/api/generate', { method: 'POST', body: form });
         if (res.ok) {
           document.getElementById('runStatus').textContent = labels.request_sent;
-          resetRefSelection();
           updateQuote();
           await loadMe();
           await loadHistory();
