@@ -533,14 +533,24 @@
       }
 
       function selectModel(key) {
-        currentModel = models.find((m) => m.key === key);
+        const nextModel = models.find((m) => m.key === key);
+        if (!nextModel) return;
+        const modelChanged = !currentModel || currentModel.key !== nextModel.key;
+        currentModel = nextModel;
         document.getElementById('modelTagline').textContent = currentModel.tagline || '';
-        optionsState = {};
-        currentModel.options.forEach((opt) => optionsState[opt.key] = opt.default);
-        optionsState.outputs = 1;
         document.getElementById('uploadBlock').style.display =
           (currentModel.supports_reference_images || currentModel.requires_reference_images) ? 'block' : 'none';
-        resetRefSelection();
+        if (modelChanged) {
+          optionsState = {};
+          currentModel.options.forEach((opt) => optionsState[opt.key] = opt.default);
+          optionsState.outputs = 1;
+          resetRefSelection();
+        } else {
+          if (!optionsState.outputs) {
+            optionsState.outputs = 1;
+          }
+          renderRefGrid();
+        }
         renderModels();
         renderOptions();
       }
