@@ -182,9 +182,15 @@ BASE_RU: Dict[str, str] = {
     "help_text": "ℹ️ Это бот для генерации изображений. Используйте меню ниже.\nКоманды: /start /ref CODE /promo CODE /admin (для админов).",
     # Start
     "start_hello": "👋 Привет, {name}!",
-    "start_balance": "💰 Баланс: <b>{credits}</b> кредитов.",
+    "start_balance": (
+        "💰 Баланс: <b>{credits}</b> "
+        "{credits, plural, one {кредит} few {кредита} many {кредитов} other {кредита}}."
+    ),
     "start_terms": "📜 Используя бот, вы подтверждаете соблюдение законов и правил сервиса.",
-    "start_bonus": "Бонус за старт: +{credits} кредитов.",
+    "start_bonus": (
+        "Бонус за старт: +{credits} "
+        "{credits, plural, one {кредит} few {кредита} many {кредитов} other {кредита}}."
+    ),
     # Prices list
     "prices_title": "🧮 <b>Арифметика расхода кредитов</b>",
     "prices_note": "Цены актуальны на момент запроса и меняются мгновенно после правок администратора.",
@@ -213,9 +219,14 @@ BASE_RU: Dict[str, str] = {
     "payment_package_not_found": "Пакет не найден",
     "payment_invalid": "Некорректный платеж.",
     "payment_processed": "Платеж уже обработан.",
-    "payment_success": "Оплата принята. Начислено {credits} кредитов.",
+    "payment_success": (
+        "Оплата принята. Начислено {credits} "
+        "{credits, plural, one {кредит} few {кредита} many {кредитов} other {кредита}}."
+    ),
     "payment_user_not_found": "Пользователь не найден.",
-    "payment_desc": "{credits} кредитов",
+    "payment_desc": (
+        "{credits} {credits, plural, one {кредит} few {кредита} many {кредитов} other {кредита}}"
+    ),
     # Referral / Promo
     "ref_usage": "Использование: /ref CODE",
     "ref_not_found": "Код не найден или неактивен.",
@@ -225,7 +236,10 @@ BASE_RU: Dict[str, str] = {
     "promo_invalid": "Промо-код не найден или неактивен.",
     "promo_used": "Промо-код уже использован.",
     "promo_not_found": "Промо-код не найден.",
-    "promo_activated": "Промо-код активирован. Начислено {credits} кредитов.",
+    "promo_activated": (
+        "Промо-код активирован. Начислено {credits} "
+        "{credits, plural, one {кредит} few {кредита} many {кредитов} other {кредита}}."
+    ),
     # Poller / results
     "result_no_urls": "Генерация завершена, но ссылки не получены.",
     "result_original": "Изображение без сжатия",
@@ -381,9 +395,9 @@ BASE_EN: Dict[str, str] = {
     "error_generic": "Failed to start generation.",
     "help_text": "ℹ️ This bot generates images. Use the menu below.\nCommands: /start /ref CODE /promo CODE /admin (admins).",
     "start_hello": "👋 Hello, {name}!",
-    "start_balance": "💰 Balance: <b>{credits}</b> credits.",
+    "start_balance": "💰 Balance: <b>{credits}</b> {credits, plural, one {credit} other {credits}}.",
     "start_terms": "📜 By using the bot, you agree to follow the rules and laws.",
-    "start_bonus": "Signup bonus: +{credits} credits.",
+    "start_bonus": "Signup bonus: +{credits} {credits, plural, one {credit} other {credits}}.",
     "prices_title": "🧮 <b>Credit math</b>",
     "prices_note": "Prices are current at the time of request and update instantly after admin changes.",
     "prices_nb": "🍌 Nano Banana — <b>{cost}</b> cr.",
@@ -409,9 +423,9 @@ BASE_EN: Dict[str, str] = {
     "payment_package_not_found": "Package not found",
     "payment_invalid": "Invalid payment.",
     "payment_processed": "Payment already processed.",
-    "payment_success": "Payment received. Credited {credits} credits.",
+    "payment_success": "Payment received. Credited {credits} {credits, plural, one {credit} other {credits}}.",
     "payment_user_not_found": "User not found.",
-    "payment_desc": "{credits} credits",
+    "payment_desc": "{credits} {credits, plural, one {credit} other {credits}}",
     "ref_usage": "Usage: /ref CODE",
     "ref_not_found": "Code not found or inactive.",
     "ref_already": "Referral code already applied.",
@@ -420,7 +434,7 @@ BASE_EN: Dict[str, str] = {
     "promo_invalid": "Promo code not found or inactive.",
     "promo_used": "Promo code already used.",
     "promo_not_found": "Promo code not found.",
-    "promo_activated": "Promo code activated. Added {credits} credits.",
+    "promo_activated": "Promo code activated. Added {credits} {credits, plural, one {credit} other {credits}}.",
     "result_no_urls": "Generation finished but no URLs returned.",
     "result_original": "Original image",
     "result_caption": "Prompt: {prompt}\nMessage us if you need changes.",
@@ -449,5 +463,149 @@ def t(lang: str, key: str) -> str:
     return TRANSLATIONS.get(normalized, BASE_RU).get(key, BASE_RU.get(key, key))
 
 
+def _extract_braced(text: str, start: int) -> tuple[str, int] | None:
+    if start >= len(text) or text[start] != "{":
+        return None
+    depth = 0
+    for idx in range(start, len(text)):
+        char = text[idx]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start + 1 : idx], idx + 1
+    return None
+
+
+def _split_top_level(text: str, separator: str, limit: int = -1) -> list[str]:
+    parts: list[str] = []
+    start = 0
+    splits = 0
+    depth = 0
+    for idx, char in enumerate(text):
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth = max(0, depth - 1)
+        elif char == separator and depth == 0 and (limit < 0 or splits < limit):
+            parts.append(text[start:idx])
+            start = idx + 1
+            splits += 1
+    parts.append(text[start:])
+    return parts
+
+
+def _parse_icu_forms(text: str) -> dict[str, str]:
+    forms: dict[str, str] = {}
+    idx = 0
+    length = len(text)
+    while idx < length:
+        while idx < length and text[idx].isspace():
+            idx += 1
+        if idx >= length:
+            break
+
+        key_start = idx
+        while idx < length and not text[idx].isspace() and text[idx] != "{":
+            idx += 1
+        key = text[key_start:idx].strip()
+        while idx < length and text[idx].isspace():
+            idx += 1
+        if not key or idx >= length or text[idx] != "{":
+            break
+
+        extracted = _extract_braced(text, idx)
+        if not extracted:
+            break
+        body, next_idx = extracted
+        forms[key] = body
+        idx = next_idx
+    return forms
+
+
+def _plural_category(lang: str, value: float) -> str:
+    normalized = normalize_lang(lang)
+    if not float(value).is_integer():
+        return "other"
+    n = abs(int(value))
+    if normalized == "ru":
+        mod10 = n % 10
+        mod100 = n % 100
+        if mod10 == 1 and mod100 != 11:
+            return "one"
+        if mod10 in (2, 3, 4) and mod100 not in (12, 13, 14):
+            return "few"
+        if mod10 == 0 or mod10 in (5, 6, 7, 8, 9) or mod100 in (11, 12, 13, 14):
+            return "many"
+        return "other"
+    return "one" if n == 1 else "other"
+
+
+def _render_icu_token(token: str, lang: str, params: dict[str, object]) -> str:
+    parts = _split_top_level(token, ",", limit=2)
+    if len(parts) < 3:
+        return "{" + token + "}"
+
+    var_name = parts[0].strip()
+    token_type = parts[1].strip()
+    body = parts[2].strip()
+    forms = _parse_icu_forms(body)
+    if not var_name or not forms:
+        return "{" + token + "}"
+
+    if token_type == "plural":
+        raw_value = params.get(var_name)
+        try:
+            value = float(raw_value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return "{" + token + "}"
+
+        selected = None
+        if float(value).is_integer():
+            selected = forms.get(f"={int(value)}")
+        if selected is None:
+            selected = forms.get(_plural_category(lang, value))
+        if selected is None:
+            selected = forms.get("other")
+        if selected is None:
+            return ""
+
+        value_str = str(int(value)) if float(value).is_integer() else str(value)
+        return _render_icu(selected.replace("#", value_str), lang, params)
+
+    if token_type == "select":
+        selector = str(params.get(var_name, "other"))
+        selected = forms.get(selector, forms.get("other", ""))
+        return _render_icu(selected, lang, params)
+
+    return "{" + token + "}"
+
+
+def _render_icu(text: str, lang: str, params: dict[str, object]) -> str:
+    out: list[str] = []
+    idx = 0
+    while idx < len(text):
+        if text[idx] != "{":
+            out.append(text[idx])
+            idx += 1
+            continue
+
+        extracted = _extract_braced(text, idx)
+        if not extracted:
+            out.append(text[idx])
+            idx += 1
+            continue
+        token, next_idx = extracted
+        out.append(_render_icu_token(token, lang, params))
+        idx = next_idx
+    return "".join(out)
+
+
 def tf(lang: str, key: str, **kwargs: object) -> str:
-    return t(lang, key).format(**kwargs)
+    base = t(lang, key)
+    rendered = _render_icu(base, lang, kwargs)
+    try:
+        return rendered.format(**kwargs)
+    except (KeyError, IndexError, ValueError):
+        return rendered
