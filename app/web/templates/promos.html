@@ -41,6 +41,7 @@
             <div class="subtle">Кредиты: {{ promo.credits_amount }}</div>
             <div class="subtle">Статус: {{ promo.status }}</div>
             <div class="subtle">Активирован: {{ promo.redeemed_user or '—' }}</div>
+            <div class="subtle">Время активации (МСК): {{ promo.redeemed_at_msk or '—' }}</div>
             <div class="subtle">Баланс пользователя: {{ promo.user_balance or '—' }}</div>
           </div>
           {% if promo.can_deactivate %}

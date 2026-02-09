@@ -23,6 +23,7 @@
           <th>Код</th>
           <th>Статус</th>
           <th>Активирован</th>
+          <th>Время активации (МСК)</th>
           <th>Баланс пользователя</th>
           <th></th>
         </tr>
@@ -41,6 +42,7 @@
             {% endif %}
           </td>
           <td class="muted">{{ row.redeemed_user or '—' }}</td>
+          <td class="muted">{{ row.redeemed_at_msk or '—' }}</td>
           <td class="muted">{{ row.user_balance or '—' }}</td>
           <td>
             {% if row.can_deactivate %}
@@ -52,7 +54,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="5" class="muted">Нет кодов</td></tr>
+        <tr><td colspan="6" class="muted">Нет кодов</td></tr>
         {% endfor %}
       </tbody>
     </table>

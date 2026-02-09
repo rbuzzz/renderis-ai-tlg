@@ -3,6 +3,7 @@
 import secrets
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import Body, FastAPI, File, Form, Request, UploadFile
@@ -27,6 +28,10 @@ from app.services.support import SupportService
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico"}
 MAX_LOGO_SIZE_BYTES = 5 * 1024 * 1024
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover
+    ZoneInfo = None  # type: ignore[assignment]
 
 
 def _is_logged_in(request: Request) -> bool:
@@ -68,6 +73,18 @@ def _parse_float(value: str) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _format_msk(dt: datetime | None) -> str | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    if ZoneInfo is not None:
+        msk = dt.astimezone(ZoneInfo("Europe/Moscow"))
+    else:
+        msk = dt.astimezone(timezone(timedelta(hours=3)))
+    return msk.strftime("%d.%m.%Y %H:%M:%S")
 
 
 def _site_assets_dir(storage_root: str) -> Path:
@@ -697,6 +714,7 @@ def create_app() -> FastAPI:
                         "batch_id": promo_row.batch_id,
                         "status": status,
                         "redeemed_user": redeemed_user,
+                        "redeemed_at_msk": _format_msk(promo_row.redeemed_at),
                         "user_balance": user_balance,
                         "can_deactivate": promo_row.active and not promo_row.redeemed_by_user_id,
                     }
@@ -767,6 +785,7 @@ def create_app() -> FastAPI:
                         "code": promo_row.code,
                         "status": status,
                         "redeemed_user": redeemed_user,
+                        "redeemed_at_msk": _format_msk(promo_row.redeemed_at),
                         "user_balance": user_balance,
                         "can_deactivate": promo_row.active and not promo_row.redeemed_by_user_id,
                     }
