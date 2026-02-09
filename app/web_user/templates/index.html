@@ -61,6 +61,59 @@
         align-items: center;
         gap: 12px;
       }
+      .lang-menu {
+        position: relative;
+      }
+      .lang-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid #2a3d57;
+        background: #0f1b2b;
+        color: var(--text);
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      .lang-name {
+        max-width: 170px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .lang-dropdown {
+        position: absolute;
+        right: 0;
+        top: 46px;
+        min-width: 180px;
+        max-height: 260px;
+        overflow-y: auto;
+        background: #0f1b2b;
+        border: 1px solid #2a3d57;
+        border-radius: 12px;
+        padding: 6px;
+        display: none;
+        z-index: 20;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+      }
+      .lang-dropdown.open { display: block; }
+      .lang-dropdown a {
+        display: block;
+        padding: 8px 10px;
+        color: var(--text);
+        text-decoration: none;
+        border-radius: 8px;
+        font-size: 14px;
+      }
+      .lang-dropdown a:hover {
+        background: #162640;
+      }
+      .lang-dropdown a.active {
+        background: rgba(64, 212, 154, 0.18);
+        border: 1px solid rgba(64, 212, 154, 0.4);
+      }
       .user-menu {
         position: relative;
       }
@@ -609,6 +662,18 @@
           flex-wrap: wrap;
           gap: 8px;
         }
+        .lang-menu {
+          width: 100%;
+        }
+        .lang-button {
+          width: 100%;
+          justify-content: space-between;
+        }
+        .lang-dropdown {
+          right: 0;
+          top: calc(100% + 6px);
+          min-width: 100%;
+        }
         .balance {
           width: 100%;
           text-align: center;
@@ -738,10 +803,26 @@
         </div>
       </div>
       <div class="top-actions">
+        <div class="lang-menu" id="langMenu">
+          <button class="lang-button" id="langButton" type="button" aria-haspopup="true" aria-expanded="false">
+            <span class="lang-icon">🌐</span>
+            <span class="lang-name">{{ labels['language'] }}: {{ current_lang_label }}</span>
+            <span class="user-caret">▾</span>
+          </button>
+          <div class="lang-dropdown" id="langDropdown">
+            {% for option in lang_options %}
+              <a
+                href="/set-lang?lang={{ option.code }}&next={{ request.url.path }}"
+                class="{% if option.code == lang %}active{% endif %}">
+                {{ option.label }}
+              </a>
+            {% endfor %}
+          </div>
+        </div>
         {% if logged_in %}
           <div class="balance" id="balanceLabel">--</div>
           <div class="user-menu" id="userMenu">
-            <button class="user-button" id="userButton" type="button">
+            <button class="user-button" id="userButton" type="button" aria-haspopup="true" aria-expanded="false">
               <div class="user-avatar" id="userAvatar">R</div>
               <div class="user-name" id="userName">User</div>
               <div class="user-caret">▾</div>
@@ -1368,7 +1449,7 @@
           const replace = document.createElement('button');
           replace.type = 'button';
           replace.className = 'ref-replace';
-          replace.textContent = 'Заменить';
+          replace.textContent = labels.ref_replace;
           replace.onclick = (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -1480,15 +1561,47 @@
 
       const userButton = document.getElementById('userButton');
       const userDropdown = document.getElementById('userDropdown');
+      const langButton = document.getElementById('langButton');
+      const langDropdown = document.getElementById('langDropdown');
+
+      function closeTopDropdowns() {
+        if (userDropdown) {
+          userDropdown.classList.remove('open');
+        }
+        if (userButton) {
+          userButton.setAttribute('aria-expanded', 'false');
+        }
+        if (langDropdown) {
+          langDropdown.classList.remove('open');
+        }
+        if (langButton) {
+          langButton.setAttribute('aria-expanded', 'false');
+        }
+      }
+
       if (userButton && userDropdown) {
         userButton.addEventListener('click', (event) => {
           event.stopPropagation();
-          userDropdown.classList.toggle('open');
-        });
-        document.addEventListener('click', () => {
-          userDropdown.classList.remove('open');
+          const open = !userDropdown.classList.contains('open');
+          closeTopDropdowns();
+          if (open) {
+            userDropdown.classList.add('open');
+            userButton.setAttribute('aria-expanded', 'true');
+          }
         });
       }
+      if (langButton && langDropdown) {
+        langButton.addEventListener('click', (event) => {
+          event.stopPropagation();
+          const open = !langDropdown.classList.contains('open');
+          closeTopDropdowns();
+          if (open) {
+            langDropdown.classList.add('open');
+            langButton.setAttribute('aria-expanded', 'true');
+          }
+        });
+      }
+      document.addEventListener('click', closeTopDropdowns);
     </script>
   </body>
 </html>

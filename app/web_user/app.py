@@ -24,7 +24,7 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.db.models import Generation, GenerationTask, PromoCode
 from app.db.session import create_sessionmaker
-from app.i18n import normalize_lang, t
+from app.i18n import SUPPORTED_LANGS, normalize_lang, t
 from app.modelspecs.registry import get_model, list_models
 from app.services.credits import CreditsService
 from app.services.pricing import PricingService
@@ -37,6 +37,17 @@ from app.utils.text import clamp_text
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico"}
+LANGUAGE_LABELS: Dict[str, str] = {
+    "ru": "Russian",
+    "en": "English",
+    "es": "Spanish",
+    "pt": "Portuguese",
+    "zh": "Chinese",
+    "fr": "French",
+    "hi": "Hindi",
+    "ja": "Japanese",
+    "tr": "Turkish",
+}
 
 
 def _is_logged_in(request: Request) -> bool:
@@ -50,6 +61,13 @@ def _get_lang(request: Request) -> str:
     header = request.headers.get("accept-language", "")
     lang = header.split(",")[0].strip()
     return normalize_lang(lang)
+
+
+def _safe_next_url(value: str | None) -> str:
+    path = (value or "/").strip()
+    if not path.startswith("/") or path.startswith("//"):
+        return "/"
+    return path
 
 
 def _verify_telegram_auth(data: Dict[str, Any], token: str) -> bool:
@@ -177,6 +195,8 @@ def create_app() -> FastAPI:
         logo_path = _find_site_logo_file(settings.reference_storage_path)
         if logo_path:
             site_logo_url = f"/assets/site-logo?v={int(logo_path.stat().st_mtime_ns)}"
+        lang_options = [{"code": code, "label": LANGUAGE_LABELS.get(code, code.upper())} for code in SUPPORTED_LANGS]
+        current_lang_label = LANGUAGE_LABELS.get(lang, lang.upper())
         return app.state.templates.TemplateResponse(
             "index.html",
             {
@@ -187,8 +207,27 @@ def create_app() -> FastAPI:
                 "logged_in": _is_logged_in(request),
                 "bot_username": settings.bot_username,
                 "site_logo_url": site_logo_url,
+                "lang_options": lang_options,
+                "current_lang_label": current_lang_label,
             },
         )
+
+    @app.get("/set-lang")
+    async def set_lang(request: Request):
+        lang = normalize_lang(request.query_params.get("lang"))
+        request.session["lang"] = lang
+        if _is_logged_in(request):
+            async with app.state.sessionmaker() as session:
+                credits = CreditsService(session)
+                user = await credits.get_user(int(request.session["user_id"]))
+                if user:
+                    settings_payload = dict(user.settings or {})
+                    settings_payload["lang"] = lang
+                    user.settings = settings_payload
+                    await session.commit()
+
+        next_url = _safe_next_url(request.query_params.get("next"))
+        return RedirectResponse(url=next_url, status_code=302)
 
     @app.api_route("/assets/site-logo", methods=["GET", "HEAD"])
     async def user_site_logo():
@@ -542,6 +581,7 @@ def create_app() -> FastAPI:
         "history_title",
         "balance",
         "credits",
+        "language",
         "redeem",
         "redeem_placeholder",
         "redeem_button",
@@ -558,6 +598,7 @@ def create_app() -> FastAPI:
         "ref_images_title",
         "ref_images_note",
         "ref_add",
+        "ref_replace",
         "ref_add_sub",
         "options_label",
         "aspect_ratio",
