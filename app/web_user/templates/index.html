@@ -750,6 +750,8 @@
           renderGallery();
           return;
         }
+        const prevItem = galleryItems[galleryIndex];
+        const prevUrl = prevItem ? prevItem.url : null;
         const items = [];
         data.history.forEach((item) => {
           (item.urls || []).forEach((url) => {
@@ -763,7 +765,16 @@
           });
         });
         galleryItems = items;
-        galleryIndex = 0;
+        if (prevUrl) {
+          const idx = galleryItems.findIndex((x) => x.url === prevUrl);
+          if (idx >= 0) {
+            galleryIndex = idx;
+          } else if (galleryIndex >= galleryItems.length) {
+            galleryIndex = 0;
+          }
+        } else if (galleryIndex >= galleryItems.length) {
+          galleryIndex = 0;
+        }
         renderGallery();
       }
 
