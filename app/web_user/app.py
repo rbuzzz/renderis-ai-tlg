@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import hmac
 import json
@@ -149,6 +150,37 @@ def _find_site_logo_file(storage_root: str) -> Path | None:
     return sorted(files, key=lambda f: f.name)[0]
 
 
+def _site_logo_mime(path: Path) -> str:
+    ext = path.suffix.lower()
+    if ext == ".png":
+        return "image/png"
+    if ext in (".jpg", ".jpeg"):
+        return "image/jpeg"
+    if ext == ".webp":
+        return "image/webp"
+    if ext == ".svg":
+        return "image/svg+xml"
+    if ext == ".ico":
+        return "image/x-icon"
+    return "application/octet-stream"
+
+
+def _rounded_favicon_svg(storage_root: str) -> str | None:
+    logo_path = _find_site_logo_file(storage_root)
+    if not logo_path:
+        return None
+    raw = logo_path.read_bytes()
+    encoded = base64.b64encode(raw).decode("ascii")
+    data_uri = f"data:{_site_logo_mime(logo_path)};base64,{encoded}"
+    return (
+        "<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'>"
+        "<defs><clipPath id='r'><rect x='0' y='0' width='64' height='64' rx='14' ry='14'/></clipPath></defs>"
+        "<rect x='0' y='0' width='64' height='64' fill='transparent'/>"
+        f"<image href='{data_uri}' x='0' y='0' width='64' height='64' preserveAspectRatio='xMidYMid slice' clip-path='url(#r)'/>"
+        "</svg>"
+    )
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="Renderis User")
@@ -236,12 +268,16 @@ def create_app() -> FastAPI:
             return JSONResponse({"error": "not_found"}, status_code=404)
         return FileResponse(path=str(logo_path))
 
+    @app.api_route("/favicon.svg", methods=["GET", "HEAD"])
+    async def user_favicon_svg():
+        svg = _rounded_favicon_svg(settings.reference_storage_path)
+        if not svg:
+            return Response(status_code=404)
+        return Response(content=svg, media_type="image/svg+xml", headers={"Cache-Control": "no-cache"})
+
     @app.api_route("/favicon.ico", methods=["GET", "HEAD"])
     async def user_favicon():
-        logo_path = _find_site_logo_file(settings.reference_storage_path)
-        if not logo_path:
-            return Response(status_code=404)
-        return FileResponse(path=str(logo_path))
+        return await user_favicon_svg()
 
     @app.post("/auth/telegram")
     async def auth_telegram(request: Request):
