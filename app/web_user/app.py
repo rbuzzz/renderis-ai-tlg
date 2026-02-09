@@ -184,13 +184,15 @@ def create_app() -> FastAPI:
             credits = CreditsService(session)
             is_admin = int(data["id"]) in settings.admin_ids()
             user = await credits.ensure_user(int(data["id"]), data.get("username"), is_admin)
-            user.settings["lang"] = lang
+            settings_payload = dict(user.settings or {})
+            settings_payload["lang"] = lang
             if first_name:
-                user.settings["first_name"] = first_name
+                settings_payload["first_name"] = first_name
             if last_name:
-                user.settings["last_name"] = last_name
+                settings_payload["last_name"] = last_name
             if photo_url:
-                user.settings["photo_url"] = photo_url
+                settings_payload["photo_url"] = photo_url
+            user.settings = settings_payload
             await credits.apply_signup_bonus(user, settings.signup_bonus_credits)
             await session.commit()
 
