@@ -752,6 +752,7 @@
         }
         const prevItem = galleryItems[galleryIndex];
         const prevUrl = prevItem ? prevItem.url : null;
+        const allowAutoAdvance = galleryIndex === 0;
         const items = [];
         data.history.forEach((item) => {
           (item.urls || []).forEach((url) => {
@@ -766,7 +767,7 @@
         });
         galleryItems = items;
         const newIndex = galleryItems.findIndex((item) => !prevUrls.has(item.url));
-        if (newIndex >= 0) {
+        if (newIndex >= 0 && allowAutoAdvance) {
           galleryIndex = newIndex;
         } else if (prevUrl) {
           const idx = galleryItems.findIndex((x) => x.url === prevUrl);
