@@ -341,10 +341,6 @@ async def support_reply_send(message: Message, state: FSMContext, session: Async
         return
 
     settings = get_settings()
-    if not settings.support_bot_token:
-        await message.answer('SUPPORT_BOT_TOKEN не задан.')
-        await state.clear()
-        return
 
     support = SupportService(session)
     thread = await support.get_thread(int(thread_id))
@@ -360,14 +356,17 @@ async def support_reply_send(message: Message, state: FSMContext, session: Async
         await state.clear()
         return
 
-    bot = Bot(
-        token=settings.support_bot_token,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-    )
-    try:
-        sent = await bot.send_message(user.telegram_id, message.text or '')
-    finally:
-        await bot.session.close()
+    if settings.support_bot_token:
+        bot = Bot(
+            token=settings.support_bot_token,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        )
+        try:
+            sent = await bot.send_message(user.telegram_id, message.text or '')
+        finally:
+            await bot.session.close()
+    else:
+        sent = await message.bot.send_message(user.telegram_id, message.text or '')
 
     await support.add_message(thread, 'admin', message.text or '', sender_admin_id=message.from_user.id, tg_message_id=sent.message_id)
     await session.commit()
