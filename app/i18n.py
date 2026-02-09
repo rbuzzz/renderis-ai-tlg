@@ -3,12 +3,12 @@
 from typing import Dict
 
 
-SUPPORTED_LANGS = ("ru", "en", "es", "pt", "zh", "fr", "hi", "ja", "tr")
+SUPPORTED_LANGS = ("en", "es", "ru")
 
 
 def normalize_lang(code: str | None) -> str:
     if not code:
-        return "ru"
+        return "en"
     value = code.lower()
     if value.startswith("ru"):
         return "ru"
@@ -16,18 +16,6 @@ def normalize_lang(code: str | None) -> str:
         return "en"
     if value.startswith("es"):
         return "es"
-    if value.startswith("pt"):
-        return "pt"
-    if value.startswith("zh"):
-        return "zh"
-    if value.startswith("fr"):
-        return "fr"
-    if value.startswith("hi"):
-        return "hi"
-    if value.startswith("ja"):
-        return "ja"
-    if value.startswith("tr"):
-        return "tr"
     return "en"
 
 
@@ -467,17 +455,82 @@ BASE_EN: Dict[str, str] = {
     "report_thanks": "Thanks for the report! We will review the result.",
 }
 
+BASE_ES: Dict[str, str] = dict(BASE_EN)
+BASE_ES.update(
+    {
+        "site_tagline": "Genera imagenes directamente en tu navegador",
+        "site_notice": (
+            "Los resultados en el sitio se guardan no mas de 15 dias. "
+            "Todas las generaciones tambien se duplican en el bot de Telegram Renderis Studio."
+        ),
+        "input_title": "Panel de generacion",
+        "output_title": "Resultado",
+        "output_empty": "Aun no hay resultados. Inicia una generacion.",
+        "download": "Descargar",
+        "delete": "Eliminar",
+        "history_title": "Historial",
+        "balance": "Saldo",
+        "credits": "creditos",
+        "language": "Idioma",
+        "redeem": "Codigo promo",
+        "redeem_placeholder": "Introduce el codigo promo",
+        "redeem_button": "Activar",
+        "model_label": "Modelo",
+        "prompt_label": "Prompt",
+        "prompt_placeholder": "Describe lo que quieres crear...",
+        "upload_label": "Referencias",
+        "upload_hint": "Puedes subir hasta 8 imagenes (Edit: hasta 10).",
+        "upload_hint_required": "Debes agregar al menos 1 imagen (hasta {max}).",
+        "upload_hint_optional": "Puedes agregar hasta {max} imagenes.",
+        "upload_required": "Agrega al menos una imagen.",
+        "upload_count": "Seleccionadas {count} de {max} imagenes.",
+        "upload_button": "Agregar archivos",
+        "ref_images_title": "Imagenes de referencia {count}/{max}",
+        "ref_images_note": "Puedes seleccionar hasta {max} imagenes para combinar",
+        "ref_add": "Agregar foto",
+        "ref_replace": "Reemplazar",
+        "ref_add_sub": "Puedes subir varias, hasta 50MB",
+        "options_label": "Opciones",
+        "aspect_ratio": "Relacion de aspecto",
+        "resolution": "Resolucion",
+        "output_format": "Formato",
+        "outputs": "Cantidad",
+        "run": "Generar",
+        "run_pending": "Enviando solicitud...",
+        "history": "Historial",
+        "history_empty": "Aun no hay generaciones.",
+        "history_deleted": "Archivo eliminado",
+        "logout": "Cerrar sesion",
+        "login_title": "Iniciar sesion en Renderis",
+        "login_subtitle": "Autoriza con Telegram para ver tu saldo e historial.",
+        "login_failed": "No se pudo autorizar.",
+        "login_required": "Inicia sesion con Telegram para continuar.",
+        "prompt_required": "El prompt no puede estar vacio.",
+        "request_sent": "Solicitud enviada.",
+        "error_prefix": "Error",
+        "promo_added": "Acreditado",
+        "promo_error": "Error",
+        "delete_failed": "No se pudo eliminar",
+        "quote_line": "Se cobraran: {total} cr.",
+        "quote_login_required": "Inicia sesion para ver el costo.",
+        "quote_unavailable": "No se pudo calcular el costo.",
+        "ratio_2_3": "2:3 (vertical)",
+        "ratio_3_4": "3:4 (vertical)",
+        "ratio_3_2": "3:2 (horizontal)",
+        "ratio_4_3": "4:3 (horizontal)",
+        "ratio_4_5": "4:5 (vertical)",
+        "ratio_5_4": "5:4 (horizontal)",
+        "ratio_9_16": "9:16 (vertical)",
+        "ratio_16_9": "16:9 (horizontal)",
+        "ratio_21_9": "21:9 (cinematico)",
+    }
+)
+
 
 TRANSLATIONS: Dict[str, Dict[str, str]] = {
     "ru": BASE_RU,
     "en": BASE_EN,
-    "es": BASE_EN,
-    "pt": BASE_EN,
-    "zh": BASE_EN,
-    "fr": BASE_EN,
-    "hi": BASE_EN,
-    "ja": BASE_EN,
-    "tr": BASE_EN,
+    "es": BASE_ES,
 }
 
 

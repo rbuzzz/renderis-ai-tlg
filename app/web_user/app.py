@@ -38,15 +38,9 @@ from app.utils.text import clamp_text
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico"}
 LANGUAGE_LABELS: Dict[str, str] = {
-    "ru": "Russian",
     "en": "English",
     "es": "Spanish",
-    "pt": "Portuguese",
-    "zh": "Chinese",
-    "fr": "French",
-    "hi": "Hindi",
-    "ja": "Japanese",
-    "tr": "Turkish",
+    "ru": "Russian",
 }
 
 
@@ -58,9 +52,7 @@ def _get_lang(request: Request) -> str:
     session_lang = request.session.get("lang")
     if session_lang:
         return normalize_lang(session_lang)
-    header = request.headers.get("accept-language", "")
-    lang = header.split(",")[0].strip()
-    return normalize_lang(lang)
+    return "en"
 
 
 def _safe_next_url(value: str | None) -> str:
