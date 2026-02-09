@@ -348,18 +348,27 @@
         color: var(--danger);
       }
       .thumbs {
-        display: flex;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
         gap: 8px;
-        flex-wrap: wrap;
       }
       .thumb {
-        width: 64px;
-        height: 64px;
+        width: 100%;
+        aspect-ratio: 1 / 1;
         border-radius: 10px;
         border: 1px solid #2b3f59;
         overflow: hidden;
         cursor: pointer;
         background: #0f1b2b;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+      }
+      .thumb:hover {
+        transform: translateY(-1px);
+        border-color: #3f5d84;
+      }
+      .thumb.active {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px rgba(245, 185, 79, 0.35);
       }
       .thumb img {
         width: 100%;
@@ -910,11 +919,10 @@
           renderGallery();
         };
 
-        const maxThumbs = 12;
-        const thumbItems = galleryItems.filter((x) => !x.invalid).slice(0, maxThumbs);
+        const thumbItems = galleryItems.filter((x) => !x.invalid);
         thumbItems.forEach((thumbItem) => {
           const wrap = document.createElement('div');
-          wrap.className = 'thumb';
+          wrap.className = 'thumb' + (thumbItem.url === item.url ? ' active' : '');
           const timg = document.createElement('img');
           timg.src = thumbItem.url;
           timg.onerror = () => {
