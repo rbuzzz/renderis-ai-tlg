@@ -561,6 +561,20 @@
         cursor: pointer;
         font-weight: 700;
       }
+      .ref-replace {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        height: 26px;
+        border-radius: 999px;
+        border: none;
+        background: rgba(15, 27, 43, 0.9);
+        color: var(--text);
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 12px;
+        padding: 0 10px;
+      }
       .ref-note {
         color: var(--muted);
         font-size: 12px;
@@ -643,6 +657,7 @@
             <div class="ref-sub" id="refSub"></div>
           </div>
           <input id="refFiles" class="ref-input" type="file" multiple accept="image/*" />
+          <input id="refReplaceFile" class="ref-input" type="file" accept="image/*" />
           <div class="ref-grid" id="refGrid"></div>
           <div class="ref-note" id="refNote"></div>
         </div>
@@ -1182,7 +1197,9 @@
         renderThumbs(galleryItems[galleryIndex] || null, false);
       });
       const refInput = document.getElementById('refFiles');
+      const refReplaceInput = document.getElementById('refReplaceFile');
       const refGrid = document.getElementById('refGrid');
+      let replaceRefIndex = -1;
 
       function syncRefInput() {
         const dt = new DataTransfer();
@@ -1209,9 +1226,12 @@
           img.src = refPreviews[idx];
           tile.appendChild(img);
           const remove = document.createElement('button');
+          remove.type = 'button';
           remove.className = 'ref-remove';
           remove.textContent = '×';
-          remove.onclick = () => {
+          remove.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
             URL.revokeObjectURL(refPreviews[idx]);
             refPreviews.splice(idx, 1);
             selectedFiles.splice(idx, 1);
@@ -1219,6 +1239,19 @@
             renderRefGrid();
           };
           tile.appendChild(remove);
+
+          const replace = document.createElement('button');
+          replace.type = 'button';
+          replace.className = 'ref-replace';
+          replace.textContent = 'Заменить';
+          replace.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            replaceRefIndex = idx;
+            refReplaceInput.value = '';
+            refReplaceInput.click();
+          };
+          tile.appendChild(replace);
           refGrid.appendChild(tile);
         });
 
@@ -1242,6 +1275,21 @@
           selectedFiles.push(file);
           refPreviews.push(URL.createObjectURL(file));
         }
+        syncRefInput();
+        renderRefGrid();
+      });
+
+      refReplaceInput.addEventListener('change', () => {
+        if (!currentModel) return;
+        const file = Array.from(refReplaceInput.files || [])[0];
+        const idx = replaceRefIndex;
+        replaceRefIndex = -1;
+        if (!file || idx < 0 || idx >= selectedFiles.length) return;
+        if (refPreviews[idx]) {
+          URL.revokeObjectURL(refPreviews[idx]);
+        }
+        selectedFiles[idx] = file;
+        refPreviews[idx] = URL.createObjectURL(file);
         syncRefInput();
         renderRefGrid();
       });
