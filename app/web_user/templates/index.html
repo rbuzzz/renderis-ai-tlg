@@ -151,6 +151,19 @@
         font-size: 18px;
         color: var(--muted);
       }
+      .panel-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .panel-note {
+        font-size: 12px;
+        color: var(--muted);
+        max-width: 360px;
+        text-align: right;
+      }
       .model-buttons {
         display: flex;
         flex-wrap: wrap;
@@ -472,8 +485,6 @@
       </div>
     </div>
 
-    <div class="notice">{{ labels['site_notice'] }}</div>
-
     <div class="grid">
       <div class="panel">
         <h2>{{ labels['input_title'] }}</h2>
@@ -507,7 +518,10 @@
       </div>
 
       <div class="panel">
-        <h2>{{ labels['output_title'] }}</h2>
+        <div class="panel-header">
+          <h2>{{ labels['output_title'] }}</h2>
+          <div class="panel-note">{{ labels['site_notice'] }}</div>
+        </div>
         <div class="output-preview" id="outputPreview">
           <div class="gallery" id="gallery">
             <div class="gallery-empty">{{ labels['output_empty'] }}</div>
