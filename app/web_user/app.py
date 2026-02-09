@@ -27,6 +27,7 @@ from app.db.session import create_sessionmaker
 from app.i18n import normalize_lang, t
 from app.modelspecs.registry import get_model, list_models
 from app.services.credits import CreditsService
+from app.services.pricing import PricingService
 from app.services.generation import GenerationService
 from app.services.kie_client import KieClient, KieError
 from app.services.poller import PollManager
@@ -244,6 +245,40 @@ def create_app() -> FastAPI:
                 }
             )
         return {"models": models_payload}
+
+    @app.post("/api/quote")
+    async def api_quote(request: Request):
+        if not _is_logged_in(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        data = await request.json()
+        model_key = (data.get("model_key") or "").strip()
+        model = get_model(model_key)
+        if not model:
+            return JSONResponse({"error": "model_not_found"}, status_code=404)
+        try:
+            outputs = int(data.get("outputs") or 1)
+        except (ValueError, TypeError):
+            outputs = 1
+        options_payload = data.get("options") or {}
+        if not isinstance(options_payload, dict):
+            options_payload = {}
+        options_payload = model.validate_options(options_payload)
+        if model.key == "nano_banana_pro":
+            options_payload.setdefault("reference_images", "none")
+
+        async with app.state.sessionmaker() as session:
+            credits = CreditsService(session)
+            user = await credits.get_user(int(request.session["user_id"]))
+            if not user:
+                return JSONResponse({"error": "user_not_found"}, status_code=404)
+            pricing = PricingService(session)
+            breakdown = await pricing.resolve_cost(model, options_payload, outputs, user.referral_discount_pct or 0)
+            return {
+                "per_output": breakdown.per_output,
+                "outputs": breakdown.outputs,
+                "discount_pct": breakdown.discount_pct,
+                "total": breakdown.total,
+            }
 
     @app.post("/api/redeem")
     async def api_redeem(request: Request, code: str = Form("")):
@@ -496,6 +531,9 @@ def create_app() -> FastAPI:
         "promo_added",
         "promo_error",
         "delete_failed",
+        "quote_line",
+        "quote_login_required",
+        "quote_unavailable",
     ]
 
     return app

@@ -143,6 +143,11 @@
         align-items: center;
         margin-top: 16px;
       }
+      .quote-line {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 13px;
+      }
       .run-btn {
         background: var(--accent);
         color: #221600;
@@ -423,6 +428,7 @@
           <button class="run-btn" id="runBtn">{{ labels['run'] }}</button>
           <div class="status" id="runStatus"></div>
         </div>
+        <div class="quote-line" id="quoteLine"></div>
       </div>
 
       <div class="panel">
@@ -569,6 +575,7 @@
             btn.onclick = () => {
               optionsState[opt.key] = v.value;
               renderOptions();
+              updateQuote();
             };
             buttons.appendChild(btn);
           });
@@ -591,6 +598,7 @@
           btn.onclick = () => {
             optionsState.outputs = i;
             renderOptions();
+            updateQuote();
           };
           outputsButtons.appendChild(btn);
         }
@@ -732,6 +740,7 @@
         if (res.ok) {
           document.getElementById('runStatus').textContent = labels.request_sent;
           resetRefSelection();
+          updateQuote();
           await loadMe();
           await loadHistory();
         } else {
@@ -851,6 +860,7 @@
           refGrid.appendChild(add);
         }
         updateRefHint();
+        updateQuote();
       }
 
       refInput.addEventListener('change', () => {
@@ -870,6 +880,47 @@
       loadModels();
       loadHistory();
       setInterval(loadHistory, 15000);
+      let quoteTimer = null;
+
+      async function updateQuote() {
+        const quoteLine = document.getElementById('quoteLine');
+        if (!currentModel) {
+          quoteLine.textContent = '';
+          return;
+        }
+        if (!loggedIn) {
+          quoteLine.textContent = labels.quote_login_required;
+          return;
+        }
+        if (quoteTimer) {
+          clearTimeout(quoteTimer);
+        }
+        quoteTimer = setTimeout(async () => {
+          const payload = {
+            model_key: currentModel.key,
+            outputs: optionsState.outputs || 1,
+            options: { ...optionsState },
+          };
+          if (currentModel.key === 'nano_banana_pro') {
+            payload.options.reference_images = selectedFiles.length > 0 ? 'has' : 'none';
+          }
+          try {
+            const res = await fetch('/api/quote', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            if (!res.ok) {
+              quoteLine.textContent = labels.quote_unavailable;
+              return;
+            }
+            const data = await res.json();
+            quoteLine.textContent = fmt(labels.quote_line, { total: data.total });
+          } catch (err) {
+            quoteLine.textContent = labels.quote_unavailable;
+          }
+        }, 200);
+      }
 
       async function onTelegramAuth(user) {
         const res = await fetch('/auth/telegram', {
