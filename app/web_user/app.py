@@ -177,11 +177,20 @@ def create_app() -> FastAPI:
             return JSONResponse({"error": "invalid"}, status_code=400)
 
         lang = normalize_lang(data.get("language_code"))
+        first_name = (data.get("first_name") or "").strip()
+        last_name = (data.get("last_name") or "").strip()
+        photo_url = (data.get("photo_url") or "").strip()
         async with app.state.sessionmaker() as session:
             credits = CreditsService(session)
             is_admin = int(data["id"]) in settings.admin_ids()
             user = await credits.ensure_user(int(data["id"]), data.get("username"), is_admin)
             user.settings["lang"] = lang
+            if first_name:
+                user.settings["first_name"] = first_name
+            if last_name:
+                user.settings["last_name"] = last_name
+            if photo_url:
+                user.settings["photo_url"] = photo_url
             await credits.apply_signup_bonus(user, settings.signup_bonus_credits)
             await session.commit()
 
@@ -204,9 +213,17 @@ def create_app() -> FastAPI:
             user = await credits.get_user(int(request.session["user_id"]))
             if not user:
                 return JSONResponse({"error": "user_not_found"}, status_code=404)
+            first_name = (user.settings.get("first_name") or "").strip()
+            last_name = (user.settings.get("last_name") or "").strip()
+            photo_url = (user.settings.get("photo_url") or "").strip()
+            display_name = " ".join([part for part in [first_name, last_name] if part]) or user.username or str(
+                user.telegram_id
+            )
             return {
                 "telegram_id": user.telegram_id,
                 "username": user.username,
+                "display_name": display_name,
+                "photo_url": photo_url,
                 "balance": user.balance_credits,
                 "lang": user.settings.get("lang", "ru"),
                 "max_outputs": settings.max_outputs_per_request,

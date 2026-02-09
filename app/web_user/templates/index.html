@@ -43,6 +43,72 @@
         align-items: center;
         gap: 12px;
       }
+      .user-menu {
+        position: relative;
+      }
+      .user-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid #2a3d57;
+        background: #0f1b2b;
+        color: var(--text);
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .user-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #1b2b45;
+        border: 1px solid #2b3f59;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--accent);
+        background-size: cover;
+        background-position: center;
+      }
+      .user-name {
+        font-size: 14px;
+        white-space: nowrap;
+        max-width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .user-caret {
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .user-dropdown {
+        position: absolute;
+        right: 0;
+        top: 46px;
+        min-width: 160px;
+        background: #0f1b2b;
+        border: 1px solid #2a3d57;
+        border-radius: 12px;
+        padding: 6px;
+        display: none;
+        z-index: 20;
+        box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+      }
+      .user-dropdown.open { display: block; }
+      .user-dropdown a {
+        display: block;
+        padding: 8px 10px;
+        color: var(--text);
+        text-decoration: none;
+        border-radius: 8px;
+        font-size: 14px;
+      }
+      .user-dropdown a:hover {
+        background: #162640;
+      }
       .login-widget {
         border: 1px dashed #2a3d57;
         background: #0f1b2b;
@@ -381,7 +447,16 @@
       <div class="top-actions">
         {% if logged_in %}
           <div class="balance" id="balanceLabel">--</div>
-          <a class="logout" href="/logout">{{ labels['logout'] }}</a>
+          <div class="user-menu" id="userMenu">
+            <button class="user-button" id="userButton" type="button">
+              <div class="user-avatar" id="userAvatar">R</div>
+              <div class="user-name" id="userName">User</div>
+              <div class="user-caret">▾</div>
+            </button>
+            <div class="user-dropdown" id="userDropdown">
+              <a href="/logout">{{ labels['logout'] }}</a>
+            </div>
+          </div>
         {% else %}
           <div class="login-widget">
             <script
@@ -483,6 +558,21 @@
         document.getElementById('balanceLabel').textContent = label;
       }
 
+      function setUserInfo(me) {
+        const name = me.display_name || me.username || `ID ${me.telegram_id}`;
+        const nameEl = document.getElementById('userName');
+        if (nameEl) nameEl.textContent = name;
+        const avatarEl = document.getElementById('userAvatar');
+        if (!avatarEl) return;
+        if (me.photo_url) {
+          avatarEl.style.backgroundImage = `url('${me.photo_url}')`;
+          avatarEl.textContent = '';
+        } else {
+          avatarEl.style.backgroundImage = '';
+          avatarEl.textContent = name.charAt(0).toUpperCase();
+        }
+      }
+
       function updateRefHint() {
         const refTitle = document.getElementById('refTitle');
         const refSub = document.getElementById('refSub');
@@ -506,6 +596,7 @@
         if (!res.ok) return;
         const data = await res.json();
         setBalance(data.balance);
+        setUserInfo(data);
         maxOutputs = data.max_outputs || 1;
       }
 
@@ -942,6 +1033,18 @@
         } else {
           alert(labels.error_prefix + ': auth_failed');
         }
+      }
+
+      const userButton = document.getElementById('userButton');
+      const userDropdown = document.getElementById('userDropdown');
+      if (userButton && userDropdown) {
+        userButton.addEventListener('click', (event) => {
+          event.stopPropagation();
+          userDropdown.classList.toggle('open');
+        });
+        document.addEventListener('click', () => {
+          userDropdown.classList.remove('open');
+        });
       }
     </script>
   </body>
