@@ -115,7 +115,10 @@ BASE_RU: Dict[str, str] = {
     "video_soon": "🎬 Видео пока недоступно. Скоро добавим.",
     "model_intro_title": "🖼️ <b>Gemini Images</b>",
     "model_intro_desc": "Создавайте и редактируйте изображения прямо в чате.",
-    "model_intro_models": "Для вас работают {count} модели:",
+    "model_intro_models": (
+        "Для вас работают "
+        "{count, plural, one {# модель} few {# модели} many {# моделей} other {# модели}}:"
+    ),
     "model_intro_select": "Выберите модель ниже:",
     "model_not_found": "Модель не найдена",
     "prompt_enter": "✍️ Введите промпт для {model}:",
@@ -140,7 +143,10 @@ BASE_RU: Dict[str, str] = {
     "options_title": "⚙️ <b>Параметры генерации</b>",
     "options_model": "🧠 Модель: {model}",
     "options_prompt": "✍️ Промпт: {prompt}",
-    "options_refs": "📎 Референсов: {count}",
+    "options_refs": (
+        "📎 "
+        "{count, plural, one {# референс} few {# референса} many {# референсов} other {# референса}}"
+    ),
     "options_instruction": "Отметьте нужные параметры и нажмите «Далее».",
     "options_next": "➡️ Далее",
     "options_back": "⬅️ Назад",
@@ -148,8 +154,14 @@ BASE_RU: Dict[str, str] = {
     "preview_title": "✅ <b>Проверьте стоимость</b>",
     "preview_model": "🧠 Модель: {model}",
     "preview_prompt": "✍️ Промпт: {prompt}",
-    "preview_refs": "📎 Референсов: {count}",
-    "preview_outputs": "🔢 Выходов: {count}",
+    "preview_refs": (
+        "📎 "
+        "{count, plural, one {# референс} few {# референса} many {# референсов} other {# референса}}"
+    ),
+    "preview_outputs": (
+        "🔢 "
+        "{count, plural, one {# выход} few {# выхода} many {# выходов} other {# выхода}}"
+    ),
     "preview_cost_per": "💳 Цена за 1: {cost} кр.",
     "preview_total": "🧾 Итого: {total} кр.",
     "preview_discount": "Скидка: {pct}%",
@@ -329,7 +341,7 @@ BASE_EN: Dict[str, str] = {
     "video_soon": "🎬 Video is not available yet. Coming soon.",
     "model_intro_title": "🖼️ <b>Gemini Images</b>",
     "model_intro_desc": "Create and edit images right in chat.",
-    "model_intro_models": "Available models: {count}",
+    "model_intro_models": "Available {count, plural, one {# model} other {# models}}:",
     "model_intro_select": "Choose a model below:",
     "model_not_found": "Model not found",
     "prompt_enter": "✍️ Enter prompt for {model}:",
@@ -354,7 +366,7 @@ BASE_EN: Dict[str, str] = {
     "options_title": "⚙️ <b>Generation options</b>",
     "options_model": "🧠 Model: {model}",
     "options_prompt": "✍️ Prompt: {prompt}",
-    "options_refs": "📎 References: {count}",
+    "options_refs": "{count, plural, one {📎 # reference} other {📎 # references}}",
     "options_instruction": "Select options and tap “Next”.",
     "options_next": "➡️ Next",
     "options_back": "⬅️ Back",
@@ -362,8 +374,8 @@ BASE_EN: Dict[str, str] = {
     "preview_title": "✅ <b>Check the cost</b>",
     "preview_model": "🧠 Model: {model}",
     "preview_prompt": "✍️ Prompt: {prompt}",
-    "preview_refs": "📎 References: {count}",
-    "preview_outputs": "🔢 Outputs: {count}",
+    "preview_refs": "{count, plural, one {📎 # reference} other {📎 # references}}",
+    "preview_outputs": "{count, plural, one {🔢 # output} other {🔢 # outputs}}",
     "preview_cost_per": "💳 Cost per 1: {cost} cr.",
     "preview_total": "🧾 Total: {total} cr.",
     "preview_discount": "Discount: {pct}%",
