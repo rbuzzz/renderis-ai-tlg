@@ -107,6 +107,14 @@ def _value_label(lang: str, opt_key: str, value: str) -> str:
     return value
 
 
+def _model_tagline(lang: str, model_key: str, fallback: str) -> str:
+    key = f"model_tagline_{model_key}"
+    value = t(lang, key)
+    if value == key:
+        return fallback
+    return value
+
+
 def _is_allowed_download(url: str) -> bool:
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
@@ -314,7 +322,7 @@ def create_app() -> FastAPI:
                 {
                     "key": model.key,
                     "display_name": model.display_name,
-                    "tagline": model.tagline,
+                    "tagline": _model_tagline(lang, model.key, model.tagline),
                     "supports_reference_images": model.supports_reference_images,
                     "requires_reference_images": model.requires_reference_images,
                     "max_reference_images": model.max_reference_images,
