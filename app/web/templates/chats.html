@@ -1,6 +1,9 @@
 {% extends "layout.html" %}
 {% block content %}
 <style>
+  .chat-page {
+    margin-top: 16px;
+  }
   .chat-grid {
     display: grid;
     grid-template-columns: 320px 1fr;
@@ -73,7 +76,7 @@
   }
 </style>
 
-<div class="section">
+<div class="section chat-page">
   <h3>Чаты поддержки</h3>
   <div class="chat-grid">
     <div class="chat-list">
