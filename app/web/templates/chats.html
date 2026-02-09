@@ -78,6 +78,7 @@
 
 <div class="section chat-page">
   <h3>Чаты поддержки</h3>
+  <div id="chatStatus" class="subtle" style="margin-bottom: 10px;"></div>
   <div class="chat-grid">
     <div class="chat-list">
       <header>Диалоги</header>
@@ -100,7 +101,14 @@
   const chatHeader = document.getElementById('chatHeader');
   const chatInput = document.getElementById('chatInput');
   const chatSend = document.getElementById('chatSend');
+  const chatStatus = document.getElementById('chatStatus');
   let currentThread = null;
+
+  function setStatus(text, isError = false) {
+    if (!chatStatus) return;
+    chatStatus.textContent = text || '';
+    chatStatus.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+  }
 
   function fmtTime(value) {
     if (!value) return '';
@@ -109,11 +117,27 @@
   }
 
   async function loadThreads() {
-    const res = await fetch('/admin/api/chats');
-    if (!res.ok) return;
+    let res;
+    try {
+      res = await fetch('/admin/api/chats');
+    } catch (err) {
+      setStatus('Не удалось загрузить диалоги.', true);
+      return;
+    }
+    if (!res.ok) {
+      setStatus(`Ошибка загрузки диалогов (${res.status})`, true);
+      return;
+    }
     const data = await res.json();
     chatItems.innerHTML = '';
     const threads = data.threads || [];
+    if (!data.support_enabled) {
+      setStatus('SUPPORT_BOT_TOKEN не настроен. Чаты поддержки не принимают сообщения.', true);
+    } else if (!threads.length) {
+      setStatus('Диалогов пока нет. Напишите в бот поддержки, чтобы они появились.');
+    } else {
+      setStatus('');
+    }
     threads.forEach((t) => {
       const div = document.createElement('div');
       div.className = 'chat-item' + (currentThread === t.id ? ' active' : '');
@@ -121,6 +145,14 @@
       div.onclick = () => selectThread(t.id, t.user_label);
       chatItems.appendChild(div);
     });
+    if (!threads.length) {
+      const empty = document.createElement('div');
+      empty.className = 'chat-item';
+      empty.style.cursor = 'default';
+      empty.style.color = 'var(--muted)';
+      empty.textContent = 'Нет активных диалогов';
+      chatItems.appendChild(empty);
+    }
     const urlParams = new URLSearchParams(window.location.search);
     const requested = urlParams.get('thread');
     if (!currentThread && threads.length) {
@@ -160,14 +192,29 @@
     const text = (chatInput.value || '').trim();
     if (!text) return;
     chatSend.disabled = true;
-    await fetch(`/admin/api/chats/${currentThread}/send`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    });
-    chatInput.value = '';
-    chatSend.disabled = false;
-    await loadMessages();
+    try {
+      const res = await fetch(`/admin/api/chats/${currentThread}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) {
+        let error = `http_${res.status}`;
+        try {
+          const data = await res.json();
+          error = data.error || error;
+        } catch (e) {
+          // ignore parse errors
+        }
+        setStatus(`Не удалось отправить сообщение: ${error}`, true);
+        return;
+      }
+      chatInput.value = '';
+      setStatus('');
+      await loadMessages();
+    } finally {
+      chatSend.disabled = false;
+    }
   }
 
   chatSend.onclick = sendMessage;

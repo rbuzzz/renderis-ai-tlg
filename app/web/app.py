@@ -664,6 +664,7 @@ def create_app() -> FastAPI:
     async def admin_chats_list(request: Request):
         if not _is_logged_in(request):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
+        settings = get_settings()
         async with app.state.sessionmaker() as session:
             rows = await session.execute(
                 select(SupportThread, User)
@@ -681,7 +682,7 @@ def create_app() -> FastAPI:
                         "status": thread.status,
                     }
                 )
-        return {"threads": threads}
+        return {"threads": threads, "support_enabled": bool(settings.support_bot_token)}
 
     @app.get("/admin/api/chats/{thread_id}/messages")
     async def admin_chats_messages(request: Request, thread_id: int):
