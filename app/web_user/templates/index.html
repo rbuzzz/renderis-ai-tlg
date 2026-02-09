@@ -348,10 +348,75 @@
         height: 100%;
         object-fit: cover;
       }
+      .redeem-panel {
+        padding: 0;
+      }
+      .redeem-toggle {
+        width: 100%;
+        border: none;
+        background: transparent;
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 18px;
+        cursor: pointer;
+      }
+      .redeem-title {
+        font-size: 18px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .redeem-chevron {
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1;
+        transition: transform 0.25s ease, color 0.25s ease;
+      }
+      .redeem-toggle[aria-expanded="true"] .redeem-chevron {
+        transform: rotate(180deg);
+        color: var(--accent);
+      }
+      .redeem-content {
+        max-height: 0;
+        opacity: 0;
+        overflow: hidden;
+        transition: max-height 0.28s ease, opacity 0.2s ease;
+      }
+      .redeem-content.open {
+        max-height: 220px;
+        opacity: 1;
+      }
+      .redeem-content-inner {
+        padding: 0 18px 18px;
+      }
       .redeem-row {
         display: grid;
         grid-template-columns: 1fr auto;
         gap: 8px;
+      }
+      .promo-input {
+        background: #162741;
+        border-color: #35547a;
+      }
+      .promo-input:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(245, 185, 79, 0.18);
+      }
+      .promo-btn {
+        border: 1px solid #2b3f59;
+        background: linear-gradient(135deg, #f5b94f 0%, #df9f2c 100%);
+        color: #2a1b00;
+        border-radius: 12px;
+        padding: 10px 14px;
+        font-weight: 700;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .promo-btn:hover {
+        filter: brightness(1.04);
       }
       .ref-header {
         display: flex;
@@ -448,6 +513,9 @@
       }
       @media (max-width: 980px) {
         .grid { grid-template-columns: 1fr; }
+        .redeem-row { grid-template-columns: 1fr; }
+        .promo-btn { width: 100%; }
+        .redeem-content.open { max-height: 280px; }
       }
     </style>
   </head>
@@ -537,13 +605,20 @@
       </div>
     </div>
 
-    <div class="panel" style="margin-top: 20px;">
-      <h2>{{ labels['redeem'] }}</h2>
-      <div class="redeem-row">
-        <input id="promoInput" placeholder="{{ labels['redeem_placeholder'] }}" />
-        <button id="promoBtn">{{ labels['redeem_button'] }}</button>
+    <div class="panel redeem-panel" style="margin-top: 20px;">
+      <button class="redeem-toggle" id="promoToggle" type="button" aria-expanded="false" aria-controls="promoContent">
+        <span class="redeem-title">{{ labels['redeem'] }}</span>
+        <span class="redeem-chevron" aria-hidden="true">▾</span>
+      </button>
+      <div class="redeem-content" id="promoContent">
+        <div class="redeem-content-inner">
+          <div class="redeem-row">
+            <input id="promoInput" class="promo-input" placeholder="{{ labels['redeem_placeholder'] }}" />
+            <button id="promoBtn" class="promo-btn">{{ labels['redeem_button'] }}</button>
+          </div>
+          <div class="status" id="promoStatus"></div>
+        </div>
       </div>
-      <div class="status" id="promoStatus"></div>
     </div>
 
     <script>
@@ -923,8 +998,22 @@
         }
       }
 
+      const promoToggle = document.getElementById('promoToggle');
+      const promoContent = document.getElementById('promoContent');
+      promoToggle.onclick = () => {
+        const expanded = promoToggle.getAttribute('aria-expanded') === 'true';
+        promoToggle.setAttribute('aria-expanded', String(!expanded));
+        promoContent.classList.toggle('open', !expanded);
+      };
+
       document.getElementById('runBtn').onclick = runGeneration;
       document.getElementById('promoBtn').onclick = redeemPromo;
+      document.getElementById('promoInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          redeemPromo();
+        }
+      });
       const refInput = document.getElementById('refFiles');
       const refGrid = document.getElementById('refGrid');
 
