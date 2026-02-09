@@ -33,6 +33,7 @@ from app.services.generation import GenerationService
 from app.services.kie_client import KieClient, KieError
 from app.services.poller import PollManager
 from app.services.promos import PromoService
+from app.services.app_settings import AppSettingsService
 from app.utils.text import clamp_text
 
 
@@ -181,6 +182,15 @@ def _rounded_favicon_svg(storage_root: str) -> str | None:
     )
 
 
+def _base_public_url(url: str) -> str:
+    base = (url or "").rstrip("/")
+    if base.endswith("/admin/chats"):
+        return base[: -len("/admin/chats")]
+    if base.endswith("/admin"):
+        return base[: -len("/admin")]
+    return base
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="Renderis User")
@@ -224,9 +234,20 @@ def create_app() -> FastAPI:
     async def index(request: Request):
         lang = _get_lang(request)
         site_logo_url = ""
-        logo_path = _find_site_logo_file(settings.reference_storage_path)
-        if logo_path:
-            site_logo_url = f"/assets/site-logo?v={int(logo_path.stat().st_mtime_ns)}"
+        async with app.state.sessionmaker() as session:
+            settings_service = AppSettingsService(session)
+            raw_logo_url = ((await settings_service.get("site_logo_url")) or "").strip()
+            logo_version = ((await settings_service.get("site_logo_version")) or "").strip()
+            if raw_logo_url:
+                if logo_version:
+                    sep = "&" if "?" in raw_logo_url else "?"
+                    site_logo_url = f"{raw_logo_url}{sep}v={logo_version}"
+                else:
+                    site_logo_url = raw_logo_url
+        if not site_logo_url:
+            logo_path = _find_site_logo_file(settings.reference_storage_path)
+            if logo_path:
+                site_logo_url = f"/assets/site-logo?v={int(logo_path.stat().st_mtime_ns)}"
         lang_options = [{"code": code, "label": LANGUAGE_LABELS.get(code, code.upper())} for code in SUPPORTED_LANGS]
         current_lang_label = LANGUAGE_LABELS.get(lang, lang.upper())
         return app.state.templates.TemplateResponse(
@@ -264,9 +285,13 @@ def create_app() -> FastAPI:
     @app.api_route("/assets/site-logo", methods=["GET", "HEAD"])
     async def user_site_logo():
         logo_path = _find_site_logo_file(settings.reference_storage_path)
-        if not logo_path:
-            return JSONResponse({"error": "not_found"}, status_code=404)
-        return FileResponse(path=str(logo_path))
+        if logo_path:
+            return FileResponse(path=str(logo_path))
+        if settings.admin_web_public_url:
+            base = _base_public_url(settings.admin_web_public_url)
+            if base:
+                return RedirectResponse(url=f"{base}/assets/site-logo", status_code=307)
+        return JSONResponse({"error": "not_found"}, status_code=404)
 
     @app.api_route("/favicon.svg", methods=["GET", "HEAD"])
     async def user_favicon_svg():
