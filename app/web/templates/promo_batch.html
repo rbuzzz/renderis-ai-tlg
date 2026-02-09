@@ -17,47 +17,49 @@
     </div>
 
     <div style="height: 16px;"></div>
-    <table>
-      <thead>
-        <tr>
-          <th>Код</th>
-          <th>Статус</th>
-          <th>Активирован</th>
-          <th>Время активации (МСК)</th>
-          <th>Баланс пользователя</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in rows %}
-        <tr>
-          <td>{{ row.code }}</td>
-          <td>
-            {% if row.status == 'redeemed' %}
-              <span class="badge ok">Активирован</span>
-            {% elif row.status == 'inactive' %}
-              <span class="badge danger">Отключён</span>
-            {% else %}
-              <span class="badge">Не активирован</span>
-            {% endif %}
-          </td>
-          <td class="muted">{{ row.redeemed_user or '—' }}</td>
-          <td class="muted">{{ row.redeemed_at_msk or '—' }}</td>
-          <td class="muted">{{ row.user_balance or '—' }}</td>
-          <td>
-            {% if row.can_deactivate %}
-              <form method="post" action="/admin/promos/code/{{ row.code }}/deactivate">
-                <input type="hidden" name="next" value="/admin/promos/batch/{{ batch.batch_id }}" />
-                <button type="submit">Деактивировать</button>
-              </form>
-            {% endif %}
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="6" class="muted">Нет кодов</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Код</th>
+            <th>Статус</th>
+            <th>Активирован</th>
+            <th>Время активации (МСК)</th>
+            <th>Баланс пользователя</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.code }}</td>
+            <td>
+              {% if row.status == 'redeemed' %}
+                <span class="badge ok">Активирован</span>
+              {% elif row.status == 'inactive' %}
+                <span class="badge danger">Отключён</span>
+              {% else %}
+                <span class="badge">Не активирован</span>
+              {% endif %}
+            </td>
+            <td class="muted">{{ row.redeemed_user or '—' }}</td>
+            <td class="muted">{{ row.redeemed_at_msk or '—' }}</td>
+            <td class="muted">{{ row.user_balance or '—' }}</td>
+            <td>
+              {% if row.can_deactivate %}
+                <form method="post" action="/admin/promos/code/{{ row.code }}/deactivate">
+                  <input type="hidden" name="next" value="/admin/promos/batch/{{ batch.batch_id }}" />
+                  <button type="submit">Деактивировать</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="muted">Нет кодов</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <script>

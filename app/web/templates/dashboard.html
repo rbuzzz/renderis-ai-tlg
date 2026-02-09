@@ -29,60 +29,64 @@
 
   <div class="section">
     <h3>Последние заказы</h3>
-    <table>
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Пользователь</th>
-          <th>Stars</th>
-          <th>Кредиты</th>
-          <th>Статус</th>
-          <th>Время</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for o in recent_orders %}
-        <tr>
-          <td>{{ o.id }}</td>
-          <td class="muted">{{ o.user_label }}</td>
-          <td>{{ o.stars_amount }}</td>
-          <td>{{ o.credits_amount }}</td>
-          <td>{{ o.status }}</td>
-          <td class="muted">{{ o.created_at_msk }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="6" class="muted">Нет данных</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Пользователь</th>
+            <th>Stars</th>
+            <th>Кредиты</th>
+            <th>Статус</th>
+            <th>Время</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in recent_orders %}
+          <tr>
+            <td>{{ o.id }}</td>
+            <td class="muted">{{ o.user_label }}</td>
+            <td>{{ o.stars_amount }}</td>
+            <td>{{ o.credits_amount }}</td>
+            <td>{{ o.status }}</td>
+            <td class="muted">{{ o.created_at_msk }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="muted">Нет данных</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <div class="section">
     <h3>Последние генерации</h3>
-    <table>
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Пользователь</th>
-          <th>Модель</th>
-          <th>Статус</th>
-          <th>Время</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for g in recent_gens %}
-        <tr>
-          <td>{{ g.id }}</td>
-          <td class="muted">{{ g.user_label }}</td>
-          <td>{{ g.model }}</td>
-          <td>{{ g.status }}</td>
-          <td class="muted">{{ g.created_at_msk }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="5" class="muted">Нет данных</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Пользователь</th>
+            <th>Модель</th>
+            <th>Статус</th>
+            <th>Время</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in recent_gens %}
+          <tr>
+            <td>{{ g.id }}</td>
+            <td class="muted">{{ g.user_label }}</td>
+            <td>{{ g.model }}</td>
+            <td>{{ g.status }}</td>
+            <td class="muted">{{ g.created_at_msk }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="muted">Нет данных</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 {% endblock %}
 

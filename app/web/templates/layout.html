@@ -25,19 +25,22 @@
       }
       a { color: inherit; }
       .topbar {
-        display: flex;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
         align-items: center;
-        justify-content: space-between;
         gap: 16px;
         margin-bottom: 24px;
       }
       .brand {
         font-size: 20px;
         font-weight: 700;
+        white-space: nowrap;
       }
       nav {
         display: flex;
         gap: 12px;
+        justify-content: center;
+        min-width: 0;
       }
       nav a {
         text-decoration: none;
@@ -45,6 +48,7 @@
         border-radius: 8px;
         color: var(--muted);
         border: 1px solid transparent;
+        white-space: nowrap;
       }
       nav a.active {
         color: var(--text);
@@ -135,6 +139,66 @@
       }
       .row-link:hover { text-decoration: underline; }
       .subtle { color: var(--muted); font-size: 12px; }
+      .table-scroll {
+        width: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+      }
+      .table-scroll > table {
+        min-width: 640px;
+      }
+
+      @media (max-width: 980px) {
+        body {
+          padding: 16px;
+        }
+        .topbar {
+          grid-template-columns: minmax(0, 1fr) auto;
+          row-gap: 10px;
+          margin-bottom: 16px;
+        }
+        .brand {
+          font-size: 18px;
+        }
+        .logout {
+          justify-self: end;
+        }
+        nav {
+          grid-column: 1 / -1;
+          justify-content: flex-start;
+          overflow-x: auto;
+          padding-bottom: 2px;
+          gap: 8px;
+        }
+        nav a {
+          flex: 0 0 auto;
+          padding: 8px 10px;
+        }
+        .grid {
+          gap: 12px;
+        }
+        .card,
+        .section {
+          padding: 12px;
+        }
+        .form-row {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 640px) {
+        body {
+          padding: 12px;
+        }
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        th, td {
+          padding: 7px 6px;
+          font-size: 13px;
+        }
+      }
     </style>
   </head>
   <body>

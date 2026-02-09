@@ -5,47 +5,49 @@
     {% if saved %}
     <div class="notice">Изменения сохранены.</div>
     {% endif %}
-    <table>
-      <thead>
-        <tr>
-          <th>Категория</th>
-          <th>Kie кредиты</th>
-          <th>Kie $</th>
-          <th>Renderis кредиты</th>
-          <th>Renderis $</th>
-          <th>Прибыль %</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for p in products %}
-        <tr>
-          <td>{{ p.label }}</td>
-          <td>
-            <input form="price-{{ p.row_id }}" name="provider_credits" value="{{ p.kie_credits }}" />
-          </td>
-          <td>{{ p.kie_usd }}</td>
-          <td>
-            <input form="price-{{ p.row_id }}" name="renderis_credits" value="{{ p.renderis_credits }}" />
-          </td>
-          <td>{{ p.renderis_usd }}</td>
-          <td>
-            {% if p.profit_pct == "" %}
-              —
-            {% else %}
-              {{ p.profit_pct }}%
-            {% endif %}
-          </td>
-          <td>
-            <button form="price-{{ p.row_id }}" type="submit">Сохранить</button>
-            <form id="price-{{ p.row_id }}" method="post" action="/admin/products/{{ p.row_id }}"></form>
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="7" class="muted">Нет данных</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Категория</th>
+            <th>Kie кредиты</th>
+            <th>Kie $</th>
+            <th>Renderis кредиты</th>
+            <th>Renderis $</th>
+            <th>Прибыль %</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in products %}
+          <tr>
+            <td>{{ p.label }}</td>
+            <td>
+              <input form="price-{{ p.row_id }}" name="provider_credits" value="{{ p.kie_credits }}" />
+            </td>
+            <td>{{ p.kie_usd }}</td>
+            <td>
+              <input form="price-{{ p.row_id }}" name="renderis_credits" value="{{ p.renderis_credits }}" />
+            </td>
+            <td>{{ p.renderis_usd }}</td>
+            <td>
+              {% if p.profit_pct == "" %}
+                —
+              {% else %}
+                {{ p.profit_pct }}%
+              {% endif %}
+            </td>
+            <td>
+              <button form="price-{{ p.row_id }}" type="submit">Сохранить</button>
+              <form id="price-{{ p.row_id }}" method="post" action="/admin/products/{{ p.row_id }}"></form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="muted">Нет данных</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 {% endblock %}
 

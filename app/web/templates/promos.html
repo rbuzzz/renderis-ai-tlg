@@ -54,29 +54,31 @@
       </div>
     {% endif %}
 
-    <table>
-      <thead>
-        <tr>
-          <th>Батч</th>
-          <th>Дата</th>
-          <th>Кодов</th>
-          <th>Кредитов за код</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for b in batches %}
-        <tr>
-          <td><a class="row-link" href="/admin/promos/batch/{{ b.batch_id }}">{{ b.batch_id }}</a></td>
-          <td class="muted">{{ b.created_at }}</td>
-          <td>{{ b.count }}</td>
-          <td>{{ b.credits_amount }}</td>
-          <td><a class="row-link" href="/admin/promos/batch/{{ b.batch_id }}">Открыть</a></td>
-        </tr>
-        {% else %}
-        <tr><td colspan="5" class="muted">Батчи не найдены</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Батч</th>
+            <th>Дата</th>
+            <th>Кодов</th>
+            <th>Кредитов за код</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in batches %}
+          <tr>
+            <td><a class="row-link" href="/admin/promos/batch/{{ b.batch_id }}">{{ b.batch_id }}</a></td>
+            <td class="muted">{{ b.created_at }}</td>
+            <td>{{ b.count }}</td>
+            <td>{{ b.credits_amount }}</td>
+            <td><a class="row-link" href="/admin/promos/batch/{{ b.batch_id }}">Открыть</a></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="muted">Батчи не найдены</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 {% endblock %}
