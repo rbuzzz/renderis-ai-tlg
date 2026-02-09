@@ -349,7 +349,7 @@
       }
       .thumbs-wrap {
         position: relative;
-        padding: 0 40px;
+        padding: 0 34px;
       }
       .thumbs {
         display: grid;
@@ -961,7 +961,11 @@
 
       function thumbColumns() {
         const thumbs = document.getElementById('thumbs');
-        const minThumb = 78;
+        const fixedDesktopCols = 8;
+        if (window.innerWidth >= 1100) {
+          return fixedDesktopCols;
+        }
+        const minThumb = 56;
         const gap = 8;
         const width = thumbs.clientWidth || thumbs.offsetWidth || 0;
         return Math.max(1, Math.floor((width + gap) / (minThumb + gap)));
