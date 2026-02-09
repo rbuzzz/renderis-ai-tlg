@@ -399,6 +399,12 @@
       .promo-input {
         background: #162741;
         border-color: #35547a;
+        color: var(--text);
+        caret-color: var(--text);
+      }
+      .promo-input::placeholder {
+        color: var(--muted);
+        opacity: 1;
       }
       .promo-input:focus {
         outline: none;
@@ -613,7 +619,7 @@
       <div class="redeem-content" id="promoContent">
         <div class="redeem-content-inner">
           <div class="redeem-row">
-            <input id="promoInput" class="promo-input" placeholder="{{ labels['redeem_placeholder'] }}" />
+            <input id="promoInput" type="text" class="promo-input" placeholder="{{ labels['redeem_placeholder'] }}" />
             <button id="promoBtn" class="promo-btn">{{ labels['redeem_button'] }}</button>
           </div>
           <div class="status" id="promoStatus"></div>
