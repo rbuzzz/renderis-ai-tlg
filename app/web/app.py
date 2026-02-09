@@ -236,9 +236,27 @@ def create_app() -> FastAPI:
                         "created_at_msk": _format_msk(order_row.created_at) or "—",
                     }
                 )
-            recent_gens = (
-                await session.execute(select(Generation).order_by(Generation.created_at.desc()).limit(10))
-            ).scalars().all()
+            recent_gens_rows = await session.execute(
+                select(Generation, User)
+                .outerjoin(User, Generation.user_id == User.id)
+                .order_by(Generation.created_at.desc())
+                .limit(10)
+            )
+            recent_gens = []
+            for gen_row, user_row in recent_gens_rows.all():
+                username = user_row.username if user_row and user_row.username else "-"
+                user_label = f"{gen_row.user_id}"
+                if user_row:
+                    user_label = f"{user_row.telegram_id} ({username})"
+                recent_gens.append(
+                    {
+                        "id": gen_row.id,
+                        "user_label": user_label,
+                        "model": gen_row.model,
+                        "status": gen_row.status,
+                        "created_at_msk": _format_msk(gen_row.created_at) or "—",
+                    }
+                )
 
         credits_spent = abs(int(credits_spent_raw or 0))
 

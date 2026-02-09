@@ -73,10 +73,10 @@
         {% for g in recent_gens %}
         <tr>
           <td>{{ g.id }}</td>
-          <td class="muted">{{ g.user_id }}</td>
+          <td class="muted">{{ g.user_label }}</td>
           <td>{{ g.model }}</td>
           <td>{{ g.status }}</td>
-          <td class="muted">{{ g.created_at }}</td>
+          <td class="muted">{{ g.created_at_msk }}</td>
         </tr>
         {% else %}
         <tr><td colspan="5" class="muted">Нет данных</td></tr>
