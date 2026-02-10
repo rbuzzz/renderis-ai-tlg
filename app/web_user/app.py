@@ -141,14 +141,23 @@ def _site_assets_dir(storage_root: str) -> Path:
     return Path(storage_root) / "_site"
 
 
-def _find_site_logo_file(storage_root: str) -> Path | None:
+def _find_asset_file(storage_root: str, stems: list[str]) -> Path | None:
     assets_dir = _site_assets_dir(storage_root)
     if not assets_dir.exists():
         return None
-    files = [f for f in assets_dir.glob("logo.*") if f.is_file() and f.suffix.lower() in LOGO_EXTENSIONS]
-    if not files:
-        return None
-    return sorted(files, key=lambda f: f.name)[0]
+    for stem in stems:
+        files = [f for f in assets_dir.glob(f"{stem}.*") if f.is_file() and f.suffix.lower() in LOGO_EXTENSIONS]
+        if files:
+            return sorted(files, key=lambda f: f.name)[0]
+    return None
+
+
+def _find_site_logo_file(storage_root: str) -> Path | None:
+    return _find_asset_file(storage_root, ["site_logo", "logo"])
+
+
+def _find_favicon_logo_file(storage_root: str) -> Path | None:
+    return _find_asset_file(storage_root, ["favicon"])
 
 
 def _site_logo_mime(path: Path) -> str:
@@ -167,7 +176,7 @@ def _site_logo_mime(path: Path) -> str:
 
 
 def _rounded_favicon_svg(storage_root: str) -> str | None:
-    logo_path = _find_site_logo_file(storage_root)
+    logo_path = _find_favicon_logo_file(storage_root) or _find_site_logo_file(storage_root)
     if not logo_path:
         return None
     raw = logo_path.read_bytes()

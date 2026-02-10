@@ -92,26 +92,44 @@ def _site_assets_dir(storage_root: str) -> Path:
     return Path(storage_root) / "_site"
 
 
-def _clear_site_logo_files(storage_root: str) -> None:
+def _find_asset_file(storage_root: str, stems: list[str]) -> Path | None:
+    assets_dir = _site_assets_dir(storage_root)
+    if not assets_dir.exists():
+        return None
+    for stem in stems:
+        files = [f for f in assets_dir.glob(f"{stem}.*") if f.is_file() and f.suffix.lower() in LOGO_EXTENSIONS]
+        if files:
+            return sorted(files, key=lambda f: f.name)[0]
+    return None
+
+
+def _clear_asset_files(storage_root: str, stems: list[str]) -> None:
     assets_dir = _site_assets_dir(storage_root)
     if not assets_dir.exists():
         return
-    for file in assets_dir.glob("logo.*"):
-        if file.is_file():
-            try:
-                file.unlink()
-            except OSError:
-                continue
+    for stem in stems:
+        for file in assets_dir.glob(f"{stem}.*"):
+            if file.is_file():
+                try:
+                    file.unlink()
+                except OSError:
+                    continue
+
+
+def _clear_site_logo_files(storage_root: str) -> None:
+    _clear_asset_files(storage_root, ["site_logo", "logo"])
 
 
 def _find_site_logo_file(storage_root: str) -> Path | None:
-    assets_dir = _site_assets_dir(storage_root)
-    if not assets_dir.exists():
-        return None
-    files = [f for f in assets_dir.glob("logo.*") if f.is_file() and f.suffix.lower() in LOGO_EXTENSIONS]
-    if not files:
-        return None
-    return sorted(files, key=lambda f: f.name)[0]
+    return _find_asset_file(storage_root, ["site_logo", "logo"])
+
+
+def _clear_favicon_logo_files(storage_root: str) -> None:
+    _clear_asset_files(storage_root, ["favicon"])
+
+
+def _find_favicon_logo_file(storage_root: str) -> Path | None:
+    return _find_asset_file(storage_root, ["favicon"])
 
 
 def _site_logo_mime(path: Path) -> str:
@@ -130,7 +148,7 @@ def _site_logo_mime(path: Path) -> str:
 
 
 def _rounded_favicon_svg(storage_root: str) -> str | None:
-    logo_path = _find_site_logo_file(storage_root)
+    logo_path = _find_favicon_logo_file(storage_root) or _find_site_logo_file(storage_root)
     if not logo_path:
         return None
     raw = logo_path.read_bytes()
@@ -158,7 +176,26 @@ async def _save_site_logo(upload: UploadFile, storage_root: str) -> bool:
     assets_dir.mkdir(parents=True, exist_ok=True)
     _clear_site_logo_files(storage_root)
 
-    filename = f"logo{ext}"
+    filename = f"site_logo{ext}"
+    file_path = assets_dir / filename
+    file_path.write_bytes(content)
+    return True
+
+
+async def _save_favicon_logo(upload: UploadFile, storage_root: str) -> bool:
+    ext = Path(upload.filename or "").suffix.lower()
+    if ext not in LOGO_EXTENSIONS:
+        return False
+
+    content = await upload.read()
+    if not content or len(content) > MAX_LOGO_SIZE_BYTES:
+        return False
+
+    assets_dir = _site_assets_dir(storage_root)
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    _clear_favicon_logo_files(storage_root)
+
+    filename = f"favicon{ext}"
     file_path = assets_dir / filename
     file_path.write_bytes(content)
     return True
@@ -223,6 +260,13 @@ def create_app() -> FastAPI:
     @app.api_route("/assets/site-logo", methods=["GET", "HEAD"])
     async def admin_site_logo():
         logo_path = _find_site_logo_file(settings.reference_storage_path)
+        if not logo_path:
+            return JSONResponse({"error": "not_found"}, status_code=404)
+        return FileResponse(path=str(logo_path))
+
+    @app.api_route("/assets/favicon-logo", methods=["GET", "HEAD"])
+    async def admin_favicon_logo():
+        logo_path = _find_favicon_logo_file(settings.reference_storage_path)
         if not logo_path:
             return JSONResponse({"error": "not_found"}, status_code=404)
         return FileResponse(path=str(logo_path))
@@ -560,6 +604,13 @@ def create_app() -> FastAPI:
             if logo_path:
                 logo_version = (await settings_service.get("site_logo_version")) or str(int(logo_path.stat().st_mtime_ns))
                 site_logo_url = f"/assets/site-logo?v={logo_version}"
+            favicon_logo_url = ""
+            favicon_path = _find_favicon_logo_file(settings.reference_storage_path)
+            if favicon_path:
+                favicon_version = (await settings_service.get("favicon_logo_version")) or str(
+                    int(favicon_path.stat().st_mtime_ns)
+                )
+                favicon_logo_url = f"/assets/favicon-logo?v={favicon_version}"
 
         return app.state.templates.TemplateResponse(
             "settings.html",
@@ -577,6 +628,7 @@ def create_app() -> FastAPI:
                 "kie_warn_yellow": kie_warn_yellow,
                 "kie_warn_red": kie_warn_red,
                 "site_logo_url": site_logo_url,
+                "favicon_logo_url": favicon_logo_url,
                 "logo_max_size_mb": int(MAX_LOGO_SIZE_BYTES / 1024 / 1024),
                 "saved": bool(saved),
             },
@@ -595,6 +647,8 @@ def create_app() -> FastAPI:
         kie_warn_red: str = Form(""),
         logo_file: UploadFile | None = File(default=None),
         remove_logo: str = Form(""),
+        favicon_file: UploadFile | None = File(default=None),
+        remove_favicon_logo: str = Form(""),
     ):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
@@ -643,6 +697,13 @@ def create_app() -> FastAPI:
                 if logo_saved:
                     await settings_service.set("site_logo_url", "/assets/site-logo")
                     await settings_service.set("site_logo_version", str(int(time.time())))
+            if remove_favicon_logo.strip() == "1":
+                _clear_favicon_logo_files(settings.reference_storage_path)
+                await settings_service.set("favicon_logo_version", str(int(time.time())))
+            elif favicon_file and (favicon_file.filename or "").strip():
+                favicon_saved = await _save_favicon_logo(favicon_file, settings.reference_storage_path)
+                if favicon_saved:
+                    await settings_service.set("favicon_logo_version", str(int(time.time())))
             await session.commit()
 
         return RedirectResponse(url="/admin/settings?saved=1", status_code=302)

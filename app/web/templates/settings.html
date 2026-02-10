@@ -70,7 +70,7 @@
       </div>
 
       <div style="height: 16px;"></div>
-      <h3 style="margin: 0 0 8px;">Логотип сайта</h3>
+      <h3 style="margin: 0 0 8px;">Логотип в веб-интерфейсе</h3>
       <p class="muted" style="margin-top: 6px;">
         Поддержка PNG/JPG/WEBP/SVG, до {{ logo_max_size_mb }} MB.
       </p>
@@ -94,6 +94,37 @@
               src="{{ site_logo_url }}"
               alt="Site logo"
               style="display: block; max-height: 64px; width: auto; border-radius: 8px;"
+            />
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+      <div style="height: 16px;"></div>
+      <h3 style="margin: 0 0 8px;">Логотип для фавикона</h3>
+      <p class="muted" style="margin-top: 6px;">
+        Отдельная иконка для вкладки браузера (будет со скруглёнными углами). Поддержка PNG/JPG/WEBP/SVG, до {{ logo_max_size_mb }} MB.
+      </p>
+      <div class="form-row">
+        <div>
+          <label>Загрузить логотип фавикона</label>
+          <input type="file" name="favicon_file" accept=".png,.jpg,.jpeg,.webp,.svg,image/*" />
+        </div>
+        <div>
+          <label>Удалить текущий фавикон-логотип</label>
+          <label style="display: inline-flex; align-items: center; gap: 8px; margin-top: 8px;">
+            <input type="checkbox" name="remove_favicon_logo" value="1" style="width: auto;" />
+            <span class="muted" style="font-size: 13px;">Удалить при сохранении</span>
+          </label>
+        </div>
+        {% if favicon_logo_url %}
+        <div style="grid-column: 1 / -1;">
+          <label>Текущий логотип фавикона</label>
+          <div style="border: 1px solid #2b3f59; background: #0f1b2b; border-radius: 12px; padding: 12px;">
+            <img
+              src="{{ favicon_logo_url }}"
+              alt="Favicon logo"
+              style="display: block; width: 64px; height: 64px; object-fit: cover; border-radius: 12px;"
             />
           </div>
         </div>
