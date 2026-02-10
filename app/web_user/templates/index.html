@@ -615,6 +615,80 @@
         grid-template-columns: 1fr auto;
         gap: 8px;
       }
+      .crypto-package-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .crypto-package-card {
+        border: 1px solid #2f496a;
+        border-radius: 14px;
+        padding: 10px;
+        background: #102038;
+        color: var(--text);
+        text-align: left;
+        cursor: pointer;
+        transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+      }
+      .crypto-package-card:hover {
+        border-color: #4f6f96;
+      }
+      .crypto-package-card.active {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px rgba(245, 185, 79, 0.24), 0 8px 18px rgba(8, 18, 32, 0.35);
+        transform: translateY(-1px);
+      }
+      .crypto-package-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: flex-start;
+        margin-bottom: 6px;
+      }
+      .crypto-package-title {
+        font-weight: 700;
+        font-size: 14px;
+        line-height: 1.2;
+      }
+      .crypto-package-badges {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 6px;
+      }
+      .crypto-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border-radius: 999px;
+        padding: 2px 7px;
+        font-size: 11px;
+        line-height: 1.2;
+        border: 1px solid #365377;
+        color: #a9c2df;
+        background: rgba(26, 45, 68, 0.9);
+      }
+      .crypto-badge.best {
+        border-color: #3f7a5e;
+        color: #7ef0b7;
+        background: rgba(26, 63, 48, 0.7);
+      }
+      .crypto-badge.save {
+        border-color: #7a6632;
+        color: #ffd276;
+        background: rgba(88, 69, 25, 0.52);
+      }
+      .crypto-package-line {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .crypto-package-price {
+        margin-top: 7px;
+        font-size: 15px;
+        font-weight: 700;
+      }
       .crypto-select {
         width: 100%;
         border-radius: 12px;
@@ -634,6 +708,17 @@
         gap: 8px;
         margin-top: 8px;
         flex-wrap: wrap;
+      }
+      .visually-hidden {
+        position: absolute !important;
+        width: 1px !important;
+        height: 1px !important;
+        padding: 0 !important;
+        margin: -1px !important;
+        overflow: hidden !important;
+        clip: rect(0, 0, 0, 0) !important;
+        white-space: nowrap !important;
+        border: 0 !important;
       }
       .ref-header {
         display: flex;
@@ -917,6 +1002,9 @@
         .redeem-row { grid-template-columns: 1fr; }
         .promo-btn { width: 100%; }
         .crypto-row { grid-template-columns: 1fr; }
+        .crypto-package-list {
+          grid-template-columns: 1fr;
+        }
         .redeem-content.open { max-height: 420px; }
         .site-logo {
           width: 40px;
@@ -1104,8 +1192,9 @@
               <div class="status" id="promoStatus"></div>
             </div>
             <div class="topup-section" id="topupSectionCrypto">
+              <div class="crypto-package-list" id="cryptoPackageList"></div>
               <div class="crypto-row">
-                <select id="cryptoPackage" class="crypto-select" aria-label="{{ labels['crypto_select_package'] }}"></select>
+                <select id="cryptoPackage" class="crypto-select visually-hidden" aria-label="{{ labels['crypto_select_package'] }}"></select>
                 <button id="cryptoCreateBtn" class="promo-btn" type="button">{{ labels['crypto_create_invoice'] }}</button>
               </div>
               <div class="crypto-actions">
@@ -1232,6 +1321,123 @@
         return number.toFixed(2);
       }
 
+      function toFiniteNumber(value, fallback = 0) {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : fallback;
+      }
+
+      function getCryptoBaselineRate() {
+        if (!cryptoPackages.length) return 0;
+        const rates = cryptoPackages
+          .map((item) => toFiniteNumber(item.usd_per_credit, 0))
+          .filter((value) => value > 0);
+        if (!rates.length) return 0;
+        return Math.max(...rates);
+      }
+
+      function getCryptoBestValueId() {
+        if (!cryptoPackages.length) return 0;
+        let bestId = 0;
+        let bestRate = Infinity;
+        cryptoPackages.forEach((item) => {
+          const rate = toFiniteNumber(item.usd_per_credit, 0);
+          if (rate > 0 && rate < bestRate) {
+            bestRate = rate;
+            bestId = Number(item.id || 0);
+          }
+        });
+        if (bestId) return bestId;
+        return Number(cryptoPackages[0].id || 0);
+      }
+
+      function renderCryptoPackageCards() {
+        const list = document.getElementById('cryptoPackageList');
+        const select = document.getElementById('cryptoPackage');
+        if (!list || !select) return;
+        list.innerHTML = '';
+        if (!cryptoPackages.length) return;
+
+        const selectedId = Number(select.value || cryptoPackages[0].id || 0);
+        const baselineRate = getCryptoBaselineRate();
+        const bestValueId = getCryptoBestValueId();
+
+        cryptoPackages.forEach((item) => {
+          const card = document.createElement('button');
+          card.type = 'button';
+          card.className = 'crypto-package-card' + (Number(item.id) === selectedId ? ' active' : '');
+
+          const title = document.createElement('div');
+          title.className = 'crypto-package-title';
+          title.textContent = String(item.title || '');
+
+          const badges = document.createElement('div');
+          badges.className = 'crypto-package-badges';
+          if (Number(item.id) === bestValueId) {
+            const best = document.createElement('span');
+            best.className = 'crypto-badge best';
+            best.textContent = labels.crypto_best_value;
+            badges.appendChild(best);
+          }
+
+          const bonus = toFiniteNumber(item.credits_bonus, 0);
+          if (bonus > 0) {
+            const bonusBadge = document.createElement('span');
+            bonusBadge.className = 'crypto-badge';
+            bonusBadge.textContent = fmt(labels.crypto_bonus_badge, { bonus });
+            badges.appendChild(bonusBadge);
+          }
+
+          const rate = toFiniteNumber(item.usd_per_credit, 0);
+          if (baselineRate > 0 && rate > 0 && rate < baselineRate) {
+            const savePct = Math.round(((baselineRate - rate) / baselineRate) * 100);
+            if (savePct > 0) {
+              const saveBadge = document.createElement('span');
+              saveBadge.className = 'crypto-badge save';
+              saveBadge.textContent = fmt(labels.crypto_save_badge, { pct: savePct });
+              badges.appendChild(saveBadge);
+            }
+          }
+
+          const credits = toFiniteNumber(item.credits_amount, 0);
+          const totalLine = document.createElement('div');
+          totalLine.className = 'crypto-package-line';
+          totalLine.textContent = fmt(labels.crypto_total_line, { credits });
+
+          const base = toFiniteNumber(item.credits_base, credits);
+          let baseBonusLine = null;
+          if (bonus > 0) {
+            baseBonusLine = document.createElement('div');
+            baseBonusLine.className = 'crypto-package-line';
+            baseBonusLine.textContent = fmt(labels.crypto_base_bonus_line, { base, bonus });
+          }
+
+          const price = document.createElement('div');
+          price.className = 'crypto-package-price';
+          price.textContent = `${formatMoney(item.amount)} ${item.currency || ''}`.trim();
+
+          const head = document.createElement('div');
+          head.className = 'crypto-package-head';
+          head.appendChild(title);
+
+          card.appendChild(head);
+          if (badges.childNodes.length) {
+            card.appendChild(badges);
+          }
+          if (baseBonusLine) {
+            card.appendChild(baseBonusLine);
+          }
+          card.appendChild(totalLine);
+          card.appendChild(price);
+
+          card.addEventListener('click', () => {
+            select.value = String(item.id);
+            renderCryptoPackageCards();
+          });
+
+          list.appendChild(card);
+        });
+      }
+
       function stopCryptoPolling() {
         if (cryptoPollTimer) {
           clearInterval(cryptoPollTimer);
@@ -1244,6 +1450,7 @@
       function fillCryptoPackages() {
         const select = document.getElementById('cryptoPackage');
         if (!select) return;
+        const previousValue = select.value;
         select.innerHTML = '';
         if (!cryptoPackages.length) {
           const option = document.createElement('option');
@@ -1253,6 +1460,7 @@
           select.disabled = true;
           const createBtn = document.getElementById('cryptoCreateBtn');
           if (createBtn) createBtn.disabled = true;
+          renderCryptoPackageCards();
           return;
         }
         select.disabled = false;
@@ -1261,9 +1469,15 @@
         cryptoPackages.forEach((item) => {
           const option = document.createElement('option');
           option.value = String(item.id);
-          option.textContent = `${item.title} - ${item.credits_amount} ${labels.credits} (${formatMoney(item.amount)} ${item.currency})`;
+          option.textContent = `${item.title} - ${item.credits_amount} ${labels.credits}`;
           select.appendChild(option);
         });
+        if (previousValue && cryptoPackages.some((item) => String(item.id) === previousValue)) {
+          select.value = previousValue;
+        } else {
+          select.value = String(cryptoPackages[0].id);
+        }
+        renderCryptoPackageCards();
       }
 
       async function loadCryptoPackages() {
@@ -1872,6 +2086,12 @@
       const cryptoCreateBtn = document.getElementById('cryptoCreateBtn');
       if (cryptoCreateBtn) {
         cryptoCreateBtn.onclick = createCryptoInvoice;
+      }
+      const cryptoSelectEl = document.getElementById('cryptoPackage');
+      if (cryptoSelectEl) {
+        cryptoSelectEl.addEventListener('change', () => {
+          renderCryptoPackageCards();
+        });
       }
       const cryptoCheckBtn = document.getElementById('cryptoCheckBtn');
       if (cryptoCheckBtn) {

@@ -35,7 +35,7 @@ from app.services.kie_client import KieClient, KieError
 from app.services.poller import PollManager
 from app.services.promos import PromoService
 from app.services.app_settings import AppSettingsService
-from app.services.product_pricing import get_product_credits, get_product_usd_price
+from app.services.product_pricing import get_product_credits, get_product_stars_price, get_product_usd_price
 from app.utils.text import clamp_text
 from app.utils.time import utcnow
 
@@ -504,7 +504,9 @@ def create_app() -> FastAPI:
             packages = []
             for product in products:
                 credits_total = get_product_credits(product)
+                stars_total = get_product_stars_price(product)
                 amount = get_product_usd_price(product, stars_per_credit, usd_per_star)
+                usd_per_credit = round(float(amount) / credits_total, 6) if credits_total > 0 else 0.0
                 packages.append(
                     {
                         "id": product.id,
@@ -512,7 +514,9 @@ def create_app() -> FastAPI:
                         "credits_amount": credits_total,
                         "credits_base": int(product.credits_base if product.credits_base is not None else product.credits_amount),
                         "credits_bonus": int(product.credits_bonus or 0),
+                        "stars_amount": stars_total,
                         "amount": float(amount),
+                        "usd_per_credit": usd_per_credit,
                         "currency": settings.cryptocloud_currency.upper(),
                     }
                 )
@@ -1078,6 +1082,11 @@ def create_app() -> FastAPI:
         "crypto_unavailable",
         "crypto_create_failed",
         "crypto_status_failed",
+        "crypto_best_value",
+        "crypto_bonus_badge",
+        "crypto_save_badge",
+        "crypto_base_bonus_line",
+        "crypto_total_line",
         "delete_failed",
         "quote_line",
         "quote_login_required",
