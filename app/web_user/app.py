@@ -8,6 +8,7 @@ import json
 import os
 import time
 import uuid
+from decimal import Decimal, ROUND_HALF_UP
 from urllib.parse import urlparse
 from pathlib import Path
 from typing import Any, Dict, List
@@ -23,11 +24,12 @@ from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy import select
 
 from app.config import get_settings
-from app.db.models import Generation, GenerationTask, PromoCode
+from app.db.models import Generation, GenerationTask, Order, PromoCode, StarProduct, User
 from app.db.session import create_sessionmaker
 from app.i18n import SUPPORTED_LANGS, normalize_lang, t
 from app.modelspecs.registry import get_model, list_models
 from app.services.credits import CreditsService
+from app.services.cryptocloud import CryptoCloudClient, CryptoCloudError
 from app.services.pricing import PricingService
 from app.services.generation import GenerationService
 from app.services.kie_client import KieClient, KieError
@@ -35,6 +37,7 @@ from app.services.poller import PollManager
 from app.services.promos import PromoService
 from app.services.app_settings import AppSettingsService
 from app.utils.text import clamp_text
+from app.utils.time import utcnow
 
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
@@ -44,6 +47,41 @@ LANGUAGE_LABELS: Dict[str, str] = {
     "es": "Spanish",
     "ru": "Russian",
 }
+CRYPTO_SUCCESS_STATUSES = {"paid", "overpaid"}
+
+
+def _is_cryptocloud_enabled(settings) -> bool:
+    return bool(settings.cryptocloud_api_key.strip() and settings.cryptocloud_shop_id.strip())
+
+
+def _crypto_locale(lang: str) -> str:
+    return "ru" if normalize_lang(lang) == "ru" else "en"
+
+
+def _normalize_invoice_status(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _invoice_status_from_info(info: dict[str, Any] | None) -> str:
+    if not info:
+        return ""
+    return _normalize_invoice_status(info.get("status") or info.get("invoice_status") or info.get("status_invoice"))
+
+
+def _credit_price_usd(credits_amount: int, stars_per_credit: float, usd_per_star: float) -> float:
+    usd_per_credit = Decimal(str(stars_per_credit)) * Decimal(str(usd_per_star))
+    total = Decimal(str(credits_amount)) * usd_per_credit
+    rounded = total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if rounded <= Decimal("0"):
+        rounded = Decimal("0.01")
+    return float(rounded)
+
+
+async def _cryptocloud_pricing(session) -> tuple[float, float]:
+    settings_service = AppSettingsService(session)
+    stars_per_credit = await settings_service.get_float("stars_per_credit", 2.0)
+    usd_per_star = await settings_service.get_float("usd_per_star", 0.013)
+    return stars_per_credit, usd_per_star
 
 
 def _is_logged_in(request: Request) -> bool:
@@ -264,6 +302,38 @@ def create_app() -> FastAPI:
             except Exception:
                 pass
 
+    async def apply_cryptocloud_settlement(
+        session,
+        order: Order,
+        invoice_info: dict[str, Any] | None,
+    ) -> tuple[str, bool, int]:
+        invoice_status = _invoice_status_from_info(invoice_info)
+        credits_added = 0
+        is_paid = order.status == "paid"
+
+        if invoice_status in CRYPTO_SUCCESS_STATUSES and not is_paid:
+            user = await session.get(User, order.user_id)
+            if user:
+                credits = CreditsService(session)
+                await credits.add_ledger(
+                    user,
+                    order.credits_amount,
+                    "purchase",
+                    meta={
+                        "provider": "cryptocloud",
+                        "invoice_uuid": order.provider_payment_charge_id,
+                        "payload": order.payload,
+                    },
+                    idempotency_key=f"crypto_invoice:{order.provider_payment_charge_id}",
+                )
+                credits_added = order.credits_amount
+            order.status = "paid"
+            is_paid = True
+        elif invoice_status and not is_paid:
+            order.status = f"cc_{invoice_status}"[:32]
+
+        return invoice_status, is_paid, credits_added
+
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request):
         lang = _get_lang(request)
@@ -419,6 +489,238 @@ def create_app() -> FastAPI:
                 "lang": user.settings.get("lang", "ru"),
                 "max_outputs": settings.max_outputs_per_request,
             }
+
+    @app.get("/api/payments/packages")
+    async def api_payment_packages(request: Request):
+        if not _is_logged_in(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        if not _is_cryptocloud_enabled(settings):
+            return {"enabled": False, "packages": []}
+
+        async with app.state.sessionmaker() as session:
+            credits = CreditsService(session)
+            user = await credits.get_user(int(request.session["user_id"]))
+            if not user:
+                return JSONResponse({"error": "user_not_found"}, status_code=404)
+
+            stars_per_credit, usd_per_star = await _cryptocloud_pricing(session)
+            rows = await session.execute(
+                select(StarProduct)
+                .where(StarProduct.active.is_(True))
+                .order_by(StarProduct.sort_order.asc(), StarProduct.id.asc())
+            )
+            products = rows.scalars().all()
+            packages = []
+            for product in products:
+                amount = _credit_price_usd(product.credits_amount, stars_per_credit, usd_per_star)
+                packages.append(
+                    {
+                        "id": product.id,
+                        "title": product.title,
+                        "credits_amount": product.credits_amount,
+                        "amount": amount,
+                        "currency": settings.cryptocloud_currency.upper(),
+                    }
+                )
+        return {"enabled": True, "packages": packages}
+
+    @app.post("/api/payments/cryptocloud/create")
+    async def api_cryptocloud_create_invoice(request: Request):
+        if not _is_logged_in(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        if not _is_cryptocloud_enabled(settings):
+            return JSONResponse({"error": "cryptocloud_not_configured"}, status_code=503)
+
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+        product_id_raw = data.get("product_id") if isinstance(data, dict) else None
+        try:
+            product_id = int(product_id_raw)
+        except (TypeError, ValueError):
+            return JSONResponse({"error": "invalid_product_id"}, status_code=400)
+
+        async with app.state.sessionmaker() as session:
+            credits = CreditsService(session)
+            user = await credits.get_user(int(request.session["user_id"]))
+            if not user:
+                return JSONResponse({"error": "user_not_found"}, status_code=404)
+
+            product_row = await session.execute(
+                select(StarProduct).where(StarProduct.id == product_id, StarProduct.active.is_(True))
+            )
+            product = product_row.scalar_one_or_none()
+            if not product:
+                return JSONResponse({"error": "product_not_found"}, status_code=404)
+
+            stars_per_credit, usd_per_star = await _cryptocloud_pricing(session)
+            amount = _credit_price_usd(product.credits_amount, stars_per_credit, usd_per_star)
+            local_order_id = f"cc_{uuid.uuid4().hex}"
+            order_payload = f"cc:{product.id}:{local_order_id}"
+            client = CryptoCloudClient(
+                api_key=settings.cryptocloud_api_key,
+                shop_id=settings.cryptocloud_shop_id,
+            )
+            try:
+                invoice = await client.create_invoice(
+                    amount=amount,
+                    currency=settings.cryptocloud_currency.upper(),
+                    order_id=local_order_id,
+                    locale=_crypto_locale(_get_lang(request)),
+                )
+            except CryptoCloudError as exc:
+                return JSONResponse(
+                    {"error": "cryptocloud_create_failed", "detail": str(exc)},
+                    status_code=502,
+                )
+
+            invoice_uuid = str(invoice.get("uuid") or "").strip()
+            pay_url = str(invoice.get("link") or "").strip()
+            invoice_status = _normalize_invoice_status(invoice.get("status")) or "created"
+            if not invoice_uuid or not pay_url:
+                return JSONResponse({"error": "cryptocloud_invalid_response"}, status_code=502)
+
+            order = Order(
+                user_id=user.id,
+                telegram_payment_charge_id=local_order_id,
+                provider_payment_charge_id=invoice_uuid,
+                payload=order_payload,
+                stars_amount=0,
+                credits_amount=product.credits_amount,
+                status=f"cc_{invoice_status}"[:32],
+                created_at=utcnow(),
+            )
+            session.add(order)
+            await session.commit()
+
+        return {
+            "ok": True,
+            "invoice_uuid": invoice_uuid,
+            "pay_url": pay_url,
+            "invoice_status": invoice_status,
+            "credits_amount": product.credits_amount,
+            "amount": amount,
+            "currency": settings.cryptocloud_currency.upper(),
+        }
+
+    @app.get("/api/payments/cryptocloud/status/{invoice_uuid}")
+    async def api_cryptocloud_invoice_status(request: Request, invoice_uuid: str):
+        if not _is_logged_in(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        if not _is_cryptocloud_enabled(settings):
+            return JSONResponse({"error": "cryptocloud_not_configured"}, status_code=503)
+
+        invoice_uuid = invoice_uuid.strip()
+        if not invoice_uuid:
+            return JSONResponse({"error": "invalid_invoice_uuid"}, status_code=400)
+
+        async with app.state.sessionmaker() as session:
+            credits = CreditsService(session)
+            user = await credits.get_user(int(request.session["user_id"]))
+            if not user:
+                return JSONResponse({"error": "user_not_found"}, status_code=404)
+
+            order_row = await session.execute(
+                select(Order).where(
+                    Order.provider_payment_charge_id == invoice_uuid,
+                    Order.user_id == user.id,
+                )
+            )
+            order = order_row.scalar_one_or_none()
+            if not order:
+                return JSONResponse({"error": "order_not_found"}, status_code=404)
+
+            client = CryptoCloudClient(
+                api_key=settings.cryptocloud_api_key,
+                shop_id=settings.cryptocloud_shop_id,
+            )
+            try:
+                invoice_info = await client.invoice_status(invoice_uuid)
+            except CryptoCloudError as exc:
+                return JSONResponse(
+                    {"error": "cryptocloud_status_failed", "detail": str(exc)},
+                    status_code=502,
+                )
+            if not invoice_info:
+                return JSONResponse({"error": "invoice_not_found"}, status_code=404)
+
+            invoice_status, is_paid, credits_added = await apply_cryptocloud_settlement(session, order, invoice_info)
+            await session.commit()
+            return {
+                "ok": True,
+                "invoice_status": invoice_status,
+                "order_status": order.status,
+                "paid": is_paid,
+                "credits_added": credits_added,
+                "balance": user.balance_credits,
+            }
+
+    @app.post("/api/payments/cryptocloud/postback")
+    async def api_cryptocloud_postback(request: Request):
+        if not _is_cryptocloud_enabled(settings):
+            return {"ok": True}
+
+        payload: dict[str, Any] = {}
+        try:
+            raw = await request.json()
+            if isinstance(raw, dict):
+                payload = raw
+        except Exception:
+            try:
+                form_data = await request.form()
+                payload = dict(form_data)
+            except Exception:
+                payload = {}
+
+        invoice_uuid = str(
+            payload.get("invoice_id")
+            or payload.get("uuid")
+            or payload.get("invoice_uuid")
+            or ""
+        ).strip()
+        order_id = str(payload.get("order_id") or "").strip()
+
+        async with app.state.sessionmaker() as session:
+            order: Order | None = None
+            if invoice_uuid:
+                order_row = await session.execute(
+                    select(Order).where(Order.provider_payment_charge_id == invoice_uuid)
+                )
+                order = order_row.scalar_one_or_none()
+            if not order and order_id:
+                order_row = await session.execute(
+                    select(Order).where(Order.telegram_payment_charge_id == order_id)
+                )
+                order = order_row.scalar_one_or_none()
+            if not order:
+                return {"ok": True}
+
+            invoice_uuid = order.provider_payment_charge_id
+            client = CryptoCloudClient(
+                api_key=settings.cryptocloud_api_key,
+                shop_id=settings.cryptocloud_shop_id,
+            )
+            try:
+                invoice_info = await client.invoice_status(invoice_uuid)
+            except CryptoCloudError as exc:
+                return JSONResponse(
+                    {"ok": False, "error": "cryptocloud_status_failed", "detail": str(exc)},
+                    status_code=502,
+                )
+            if not invoice_info:
+                return {"ok": True}
+
+            invoice_status, is_paid, credits_added = await apply_cryptocloud_settlement(session, order, invoice_info)
+            await session.commit()
+
+        return {
+            "ok": True,
+            "invoice_status": invoice_status,
+            "order_status": order.status,
+            "paid": is_paid,
+            "credits_added": credits_added,
+        }
 
     @app.get("/api/models")
     async def api_models(request: Request):
@@ -740,6 +1042,21 @@ def create_app() -> FastAPI:
         "error_prefix",
         "promo_added",
         "promo_error",
+        "crypto_title",
+        "crypto_select_package",
+        "crypto_create_invoice",
+        "crypto_open_invoice",
+        "crypto_check_status",
+        "crypto_loading_packages",
+        "crypto_packages_empty",
+        "crypto_invoice_created",
+        "crypto_waiting_payment",
+        "crypto_partial_payment",
+        "crypto_paid",
+        "crypto_canceled",
+        "crypto_unavailable",
+        "crypto_create_failed",
+        "crypto_status_failed",
         "delete_failed",
         "quote_line",
         "quote_login_required",

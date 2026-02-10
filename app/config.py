@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     # Payments (Stars)
     stars_provider_token: str = Field('', alias='STARS_PROVIDER_TOKEN')
     stars_currency: str = Field('XTR', alias='STARS_CURRENCY')
+    cryptocloud_api_key: str = Field('', alias='CRYPTOCLOUD_API_KEY')
+    cryptocloud_shop_id: str = Field('', alias='CRYPTOCLOUD_SHOP_ID')
+    cryptocloud_secret_key: str = Field('', alias='CRYPTOCLOUD_SECRET_KEY')
+    cryptocloud_currency: str = Field('USD', alias='CRYPTOCLOUD_CURRENCY')
 
     # Defaults
     signup_bonus_credits: int = Field(3, alias='SIGNUP_BONUS_CREDITS')

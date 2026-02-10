@@ -309,6 +309,8 @@
         cursor: pointer;
       }
       .status { font-size: 12px; color: var(--muted); margin-top: 8px; }
+      .status.error { color: var(--danger); }
+      .status.success { color: var(--accent-2); }
       .output-preview {
         border-radius: 14px;
         border: 1px solid #2b3f59;
@@ -497,7 +499,7 @@
         transition: max-height 0.28s ease, opacity 0.2s ease;
       }
       .redeem-content.open {
-        max-height: 220px;
+        max-height: 360px;
         opacity: 1;
       }
       .redeem-content-inner {
@@ -535,6 +537,31 @@
       }
       .promo-btn:hover {
         filter: brightness(1.04);
+      }
+      .crypto-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+      }
+      .crypto-select {
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid #35547a;
+        background: #162741;
+        color: var(--text);
+        padding: 10px 12px;
+        font-family: inherit;
+      }
+      .crypto-select:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(245, 185, 79, 0.18);
+      }
+      .crypto-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+        flex-wrap: wrap;
       }
       .ref-header {
         display: flex;
@@ -748,7 +775,8 @@
         }
         .redeem-row { grid-template-columns: 1fr; }
         .promo-btn { width: 100%; }
-        .redeem-content.open { max-height: 320px; }
+        .crypto-row { grid-template-columns: 1fr; }
+        .redeem-content.open { max-height: 420px; }
         .site-logo {
           width: 40px;
           height: 40px;
@@ -924,6 +952,30 @@
       </div>
     </div>
 
+    <div class="panel redeem-panel" style="margin-top: 14px;">
+      <button class="redeem-toggle" id="cryptoToggle" type="button" aria-expanded="false" aria-controls="cryptoContent">
+        <span class="redeem-title">{{ labels['crypto_title'] }}</span>
+        <span class="redeem-chevron" aria-hidden="true">▾</span>
+      </button>
+      <div class="redeem-content" id="cryptoContent">
+        <div class="redeem-content-inner">
+          <div class="crypto-row">
+            <select id="cryptoPackage" class="crypto-select" aria-label="{{ labels['crypto_select_package'] }}"></select>
+            <button id="cryptoCreateBtn" class="promo-btn" type="button">{{ labels['crypto_create_invoice'] }}</button>
+          </div>
+          <div class="crypto-actions">
+            <a id="cryptoPayLink" class="action-btn" href="#" target="_blank" rel="noopener" style="display:none;">
+              💸 {{ labels['crypto_open_invoice'] }}
+            </a>
+            <button id="cryptoCheckBtn" class="action-btn" type="button" disabled>
+              🔄 {{ labels['crypto_check_status'] }}
+            </button>
+          </div>
+          <div class="status" id="cryptoStatus"></div>
+        </div>
+      </div>
+    </div>
+
     <script>
       const labels = {{ labels | tojson }};
       const loggedIn = {{ 'true' if logged_in else 'false' }};
@@ -937,6 +989,12 @@
       let modelNames = {};
       let selectedFiles = [];
       let refPreviews = [];
+      let cryptoPackages = [];
+      let cryptoInvoiceUuid = '';
+      let cryptoInvoiceCredits = 0;
+      let cryptoPollTimer = null;
+      let cryptoPollBusy = false;
+      let cryptoPollAttempts = 0;
       const THUMB_ROWS = 3;
 
       function fmt(template, params = {}) {
@@ -992,6 +1050,96 @@
         setBalance(data.balance);
         setUserInfo(data);
         maxOutputs = data.max_outputs || 1;
+      }
+
+      function setCryptoStatus(message, state = '') {
+        const status = document.getElementById('cryptoStatus');
+        status.textContent = message || '';
+        status.classList.remove('error', 'success');
+        if (state === 'error') {
+          status.classList.add('error');
+        }
+        if (state === 'success') {
+          status.classList.add('success');
+        }
+      }
+
+      function formatMoney(value) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) return '0.00';
+        return number.toFixed(2);
+      }
+
+      function stopCryptoPolling() {
+        if (cryptoPollTimer) {
+          clearInterval(cryptoPollTimer);
+          cryptoPollTimer = null;
+        }
+        cryptoPollBusy = false;
+        cryptoPollAttempts = 0;
+      }
+
+      function fillCryptoPackages() {
+        const select = document.getElementById('cryptoPackage');
+        select.innerHTML = '';
+        if (!cryptoPackages.length) {
+          const option = document.createElement('option');
+          option.value = '';
+          option.textContent = labels.crypto_packages_empty;
+          select.appendChild(option);
+          select.disabled = true;
+          document.getElementById('cryptoCreateBtn').disabled = true;
+          return;
+        }
+        select.disabled = false;
+        document.getElementById('cryptoCreateBtn').disabled = false;
+        cryptoPackages.forEach((item) => {
+          const option = document.createElement('option');
+          option.value = String(item.id);
+          option.textContent = `${item.title} - ${item.credits_amount} ${labels.credits} (${formatMoney(item.amount)} ${item.currency})`;
+          select.appendChild(option);
+        });
+      }
+
+      async function loadCryptoPackages() {
+        const payLink = document.getElementById('cryptoPayLink');
+        const checkBtn = document.getElementById('cryptoCheckBtn');
+        if (!loggedIn) {
+          cryptoPackages = [];
+          fillCryptoPackages();
+          payLink.style.display = 'none';
+          checkBtn.disabled = true;
+          setCryptoStatus(labels.login_required, 'error');
+          return;
+        }
+        setCryptoStatus(labels.crypto_loading_packages);
+        const res = await fetch('/api/payments/packages', { credentials: 'include' });
+        if (!res.ok) {
+          cryptoPackages = [];
+          fillCryptoPackages();
+          payLink.style.display = 'none';
+          checkBtn.disabled = true;
+          setCryptoStatus(labels.crypto_unavailable, 'error');
+          return;
+        }
+        const data = await res.json();
+        if (!data.enabled) {
+          cryptoPackages = [];
+          fillCryptoPackages();
+          payLink.style.display = 'none';
+          checkBtn.disabled = true;
+          setCryptoStatus(labels.crypto_unavailable, 'error');
+          return;
+        }
+        cryptoPackages = Array.isArray(data.packages) ? data.packages : [];
+        fillCryptoPackages();
+        if (!cryptoPackages.length) {
+          payLink.style.display = 'none';
+          checkBtn.disabled = true;
+          setCryptoStatus(labels.crypto_packages_empty);
+          return;
+        }
+        setCryptoStatus('');
       }
 
       async function loadModels() {
@@ -1371,6 +1519,119 @@
         }
       }
 
+      async function createCryptoInvoice() {
+        if (!loggedIn) {
+          setCryptoStatus(labels.login_required, 'error');
+          return;
+        }
+        const select = document.getElementById('cryptoPackage');
+        const productId = Number(select.value || 0);
+        if (!productId) {
+          setCryptoStatus(labels.crypto_packages_empty, 'error');
+          return;
+        }
+
+        const createBtn = document.getElementById('cryptoCreateBtn');
+        const payLink = document.getElementById('cryptoPayLink');
+        const checkBtn = document.getElementById('cryptoCheckBtn');
+        createBtn.disabled = true;
+        setCryptoStatus(labels.crypto_loading_packages);
+
+        let response;
+        try {
+          response = await fetch('/api/payments/cryptocloud/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ product_id: productId }),
+          });
+        } catch (err) {
+          createBtn.disabled = false;
+          setCryptoStatus(labels.crypto_create_failed, 'error');
+          return;
+        }
+        createBtn.disabled = false;
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          if (errorData.error === 'cryptocloud_not_configured') {
+            setCryptoStatus(labels.crypto_unavailable, 'error');
+            return;
+          }
+          setCryptoStatus(labels.crypto_create_failed, 'error');
+          return;
+        }
+
+        const data = await response.json();
+        cryptoInvoiceUuid = data.invoice_uuid || '';
+        cryptoInvoiceCredits = Number(data.credits_amount || 0);
+        payLink.href = data.pay_url || '#';
+        payLink.style.display = data.pay_url ? 'inline-flex' : 'none';
+        checkBtn.disabled = !cryptoInvoiceUuid;
+
+        const amount = formatMoney(data.amount);
+        const currency = data.currency || '';
+        setCryptoStatus(fmt(labels.crypto_invoice_created, { amount, currency }));
+
+        if (data.pay_url) {
+          window.open(data.pay_url, '_blank', 'noopener');
+        }
+        stopCryptoPolling();
+        cryptoPollTimer = setInterval(() => {
+          void checkCryptoStatus(false);
+        }, 5000);
+      }
+
+      async function checkCryptoStatus(showWaiting = true) {
+        if (!cryptoInvoiceUuid) {
+          if (showWaiting) {
+            setCryptoStatus(labels.crypto_status_failed, 'error');
+          }
+          return;
+        }
+        if (cryptoPollBusy) return;
+        cryptoPollBusy = true;
+
+        try {
+          const res = await fetch(`/api/payments/cryptocloud/status/${encodeURIComponent(cryptoInvoiceUuid)}`, {
+            credentials: 'include',
+          });
+          if (!res.ok) {
+            if (showWaiting) {
+              setCryptoStatus(labels.crypto_status_failed, 'error');
+            }
+            return;
+          }
+          const data = await res.json();
+          const status = (data.invoice_status || '').toLowerCase();
+          if (data.paid || status === 'paid' || status === 'overpaid') {
+            const creditsAdded = Number(data.credits_added || cryptoInvoiceCredits || 0);
+            setCryptoStatus(fmt(labels.crypto_paid, { credits: creditsAdded }), 'success');
+            await loadMe();
+            stopCryptoPolling();
+            return;
+          }
+          if (status === 'partial') {
+            setCryptoStatus(labels.crypto_partial_payment);
+          } else if (status === 'canceled' || status === 'cancelled') {
+            setCryptoStatus(labels.crypto_canceled, 'error');
+            stopCryptoPolling();
+          } else if (showWaiting || status === 'created') {
+            setCryptoStatus(labels.crypto_waiting_payment);
+          }
+        } catch (err) {
+          if (showWaiting) {
+            setCryptoStatus(labels.crypto_status_failed, 'error');
+          }
+        } finally {
+          cryptoPollBusy = false;
+          cryptoPollAttempts += 1;
+          if (cryptoPollAttempts >= 120) {
+            stopCryptoPolling();
+          }
+        }
+      }
+
       const promoToggle = document.getElementById('promoToggle');
       const promoContent = document.getElementById('promoContent');
       promoToggle.onclick = () => {
@@ -1378,9 +1639,18 @@
         promoToggle.setAttribute('aria-expanded', String(!expanded));
         promoContent.classList.toggle('open', !expanded);
       };
+      const cryptoToggle = document.getElementById('cryptoToggle');
+      const cryptoContent = document.getElementById('cryptoContent');
+      cryptoToggle.onclick = () => {
+        const expanded = cryptoToggle.getAttribute('aria-expanded') === 'true';
+        cryptoToggle.setAttribute('aria-expanded', String(!expanded));
+        cryptoContent.classList.toggle('open', !expanded);
+      };
 
       document.getElementById('runBtn').onclick = runGeneration;
       document.getElementById('promoBtn').onclick = redeemPromo;
+      document.getElementById('cryptoCreateBtn').onclick = createCryptoInvoice;
+      document.getElementById('cryptoCheckBtn').onclick = () => checkCryptoStatus(true);
       document.getElementById('thumbsPrev').onclick = (e) => {
         e.preventDefault();
         if (thumbsPage <= 0) return;
@@ -1406,6 +1676,7 @@
         if (!galleryItems.length) return;
         renderThumbs(galleryItems[galleryIndex] || null, false);
       });
+      window.addEventListener('beforeunload', stopCryptoPolling);
       const refInput = document.getElementById('refFiles');
       const refReplaceInput = document.getElementById('refReplaceFile');
       const refGrid = document.getElementById('refGrid');
@@ -1506,6 +1777,7 @@
 
       loadMe();
       loadModels();
+      loadCryptoPackages();
       loadHistory();
       setInterval(loadHistory, 15000);
       let quoteTimer = null;
