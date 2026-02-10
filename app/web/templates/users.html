@@ -1,0 +1,75 @@
+{% extends "layout.html" %}
+{% block content %}
+  <div class="section">
+    <h3>Пользователи</h3>
+    <form method="get" action="/admin/users" class="form-row" style="margin-bottom: 12px;">
+      <div>
+        <label>Поиск (Telegram ID или username)</label>
+        <input name="q" value="{{ search }}" placeholder="Например: 493780829 или stepanenko" />
+      </div>
+      <div>
+        <label>Статус</label>
+        <select name="status" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #2b3f59;background:#0f1b2b;color:var(--text);">
+          <option value="all" {% if status == 'all' %}selected{% endif %}>Все</option>
+          <option value="active" {% if status == 'active' %}selected{% endif %}>Активные</option>
+          <option value="banned" {% if status == 'banned' %}selected{% endif %}>Забаненные</option>
+        </select>
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button type="submit">Найти</button>
+      </div>
+    </form>
+
+    <div class="subtle" style="margin-bottom: 8px;">Найдено: {{ total }}</div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Telegram ID</th>
+            <th>Username</th>
+            <th>Баланс</th>
+            <th>Статус</th>
+            <th>Первый вход (МСК)</th>
+            <th>Последняя активность (МСК)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+          <tr>
+            <td>{{ u.id }}</td>
+            <td>{{ u.telegram_id }}</td>
+            <td class="muted">{{ u.username }}</td>
+            <td>{{ u.balance_credits }}</td>
+            <td>
+              {% if u.is_banned %}
+                <span class="badge danger">Забанен</span>
+              {% else %}
+                <span class="badge ok">Активен</span>
+              {% endif %}
+            </td>
+            <td class="muted">{{ u.first_seen_at_msk }}</td>
+            <td class="muted">{{ u.last_seen_at_msk }}</td>
+            <td><a class="row-link" href="/admin/users/{{ u.id }}">Открыть</a></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8" class="muted">Пользователи не найдены</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div style="display:flex; gap:10px; margin-top: 12px; align-items:center;">
+      {% if has_prev %}
+        <a class="row-link" href="/admin/users?q={{ search }}&status={{ status }}&page={{ prev_page }}">← Предыдущая</a>
+      {% endif %}
+      <span class="subtle">Страница {{ page }}</span>
+      {% if has_next %}
+        <a class="row-link" href="/admin/users?q={{ search }}&status={{ status }}&page={{ next_page }}">Следующая →</a>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

@@ -1,0 +1,127 @@
+{% extends "layout.html" %}
+{% block content %}
+  <div class="section">
+    <a class="row-link" href="/admin/users">← Назад к пользователям</a>
+    <h3 style="margin-top: 10px;">Профиль пользователя</h3>
+    <div class="grid">
+      <div class="card">
+        <h3>Telegram ID</h3>
+        <div class="value">{{ user.telegram_id }}</div>
+        <div class="subtle">Username: {{ user.username }}</div>
+      </div>
+      <div class="card">
+        <h3>Баланс</h3>
+        <div class="value">{{ user.balance_credits }}</div>
+      </div>
+      <div class="card">
+        <h3>Статус</h3>
+        <div class="value">
+          {% if user.is_banned %}
+            <span class="badge danger">Забанен</span>
+          {% else %}
+            <span class="badge ok">Активен</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="card">
+        <h3>Активность</h3>
+        <div class="subtle">Первый вход: {{ user.first_seen_at_msk }}</div>
+        <div class="subtle">Последний вход: {{ user.last_seen_at_msk }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>История пополнений (Orders)</h3>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Тип</th>
+            <th>Stars</th>
+            <th>Кредиты</th>
+            <th>Статус</th>
+            <th>Payload</th>
+            <th>Время (МСК)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in orders %}
+          <tr>
+            <td>{{ o.id }}</td>
+            <td>{{ o.payment_kind }}</td>
+            <td>{{ o.stars_amount }}</td>
+            <td>{{ o.credits_amount }}</td>
+            <td>{{ o.status }}</td>
+            <td class="muted">{{ o.payload }}</td>
+            <td class="muted">{{ o.created_at_msk }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="muted">Данных нет</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>История баланса (Ledger)</h3>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Δ Кредиты</th>
+            <th>Причина</th>
+            <th>Meta</th>
+            <th>Время (МСК)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in ledger %}
+          <tr>
+            <td>{{ row.id }}</td>
+            <td>
+              {% if row.delta >= 0 %}+{% endif %}{{ row.delta }}
+            </td>
+            <td>{{ row.reason }}</td>
+            <td class="muted">{{ row.meta }}</td>
+            <td class="muted">{{ row.created_at_msk }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="muted">Данных нет</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Активированные промо-коды</h3>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Код</th>
+            <th>Кредитов</th>
+            <th>Батч</th>
+            <th>Активирован (МСК)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in promo_codes %}
+          <tr>
+            <td>{{ p.code }}</td>
+            <td>{{ p.credits_amount }}</td>
+            <td>{{ p.batch_id }}</td>
+            <td class="muted">{{ p.redeemed_at_msk }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="muted">Нет активированных промо-кодов</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

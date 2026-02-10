@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi import Body, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from starlette.middleware.sessions import SessionMiddleware
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
@@ -413,6 +413,170 @@ def create_app() -> FastAPI:
                 "credits_spent": credits_spent,
                 "recent_orders": recent_orders,
                 "recent_gens": recent_gens,
+            },
+        )
+
+    @app.get("/admin/users", response_class=HTMLResponse)
+    async def admin_users(
+        request: Request,
+        q: str | None = None,
+        status: str = "all",
+        page: int = 1,
+    ):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+
+        search = (q or "").strip()
+        status = (status or "all").strip().lower()
+        if status not in {"all", "banned", "active"}:
+            status = "all"
+        page = max(1, int(page or 1))
+        per_page = 40
+
+        filters = []
+        if search:
+            search_filters = [func.coalesce(User.username, "").ilike(f"%{search}%")]
+            if search.isdigit():
+                search_filters.append(User.telegram_id == int(search))
+            filters.append(or_(*search_filters))
+        if status == "banned":
+            filters.append(User.is_banned.is_(True))
+        elif status == "active":
+            filters.append(User.is_banned.is_(False))
+
+        async with app.state.sessionmaker() as session:
+            count_query = select(func.count(User.id))
+            list_query = select(User)
+            for condition in filters:
+                count_query = count_query.where(condition)
+                list_query = list_query.where(condition)
+
+            total = int((await session.scalar(count_query)) or 0)
+            total_pages = max(1, (total + per_page - 1) // per_page)
+            page = min(page, total_pages)
+            offset = (page - 1) * per_page
+            rows = await session.execute(
+                list_query.order_by(User.last_seen_at.desc(), User.id.desc()).offset(offset).limit(per_page)
+            )
+            users = []
+            for user in rows.scalars().all():
+                users.append(
+                    {
+                        "id": user.id,
+                        "telegram_id": user.telegram_id,
+                        "username": user.username or "—",
+                        "balance_credits": user.balance_credits,
+                        "is_banned": bool(user.is_banned),
+                        "first_seen_at_msk": _format_msk(user.first_seen_at) or "—",
+                        "last_seen_at_msk": _format_msk(user.last_seen_at) or "—",
+                    }
+                )
+
+        return app.state.templates.TemplateResponse(
+            "users.html",
+            {
+                "request": request,
+                "title": "Renderis Admin — Пользователи",
+                "active_tab": "users",
+                "users": users,
+                "search": search,
+                "status": status,
+                "page": page,
+                "total": total,
+                "per_page": per_page,
+                "has_prev": page > 1,
+                "has_next": page < total_pages,
+                "prev_page": page - 1,
+                "next_page": page + 1,
+            },
+        )
+
+    @app.get("/admin/users/{user_id}", response_class=HTMLResponse)
+    async def admin_user_profile(request: Request, user_id: int):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+
+        async with app.state.sessionmaker() as session:
+            user = await session.get(User, user_id)
+            if not user:
+                return Response(status_code=404, content="User not found")
+
+            orders_rows = await session.execute(
+                select(Order)
+                .where(Order.user_id == user.id)
+                .order_by(Order.created_at.desc())
+                .limit(100)
+            )
+            orders = []
+            for order in orders_rows.scalars().all():
+                payment_kind = "Stars"
+                if (order.payload or "").startswith("crypto:"):
+                    payment_kind = "Crypto"
+                orders.append(
+                    {
+                        "id": order.id,
+                        "payment_kind": payment_kind,
+                        "stars_amount": int(order.stars_amount or 0),
+                        "credits_amount": int(order.credits_amount or 0),
+                        "status": order.status,
+                        "created_at_msk": _format_msk(order.created_at) or "—",
+                        "payload": order.payload,
+                    }
+                )
+
+            ledger_rows = await session.execute(
+                select(CreditLedger)
+                .where(CreditLedger.user_id == user.id)
+                .order_by(CreditLedger.created_at.desc(), CreditLedger.id.desc())
+                .limit(200)
+            )
+            ledger = []
+            for item in ledger_rows.scalars().all():
+                ledger.append(
+                    {
+                        "id": item.id,
+                        "delta": int(item.delta_credits or 0),
+                        "reason": item.reason,
+                        "meta": item.meta or {},
+                        "created_at_msk": _format_msk(item.created_at) or "—",
+                    }
+                )
+
+            promo_rows = await session.execute(
+                select(PromoCode)
+                .where(PromoCode.redeemed_by_user_id == user.id)
+                .order_by(PromoCode.redeemed_at.desc(), PromoCode.code.asc())
+                .limit(100)
+            )
+            promo_codes = []
+            for promo in promo_rows.scalars().all():
+                promo_codes.append(
+                    {
+                        "code": promo.code,
+                        "credits_amount": int(promo.credits_amount or 0),
+                        "batch_id": promo.batch_id or "—",
+                        "redeemed_at_msk": _format_msk(promo.redeemed_at) or "—",
+                    }
+                )
+
+        return app.state.templates.TemplateResponse(
+            "user_profile.html",
+            {
+                "request": request,
+                "title": f"Renderis Admin — Пользователь {user.telegram_id}",
+                "active_tab": "users",
+                "user": {
+                    "id": user.id,
+                    "telegram_id": user.telegram_id,
+                    "username": user.username or "—",
+                    "balance_credits": user.balance_credits,
+                    "is_banned": bool(user.is_banned),
+                    "first_seen_at_msk": _format_msk(user.first_seen_at) or "—",
+                    "last_seen_at_msk": _format_msk(user.last_seen_at) or "—",
+                },
+                "orders": orders,
+                "ledger": ledger,
+                "promo_codes": promo_codes,
             },
         )
 
