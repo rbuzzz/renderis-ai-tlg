@@ -4,6 +4,7 @@ import secrets
 import base64
 import time
 import uuid
+from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -17,12 +18,13 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from app.config import get_settings
-from app.db.models import CreditLedger, Generation, Order, Price, PromoCode, SupportMessage, SupportThread, User
+from app.db.models import CreditLedger, Generation, Order, Price, PromoCode, StarProduct, SupportMessage, SupportThread, User
 from app.db.session import create_sessionmaker
 from app.modelspecs.registry import list_models
 from app.services.app_settings import AppSettingsService
 from app.services.kie_balance import KieBalanceService
 from app.services.promos import PromoService
+from app.services.product_pricing import get_product_credits, get_product_stars_price, get_product_usd_price
 from app.services.support import SupportService
 
 
@@ -74,6 +76,17 @@ def _parse_float(value: str) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _parse_decimal(value: str) -> Decimal | None:
+    raw = (value or "").strip().replace(",", ".")
+    if not raw:
+        return None
+    try:
+        parsed = Decimal(raw)
+    except (InvalidOperation, ValueError):
+        return None
+    return parsed
 
 
 def _format_msk(dt: datetime | None) -> str | None:
@@ -544,6 +557,41 @@ def create_app() -> FastAPI:
                     }
                 )
 
+            topup_rows = (
+                await session.execute(
+                    select(StarProduct).order_by(StarProduct.sort_order.asc(), StarProduct.id.asc())
+                )
+            ).scalars().all()
+            topup_products: list[dict] = []
+            for row in topup_rows:
+                credits_base = int(row.credits_base if row.credits_base is not None else row.credits_amount)
+                credits_bonus = int(row.credits_bonus or 0)
+                credits_total = get_product_credits(row)
+                stars_effective = get_product_stars_price(row)
+                usd_effective = float(get_product_usd_price(row, stars_per_credit, usd_per_star))
+                stars_per_credit_eff = round(stars_effective / credits_total, 4) if credits_total > 0 else 0.0
+                usd_per_credit_eff = round(usd_effective / credits_total, 4) if credits_total > 0 else 0.0
+                price_usd_value = ""
+                if row.price_usd is not None:
+                    price_usd_value = f"{Decimal(str(row.price_usd)):.2f}"
+                topup_products.append(
+                    {
+                        "id": row.id,
+                        "title": row.title,
+                        "credits_base": credits_base,
+                        "credits_bonus": credits_bonus,
+                        "credits_total": credits_total,
+                        "price_stars": int(row.price_stars if row.price_stars is not None else stars_effective),
+                        "price_usd": price_usd_value,
+                        "sort_order": row.sort_order,
+                        "active": bool(row.active),
+                        "stars_effective": stars_effective,
+                        "usd_effective": round(usd_effective, 2),
+                        "stars_per_credit": stars_per_credit_eff,
+                        "usd_per_credit": usd_per_credit_eff,
+                    }
+                )
+
         return app.state.templates.TemplateResponse(
             "products.html",
             {
@@ -551,6 +599,7 @@ def create_app() -> FastAPI:
                 "title": "Renderis Admin — Товары",
                 "active_tab": "products",
                 "products": products,
+                "topup_products": topup_products,
                 "saved": bool(saved),
             },
         )
@@ -617,6 +666,109 @@ def create_app() -> FastAPI:
             elif row_id == "pro_refs_4k":
                 update_price("nano_banana_pro", "bundle_refs_4k", parsed_renderis, parsed_kie)
 
+            await session.commit()
+
+        return RedirectResponse(url="/admin/products?saved=1", status_code=302)
+
+    @app.post("/admin/topup-products/{product_id}")
+    async def admin_topup_product_update(
+        request: Request,
+        product_id: int,
+        title: str = Form(""),
+        credits_base: str = Form(""),
+        credits_bonus: str = Form(""),
+        price_stars: str = Form(""),
+        price_usd: str = Form(""),
+        sort_order: str = Form(""),
+        active: str = Form("0"),
+    ):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+
+        async with app.state.sessionmaker() as session:
+            product = await session.get(StarProduct, product_id)
+            if not product:
+                return RedirectResponse(url="/admin/products", status_code=302)
+
+            title_clean = title.strip()
+            if title_clean:
+                product.title = title_clean
+
+            parsed_base = _parse_int(credits_base.strip())
+            parsed_bonus = _parse_int(credits_bonus.strip())
+            parsed_stars = _parse_int(price_stars.strip())
+            parsed_sort = _parse_int(sort_order.strip())
+            parsed_usd = _parse_decimal(price_usd.strip()) if price_usd.strip() else None
+
+            if parsed_base is not None:
+                product.credits_base = max(0, parsed_base)
+            if parsed_bonus is not None:
+                product.credits_bonus = max(0, parsed_bonus)
+            if parsed_sort is not None:
+                product.sort_order = parsed_sort
+
+            credits_total = max(0, int(product.credits_base or 0) + int(product.credits_bonus or 0))
+            product.credits_amount = credits_total
+
+            if parsed_stars is not None and parsed_stars > 0:
+                product.price_stars = parsed_stars
+                # Keep legacy field in sync for old integrations.
+                product.stars_amount = parsed_stars
+
+            if price_usd.strip():
+                if parsed_usd is not None and parsed_usd > 0:
+                    product.price_usd = parsed_usd.quantize(Decimal("0.01"))
+            else:
+                product.price_usd = None
+
+            product.active = active.strip() == "1"
+            await session.commit()
+
+        return RedirectResponse(url="/admin/products?saved=1", status_code=302)
+
+    @app.post("/admin/topup-products/create")
+    async def admin_topup_product_create(
+        request: Request,
+        title: str = Form(""),
+        credits_base: str = Form(""),
+        credits_bonus: str = Form(""),
+        price_stars: str = Form(""),
+        price_usd: str = Form(""),
+        sort_order: str = Form("0"),
+        active: str = Form("1"),
+    ):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+
+        title_clean = title.strip() or "Новый пакет"
+        parsed_base = _parse_int(credits_base.strip())
+        parsed_bonus = _parse_int(credits_bonus.strip())
+        parsed_stars = _parse_int(price_stars.strip())
+        parsed_sort = _parse_int(sort_order.strip())
+        parsed_usd = _parse_decimal(price_usd.strip()) if price_usd.strip() else None
+
+        base_val = max(0, parsed_base or 0)
+        bonus_val = max(0, parsed_bonus or 0)
+        stars_val = max(1, parsed_stars or 1)
+        credits_total = base_val + bonus_val
+        if credits_total <= 0:
+            credits_total = base_val or 1
+            base_val = credits_total
+            bonus_val = 0
+
+        async with app.state.sessionmaker() as session:
+            product = StarProduct(
+                title=title_clean,
+                stars_amount=stars_val,
+                credits_amount=credits_total,
+                credits_base=base_val,
+                credits_bonus=bonus_val,
+                price_stars=stars_val,
+                price_usd=parsed_usd.quantize(Decimal("0.01")) if parsed_usd and parsed_usd > 0 else None,
+                active=active.strip() == "1",
+                sort_order=parsed_sort or 0,
+            )
+            session.add(product)
             await session.commit()
 
         return RedirectResponse(url="/admin/products?saved=1", status_code=302)

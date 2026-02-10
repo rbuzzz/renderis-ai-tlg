@@ -49,5 +49,106 @@
       </table>
     </div>
   </div>
+  <div class="section">
+    <h3>Пакеты пополнения (Stars / Crypto)</h3>
+    <div class="subtle" style="margin-bottom:8px;">
+      Итого кредиты = База + Бонус. Если поле USD цена пустое, цена для Crypto считается автоматически из глобальных настроек.
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Пакет</th>
+            <th>База</th>
+            <th>Бонус</th>
+            <th>Итого</th>
+            <th>Stars цена</th>
+            <th>USD цена (ручная)</th>
+            <th>Эфф. Stars</th>
+            <th>Эфф. USD</th>
+            <th>Stars/кредит</th>
+            <th>USD/кредит</th>
+            <th>Сорт</th>
+            <th>Активен</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in topup_products %}
+          <tr>
+            <td>
+              <input form="topup-{{ p.id }}" name="title" value="{{ p.title }}" />
+            </td>
+            <td>
+              <input form="topup-{{ p.id }}" name="credits_base" value="{{ p.credits_base }}" />
+            </td>
+            <td>
+              <input form="topup-{{ p.id }}" name="credits_bonus" value="{{ p.credits_bonus }}" />
+            </td>
+            <td>{{ p.credits_total }}</td>
+            <td>
+              <input form="topup-{{ p.id }}" name="price_stars" value="{{ p.price_stars }}" />
+            </td>
+            <td>
+              <input form="topup-{{ p.id }}" name="price_usd" value="{{ p.price_usd }}" placeholder="auto" />
+            </td>
+            <td>{{ p.stars_effective }}</td>
+            <td>{{ p.usd_effective }}</td>
+            <td>{{ p.stars_per_credit }}</td>
+            <td>{{ p.usd_per_credit }}</td>
+            <td>
+              <input form="topup-{{ p.id }}" name="sort_order" value="{{ p.sort_order }}" />
+            </td>
+            <td>
+              <input form="topup-{{ p.id }}" type="hidden" name="active" value="0" />
+              <input form="topup-{{ p.id }}" type="checkbox" name="active" value="1" {% if p.active %}checked{% endif %}/>
+            </td>
+            <td>
+              <button form="topup-{{ p.id }}" type="submit">Сохранить</button>
+              <form id="topup-{{ p.id }}" method="post" action="/admin/topup-products/{{ p.id }}"></form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="13" class="muted">Нет пакетов пополнения</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <h3 style="margin-top:18px;">Добавить пакет</h3>
+    <form class="form-row" method="post" action="/admin/topup-products/create">
+      <div>
+        <label>Название</label>
+        <input name="title" placeholder="Например: 500 кредитов" />
+      </div>
+      <div>
+        <label>База кредитов</label>
+        <input name="credits_base" value="100" />
+      </div>
+      <div>
+        <label>Бонус кредитов</label>
+        <input name="credits_bonus" value="0" />
+      </div>
+      <div>
+        <label>Stars цена</label>
+        <input name="price_stars" value="200" />
+      </div>
+      <div>
+        <label>USD цена (опц.)</label>
+        <input name="price_usd" placeholder="auto" />
+      </div>
+      <div>
+        <label>Сортировка</label>
+        <input name="sort_order" value="0" />
+      </div>
+      <div>
+        <label>Активен</label>
+        <input type="hidden" name="active" value="0" />
+        <input type="checkbox" name="active" value="1" checked />
+      </div>
+      <div>
+        <button type="submit">Добавить пакет</button>
+      </div>
+    </form>
+  </div>
 {% endblock %}
 
