@@ -94,6 +94,63 @@
     border: 1px solid #2b3f59;
     margin-bottom: 8px;
     background: #0b1626;
+    cursor: zoom-in;
+  }
+  .image-preview-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(3, 8, 16, 0.88);
+    z-index: 1000;
+    padding: 20px;
+  }
+  .image-preview-modal.open {
+    display: flex;
+  }
+  .image-preview-frame {
+    position: relative;
+    max-width: min(1200px, 96vw);
+    max-height: 92vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #2b3f59;
+    border-radius: 12px;
+    background: #0b1626;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+    padding: 10px;
+  }
+  .image-preview-frame img {
+    display: block;
+    max-width: min(1160px, 92vw);
+    max-height: 86vh;
+    width: auto;
+    height: auto;
+    border-radius: 8px;
+    object-fit: contain;
+    background: #09111d;
+  }
+  .image-preview-close {
+    position: absolute;
+    top: -14px;
+    right: -14px;
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: #13253b;
+    color: var(--text);
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .image-preview-close:hover {
+    background: #1a324f;
   }
   .msg small { color: var(--muted); display: block; margin-top: 6px; font-size: 11px; }
   .chat-input {
@@ -191,6 +248,12 @@
     </div>
   </div>
 </div>
+<div id="imagePreviewModal" class="image-preview-modal" aria-hidden="true">
+  <div class="image-preview-frame">
+    <button id="imagePreviewClose" type="button" class="image-preview-close" aria-label="Close">×</button>
+    <img id="imagePreviewImg" src="" alt="preview" />
+  </div>
+</div>
 
 <script>
   const chatItems = document.getElementById('chatItems');
@@ -202,9 +265,27 @@
   const chatFileName = document.getElementById('chatFileName');
   const chatSend = document.getElementById('chatSend');
   const chatStatus = document.getElementById('chatStatus');
+  const imagePreviewModal = document.getElementById('imagePreviewModal');
+  const imagePreviewImg = document.getElementById('imagePreviewImg');
+  const imagePreviewClose = document.getElementById('imagePreviewClose');
   let currentThread = null;
   let currentThreadUserId = null;
   let currentThreadLabel = '';
+
+  function openImagePreview(src, alt) {
+    if (!imagePreviewModal || !imagePreviewImg) return;
+    imagePreviewImg.src = src;
+    imagePreviewImg.alt = alt || 'preview';
+    imagePreviewModal.classList.add('open');
+    imagePreviewModal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeImagePreview() {
+    if (!imagePreviewModal || !imagePreviewImg) return;
+    imagePreviewModal.classList.remove('open');
+    imagePreviewModal.setAttribute('aria-hidden', 'true');
+    imagePreviewImg.src = '';
+  }
 
   function setStatus(text, isError = false) {
     if (!chatStatus) return;
@@ -321,6 +402,7 @@
         img.className = 'msg-image';
         img.src = m.media_url;
         img.alt = m.media_file_name || 'image';
+        img.addEventListener('click', () => openImagePreview(m.media_url, m.media_file_name || 'image'));
         div.appendChild(img);
       }
       if (m.text) {
@@ -398,6 +480,21 @@
     chatAttach.onclick = () => chatFile.click();
     chatFile.addEventListener('change', setFileLabel);
   }
+  if (imagePreviewClose) {
+    imagePreviewClose.addEventListener('click', closeImagePreview);
+  }
+  if (imagePreviewModal) {
+    imagePreviewModal.addEventListener('click', (e) => {
+      if (e.target === imagePreviewModal) {
+        closeImagePreview();
+      }
+    });
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeImagePreview();
+    }
+  });
   chatInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
