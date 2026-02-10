@@ -44,6 +44,10 @@ class SupportService:
         text: str,
         sender_admin_id: int | None = None,
         tg_message_id: int | None = None,
+        media_type: str | None = None,
+        media_path: str | None = None,
+        media_file_name: str | None = None,
+        media_mime_type: str | None = None,
     ) -> SupportMessage:
         now = utcnow()
         message = SupportMessage(
@@ -51,6 +55,10 @@ class SupportService:
             sender_type=sender_type,
             sender_admin_id=sender_admin_id,
             text=text,
+            media_type=media_type,
+            media_path=media_path,
+            media_file_name=media_file_name,
+            media_mime_type=media_mime_type,
             tg_message_id=tg_message_id,
             created_at=now,
         )

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from aiogram import Bot, F, Router
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
+import mimetypes
+import uuid
+from html import escape
+from pathlib import Path
+
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
@@ -18,6 +21,9 @@ from app.services.support import SupportService
 
 router = Router()
 
+SUPPORT_MEDIA_DIR = "_support_media"
+SUPPORT_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
+
 
 async def _is_admin(session: AsyncSession, telegram_id: int) -> bool:
     settings = get_settings()
@@ -28,6 +34,16 @@ async def _is_admin(session: AsyncSession, telegram_id: int) -> bool:
     return bool(user and user.is_admin)
 
 
+def _is_image_document(message: Message) -> bool:
+    if not message.document:
+        return False
+    mime = (message.document.mime_type or "").lower()
+    if mime.startswith("image/"):
+        return True
+    ext = Path(message.document.file_name or "").suffix.lower()
+    return ext in SUPPORT_IMAGE_EXTENSIONS
+
+
 def _message_text(message: Message) -> str:
     if message.text:
         return message.text
@@ -35,10 +51,56 @@ def _message_text(message: Message) -> str:
         return message.caption
     if message.photo:
         return "📷 Фото"
+    if _is_image_document(message):
+        name = message.document.file_name or "image"
+        return f"📎 Изображение: {name}"
     if message.document:
         name = message.document.file_name or "файл"
         return f"📎 Документ: {name}"
     return f"[{message.content_type}]"
+
+
+def _support_media_root(storage_root: str) -> Path:
+    return Path(storage_root) / SUPPORT_MEDIA_DIR
+
+
+def _guess_ext(file_path: str | None, file_name: str | None, mime_type: str | None, default: str = ".jpg") -> str:
+    ext = Path(file_name or "").suffix.lower()
+    if ext in SUPPORT_IMAGE_EXTENSIONS:
+        return ext
+    ext = Path(file_path or "").suffix.lower()
+    if ext in SUPPORT_IMAGE_EXTENSIONS:
+        return ext
+    guessed = mimetypes.guess_extension((mime_type or "").lower())
+    if guessed and guessed.lower() in SUPPORT_IMAGE_EXTENSIONS:
+        return guessed.lower()
+    return default
+
+
+async def _store_telegram_media(
+    message: Message,
+    thread_id: int,
+    file_id: str,
+    source_name: str | None = None,
+    mime_type: str | None = None,
+) -> tuple[str | None, str | None, str | None]:
+    settings = get_settings()
+    try:
+        file = await message.bot.get_file(file_id)
+        if not file.file_path:
+            return None, source_name, mime_type
+        ext = _guess_ext(file.file_path, source_name, mime_type)
+        thread_dir = _support_media_root(settings.reference_storage_path) / str(thread_id)
+        thread_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"{uuid.uuid4().hex}{ext}"
+        abs_path = thread_dir / filename
+        await message.bot.download_file(file.file_path, destination=str(abs_path))
+        rel_path = str(Path(SUPPORT_MEDIA_DIR) / str(thread_id) / filename).replace("\\", "/")
+        final_name = source_name or filename
+        final_mime = mime_type or mimetypes.guess_type(final_name)[0] or "image/jpeg"
+        return rel_path, final_name, final_mime
+    except Exception:
+        return None, source_name, mime_type
 
 
 def _admin_chat_url(thread_id: int) -> str | None:
@@ -52,46 +114,40 @@ def _admin_chat_url(thread_id: int) -> str | None:
     return f"{base}/admin/chats?thread={thread_id}"
 
 
-async def _notify_admins(thread_id: int, user_label: str, text: str) -> None:
+async def _notify_admins(
+    message: Message,
+    thread_id: int,
+    user_label: str,
+    text: str,
+    media_kind: str | None = None,
+    media_file_id: str | None = None,
+) -> None:
     settings = get_settings()
-    if not settings.support_bot_token:
-        return
-
     admin_ids = settings.admin_ids()
     if not admin_ids:
         return
 
-    preview = text.strip()
-    if len(preview) > 400:
-        preview = preview[:400] + "..."
+    preview = (text or "").strip()
+    if len(preview) > 800:
+        preview = preview[:800] + "..."
+    body = f"📩 Сообщение в поддержку\n<b>{escape(user_label)}</b>\n\n{escape(preview)}"
 
     first_row: list[InlineKeyboardButton] = []
     second_row: list[InlineKeyboardButton] = []
-
     chat_url = _admin_chat_url(thread_id)
     if chat_url:
         first_row.append(InlineKeyboardButton(text="Перейти в чат", url=chat_url))
     first_row.append(InlineKeyboardButton(text="Ответить в боте", callback_data=f"support:reply:{thread_id}"))
     second_row.append(InlineKeyboardButton(text="Шаблоны", callback_data=f"support:templates:{thread_id}"))
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[first_row, second_row])
 
-    keyboard_rows = [first_row]
-    if second_row:
-        keyboard_rows.append(second_row)
-
-    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
-    bot = Bot(
-        token=settings.support_bot_token,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-    )
-    try:
-        for admin_id in admin_ids:
-            await bot.send_message(
-                admin_id,
-                f"📩 Сообщение в поддержку\n<b>{user_label}</b>\n\n{preview}",
-                reply_markup=keyboard,
-            )
-    finally:
-        await bot.session.close()
+    for admin_id in admin_ids:
+        if media_kind == "photo" and media_file_id:
+            await message.bot.send_photo(admin_id, media_file_id, caption=body, reply_markup=keyboard)
+        elif media_kind == "document" and media_file_id:
+            await message.bot.send_document(admin_id, media_file_id, caption=body, reply_markup=keyboard)
+        else:
+            await message.bot.send_message(admin_id, body, reply_markup=keyboard)
 
 
 @router.message(F.text == "/start")
@@ -137,7 +193,7 @@ async def support_reply(callback: CallbackQuery, state: FSMContext, session: Asy
     thread_id = int(parts[2])
     await state.set_state(AdminFlow.support_reply)
     prompt = await callback.message.answer(
-        "Напишите ответ одним сообщением.",
+        "Напишите ответ текстом или отправьте изображение (скриншот) одним сообщением.",
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[[InlineKeyboardButton(text="Отмена", callback_data="support:reply_cancel")]]
         ),
@@ -176,14 +232,55 @@ async def support_reply_send(message: Message, state: FSMContext, session: Async
         await state.clear()
         return
 
-    text = _message_text(message)
-    sent = await message.bot.send_message(user.telegram_id, text)
+    if not message.text and not message.photo and not _is_image_document(message):
+        await message.answer("Поддерживаются только текст и изображения (фото или image-документ).")
+        return
+
+    text = _message_text(message).strip()
+    media_type = None
+    media_path = None
+    media_file_name = None
+    media_mime_type = None
+
+    if message.photo:
+        photo = message.photo[-1]
+        caption = (message.caption or "").strip()
+        text = caption or "📷 Фото"
+        sent = await message.bot.send_photo(user.telegram_id, photo.file_id, caption=caption or None)
+        media_type = "image"
+        media_path, media_file_name, media_mime_type = await _store_telegram_media(
+            message,
+            int(thread_id),
+            photo.file_id,
+            source_name="photo.jpg",
+            mime_type="image/jpeg",
+        )
+    elif _is_image_document(message):
+        document = message.document
+        caption = (message.caption or "").strip()
+        text = caption or f"📎 Изображение: {document.file_name or 'image'}"
+        sent = await message.bot.send_document(user.telegram_id, document.file_id, caption=caption or None)
+        media_type = "image"
+        media_path, media_file_name, media_mime_type = await _store_telegram_media(
+            message,
+            int(thread_id),
+            document.file_id,
+            source_name=document.file_name,
+            mime_type=document.mime_type,
+        )
+    else:
+        sent = await message.bot.send_message(user.telegram_id, text)
+
     await support.add_message(
         thread,
         "admin",
         text,
         sender_admin_id=message.from_user.id,
         tg_message_id=sent.message_id,
+        media_type=media_type,
+        media_path=media_path,
+        media_file_name=media_file_name,
+        media_mime_type=media_mime_type,
     )
     await session.commit()
 
@@ -209,15 +306,71 @@ async def support_message(message: Message, session: AsyncSession) -> None:
     if await _is_admin(session, message.from_user.id):
         return
 
+    if not message.text and not message.photo and not _is_image_document(message):
+        await message.answer("Поддерживаются только текст и изображения (скриншоты).")
+        return
+
     credits = CreditsService(session)
     user = await credits.ensure_user(message.from_user.id, message.from_user.username, False)
     support = SupportService(session)
     thread = await support.ensure_thread(user)
 
-    text = _message_text(message)
-    await support.add_message(thread, "user", text, tg_message_id=message.message_id)
+    text = _message_text(message).strip()
+    media_type = None
+    media_path = None
+    media_file_name = None
+    media_mime_type = None
+    notify_media_kind = None
+    notify_media_file_id = None
+
+    if message.photo:
+        photo = message.photo[-1]
+        caption = (message.caption or "").strip()
+        text = caption or "📷 Фото"
+        media_type = "image"
+        media_path, media_file_name, media_mime_type = await _store_telegram_media(
+            message,
+            thread.id,
+            photo.file_id,
+            source_name="photo.jpg",
+            mime_type="image/jpeg",
+        )
+        notify_media_kind = "photo"
+        notify_media_file_id = photo.file_id
+    elif _is_image_document(message):
+        document = message.document
+        caption = (message.caption or "").strip()
+        text = caption or f"📎 Изображение: {document.file_name or 'image'}"
+        media_type = "image"
+        media_path, media_file_name, media_mime_type = await _store_telegram_media(
+            message,
+            thread.id,
+            document.file_id,
+            source_name=document.file_name,
+            mime_type=document.mime_type,
+        )
+        notify_media_kind = "document"
+        notify_media_file_id = document.file_id
+
+    await support.add_message(
+        thread,
+        "user",
+        text,
+        tg_message_id=message.message_id,
+        media_type=media_type,
+        media_path=media_path,
+        media_file_name=media_file_name,
+        media_mime_type=media_mime_type,
+    )
     await session.commit()
 
     label = user.username or str(user.telegram_id)
-    await _notify_admins(thread.id, label, text)
+    await _notify_admins(
+        message,
+        thread.id,
+        label,
+        text,
+        media_kind=notify_media_kind,
+        media_file_id=notify_media_file_id,
+    )
     await message.answer("Спасибо! Мы скоро ответим.")

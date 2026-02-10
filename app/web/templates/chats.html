@@ -86,6 +86,15 @@
   }
   .msg.user { align-self: flex-start; }
   .msg.admin { align-self: flex-end; background: #123b2c; border-color: #1c5e46; }
+  .msg-image {
+    display: block;
+    width: min(100%, 340px);
+    height: auto;
+    border-radius: 8px;
+    border: 1px solid #2b3f59;
+    margin-bottom: 8px;
+    background: #0b1626;
+  }
   .msg small { color: var(--muted); display: block; margin-top: 6px; font-size: 11px; }
   .chat-input {
     padding: 12px 14px;
@@ -95,6 +104,19 @@
     background: #13253b;
   }
   .chat-input input { flex: 1; min-width: 0; }
+  .chat-input-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .chat-file-label {
+    font-size: 12px;
+    color: var(--muted);
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   @media (max-width: 980px) {
     .chat-grid { grid-template-columns: 1fr; }
     .chat-list {
@@ -158,6 +180,11 @@
       <header id="chatHeader">Выберите чат</header>
       <div class="chat-messages" id="chatMessages"></div>
       <div class="chat-input">
+        <input id="chatFile" type="file" accept="image/*" style="display:none;" />
+        <div class="chat-input-tools">
+          <button id="chatAttach" type="button">📎 Фото</button>
+          <span id="chatFileName" class="chat-file-label"></span>
+        </div>
         <input id="chatInput" placeholder="Введите сообщение..." />
         <button id="chatSend">Отправить</button>
       </div>
@@ -170,6 +197,9 @@
   const chatMessages = document.getElementById('chatMessages');
   const chatHeader = document.getElementById('chatHeader');
   const chatInput = document.getElementById('chatInput');
+  const chatFile = document.getElementById('chatFile');
+  const chatAttach = document.getElementById('chatAttach');
+  const chatFileName = document.getElementById('chatFileName');
   const chatSend = document.getElementById('chatSend');
   const chatStatus = document.getElementById('chatStatus');
   let currentThread = null;
@@ -186,6 +216,12 @@
     if (!value) return '';
     const d = new Date(value);
     return d.toLocaleString();
+  }
+
+  function setFileLabel() {
+    if (!chatFileName || !chatFile) return;
+    const file = chatFile.files && chatFile.files[0];
+    chatFileName.textContent = file ? file.name : '';
   }
 
   function renderChatHeader() {
@@ -280,7 +316,18 @@
     messages.forEach((m) => {
       const div = document.createElement('div');
       div.className = 'msg ' + (m.sender_type === 'admin' ? 'admin' : 'user');
-      div.textContent = m.text;
+      if (m.media_type === 'image' && m.media_url) {
+        const img = document.createElement('img');
+        img.className = 'msg-image';
+        img.src = m.media_url;
+        img.alt = m.media_file_name || 'image';
+        div.appendChild(img);
+      }
+      if (m.text) {
+        const text = document.createElement('div');
+        text.textContent = m.text;
+        div.appendChild(text);
+      }
       const ts = document.createElement('small');
       ts.textContent = fmtTime(m.created_at);
       div.appendChild(ts);
@@ -301,14 +348,27 @@
   async function sendMessage() {
     if (!currentThread) return;
     const text = (chatInput.value || '').trim();
-    if (!text) return;
+    const image = chatFile && chatFile.files ? chatFile.files[0] : null;
+    if (!text && !image) return;
     chatSend.disabled = true;
+    if (chatAttach) chatAttach.disabled = true;
     try {
-      const res = await fetch(`/admin/api/chats/${currentThread}/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      });
+      let res;
+      if (image) {
+        const formData = new FormData();
+        formData.append('file', image);
+        if (text) formData.append('caption', text);
+        res = await fetch(`/admin/api/chats/${currentThread}/send-media`, {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        res = await fetch(`/admin/api/chats/${currentThread}/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        });
+      }
       if (!res.ok) {
         let error = `http_${res.status}`;
         try {
@@ -321,14 +381,23 @@
         return;
       }
       chatInput.value = '';
+      if (chatFile) {
+        chatFile.value = '';
+      }
+      setFileLabel();
       setStatus('');
       await loadMessages();
     } finally {
       chatSend.disabled = false;
+      if (chatAttach) chatAttach.disabled = false;
     }
   }
 
   chatSend.onclick = sendMessage;
+  if (chatAttach && chatFile) {
+    chatAttach.onclick = () => chatFile.click();
+    chatFile.addEventListener('change', setFileLabel);
+  }
   chatInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();

@@ -192,6 +192,10 @@ class SupportMessage(Base):
     sender_type: Mapped[str] = mapped_column(String(16))
     sender_admin_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     text: Mapped[str] = mapped_column(Text)
+    media_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    media_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    media_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    media_mime_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
     tg_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 

@@ -2,6 +2,7 @@
 
 import secrets
 import base64
+import mimetypes
 import time
 import uuid
 from decimal import Decimal, InvalidOperation
@@ -16,6 +17,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.types import FSInputFile
 
 from app.config import get_settings
 from app.db.models import CreditLedger, Generation, Order, Price, PromoCode, StarProduct, SupportMessage, SupportThread, User
@@ -32,6 +34,9 @@ from app.services.support import SupportService
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico", ".gif", ".bmp", ".avif", ".heic", ".heif", ".jfif"}
 MAX_LOGO_SIZE_BYTES = 15 * 1024 * 1024
+SUPPORT_MEDIA_DIR = "_support_media"
+SUPPORT_MEDIA_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
+MAX_SUPPORT_MEDIA_SIZE_BYTES = 20 * 1024 * 1024
 try:
     from zoneinfo import ZoneInfo
 except ImportError:  # pragma: no cover
@@ -252,6 +257,63 @@ async def _save_favicon_logo(upload: UploadFile, storage_root: str) -> tuple[boo
     file_path = assets_dir / filename
     file_path.write_bytes(content)
     return True, ""
+
+
+def _support_media_root(storage_root: str) -> Path:
+    return Path(storage_root) / SUPPORT_MEDIA_DIR
+
+
+def _support_media_mime(path: Path) -> str:
+    guessed = mimetypes.guess_type(path.name)[0]
+    return guessed or "application/octet-stream"
+
+
+def _resolve_support_media_path(storage_root: str, rel_path: str) -> Path | None:
+    rel = (rel_path or "").strip().replace("\\", "/")
+    if not rel:
+        return None
+    root = _support_media_root(storage_root).resolve()
+    full = (Path(storage_root) / rel).resolve()
+    try:
+        full.relative_to(root)
+    except ValueError:
+        return None
+    if not full.is_file():
+        return None
+    return full
+
+
+def _normalize_support_media_ext(upload: UploadFile) -> str:
+    ext = Path(upload.filename or "").suffix.lower()
+    if ext in SUPPORT_MEDIA_EXTENSIONS:
+        return ext
+    mime_ext = mimetypes.guess_extension((upload.content_type or "").lower())
+    if mime_ext and mime_ext.lower() in SUPPORT_MEDIA_EXTENSIONS:
+        return mime_ext.lower()
+    return ""
+
+
+async def _save_support_media_upload(upload: UploadFile, storage_root: str, thread_id: int) -> tuple[bool, dict, str]:
+    ext = _normalize_support_media_ext(upload)
+    if ext not in SUPPORT_MEDIA_EXTENSIONS:
+        return False, {}, "unsupported_format"
+
+    content = await upload.read()
+    if not content:
+        return False, {}, "empty_file"
+    if len(content) > MAX_SUPPORT_MEDIA_SIZE_BYTES:
+        return False, {}, "file_too_large"
+
+    thread_dir = _support_media_root(storage_root) / str(thread_id)
+    thread_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{uuid.uuid4().hex}{ext}"
+    abs_path = thread_dir / filename
+    abs_path.write_bytes(content)
+
+    rel_path = str(Path(SUPPORT_MEDIA_DIR) / str(thread_id) / filename).replace("\\", "/")
+    source_name = (upload.filename or "").strip() or filename
+    mime_type = (upload.content_type or "").strip() or _support_media_mime(abs_path)
+    return True, {"path": rel_path, "name": source_name, "mime": mime_type}, ""
 
 
 def _get_price_value(price: Price | None, attr: str) -> int:
@@ -1276,11 +1338,29 @@ def create_app() -> FastAPI:
                     "id": msg.id,
                     "sender_type": msg.sender_type,
                     "text": msg.text,
+                    "media_type": msg.media_type,
+                    "media_url": f"/admin/api/chats/media/{msg.id}" if msg.media_path and msg.media_type == "image" else None,
+                    "media_file_name": msg.media_file_name,
                     "created_at": msg.created_at.isoformat(),
                 }
                 for msg in rows.scalars().all()
             ]
         return {"messages": messages}
+
+    @app.get("/admin/api/chats/media/{message_id}")
+    async def admin_chat_media(request: Request, message_id: int):
+        if not _is_logged_in(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        settings = get_settings()
+        async with app.state.sessionmaker() as session:
+            msg = await session.get(SupportMessage, message_id)
+            if not msg or not msg.media_path:
+                return Response(status_code=404)
+            media_file = _resolve_support_media_path(settings.reference_storage_path, msg.media_path)
+            if not media_file:
+                return Response(status_code=404)
+            media_type = (msg.media_mime_type or "").strip() or _support_media_mime(media_file)
+            return FileResponse(path=str(media_file), media_type=media_type)
 
     @app.post("/admin/api/chats/{thread_id}/send")
     async def admin_chats_send(request: Request, thread_id: int, payload: dict = Body(...)):
@@ -1308,11 +1388,74 @@ def create_app() -> FastAPI:
                 default=DefaultBotProperties(parse_mode=ParseMode.HTML),
             )
             try:
-                sent = await bot.send_message(user.telegram_id, text)
+                sent = await bot.send_message(user.telegram_id, text, parse_mode=None)
             finally:
                 await bot.session.close()
 
             await support.add_message(thread, "admin", text, sender_admin_id=0, tg_message_id=sent.message_id)
+            await session.commit()
+
+        return {"ok": True}
+
+    @app.post("/admin/api/chats/{thread_id}/send-media")
+    async def admin_chats_send_media(
+        request: Request,
+        thread_id: int,
+        file: UploadFile | None = File(default=None),
+        caption: str = Form(""),
+    ):
+        if not _is_logged_in(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        if file is None:
+            return JSONResponse({"error": "missing_file"}, status_code=400)
+
+        settings = get_settings()
+        if not settings.support_bot_token:
+            return JSONResponse({"error": "support_bot_missing"}, status_code=400)
+
+        async with app.state.sessionmaker() as session:
+            support = SupportService(session)
+            thread = await support.get_thread(thread_id)
+            if not thread:
+                return JSONResponse({"error": "not_found"}, status_code=404)
+            user = await session.get(User, thread.user_id)
+            if not user:
+                return JSONResponse({"error": "user_not_found"}, status_code=404)
+
+            ok, media_meta, media_error = await _save_support_media_upload(file, settings.reference_storage_path, thread_id)
+            if not ok:
+                return JSONResponse({"error": media_error or "upload_failed"}, status_code=400)
+
+            media_file = _resolve_support_media_path(settings.reference_storage_path, media_meta["path"])
+            if not media_file:
+                return JSONResponse({"error": "upload_failed"}, status_code=400)
+
+            bot = Bot(
+                token=settings.support_bot_token,
+                default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+            )
+            try:
+                sent = await bot.send_photo(
+                    user.telegram_id,
+                    FSInputFile(str(media_file)),
+                    caption=(caption or "").strip() or None,
+                    parse_mode=None,
+                )
+            finally:
+                await bot.session.close()
+
+            text = (caption or "").strip() or "📷 Изображение"
+            await support.add_message(
+                thread,
+                "admin",
+                text,
+                sender_admin_id=0,
+                tg_message_id=sent.message_id,
+                media_type="image",
+                media_path=media_meta["path"],
+                media_file_name=media_meta.get("name"),
+                media_mime_type=media_meta.get("mime"),
+            )
             await session.commit()
 
         return {"ok": True}
