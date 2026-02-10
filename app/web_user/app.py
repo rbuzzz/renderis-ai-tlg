@@ -722,6 +722,20 @@ def create_app() -> FastAPI:
             "credits_added": credits_added,
         }
 
+    @app.api_route("/callback", methods=["POST", "GET", "HEAD"])
+    async def cryptocloud_callback_alias(request: Request):
+        if request.method in {"GET", "HEAD"}:
+            return {"ok": True}
+        return await api_cryptocloud_postback(request)
+
+    @app.get("/successful-payment")
+    async def cryptocloud_successful_payment():
+        return RedirectResponse(url="/?payment=success", status_code=302)
+
+    @app.get("/failed-payment")
+    async def cryptocloud_failed_payment():
+        return RedirectResponse(url="/?payment=failed", status_code=302)
+
     @app.get("/api/models")
     async def api_models(request: Request):
         lang = _get_lang(request)
