@@ -387,8 +387,11 @@
     }
   }
 
-  async function loadMessages() {
+  async function loadMessages(forceScrollToBottom = false) {
     if (!currentThread) return;
+    const prevScrollTop = chatMessages.scrollTop;
+    const wasNearBottom =
+      chatMessages.scrollHeight - (chatMessages.scrollTop + chatMessages.clientHeight) < 40;
     const res = await fetch(`/admin/api/chats/${currentThread}/messages`);
     if (!res.ok) return;
     const data = await res.json();
@@ -415,7 +418,11 @@
       div.appendChild(ts);
       chatMessages.appendChild(div);
     });
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    if (forceScrollToBottom || wasNearBottom) {
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    } else {
+      chatMessages.scrollTop = prevScrollTop;
+    }
   }
 
   async function selectThread(threadId, label, userId) {
@@ -423,7 +430,7 @@
     currentThreadLabel = label || '';
     currentThreadUserId = userId || null;
     renderChatHeader();
-    await loadMessages();
+    await loadMessages(true);
     await loadThreads();
   }
 
@@ -468,7 +475,7 @@
       }
       setFileLabel();
       setStatus('');
-      await loadMessages();
+      await loadMessages(true);
     } finally {
       chatSend.disabled = false;
       if (chatAttach) chatAttach.disabled = false;
