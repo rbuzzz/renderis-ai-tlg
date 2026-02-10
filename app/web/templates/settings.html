@@ -5,6 +5,12 @@
     {% if saved %}
     <div class="notice">Настройки сохранены.</div>
     {% endif %}
+    {% if error %}
+    <div style="color: var(--danger); font-size: 13px; margin-bottom: 8px;">
+      Ошибка загрузки логотипа: {{ error }}.
+      Допустимы изображения PNG/JPG/JPEG/WEBP/SVG/ICO/GIF/BMP/AVIF/HEIC/HEIF/JFIF, размер до {{ logo_max_size_mb }} MB.
+    </div>
+    {% endif %}
     <form method="post" action="/admin/settings" enctype="multipart/form-data">
       <p class="muted" style="margin-top: 6px;">
         Формула: стоимость 1 кредита Renderis (USD) = стоимость 1 звезды (USD) × звезд за 1 кредит.
