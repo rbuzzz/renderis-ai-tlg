@@ -15,6 +15,9 @@
         --line: #2b3f59;
         --danger: #ff7a7a;
       }
+      html {
+        scrollbar-gutter: stable;
+      }
       * { box-sizing: border-box; }
       body {
         margin: 0;
@@ -22,6 +25,7 @@
         background: linear-gradient(120deg, #0f1b2b 0%, #13253b 50%, #0f1b2b 100%);
         color: var(--text);
         padding: 28px;
+        min-height: 100vh;
       }
       a { color: inherit; }
       .topbar {
@@ -29,6 +33,7 @@
         grid-template-columns: auto minmax(0, 1fr) auto;
         align-items: center;
         gap: 16px;
+        margin-top: 0;
         margin-bottom: 24px;
       }
       .brand {
@@ -216,6 +221,11 @@
     </div>
 
     {% block content %}{% endblock %}
+    <script>
+      if ('scrollRestoration' in history) {
+        history.scrollRestoration = 'manual';
+      }
+    </script>
   </body>
 </html>
 
