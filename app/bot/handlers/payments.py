@@ -16,25 +16,31 @@ from app.bot.i18n import get_lang, t, tf
 router = Router()
 
 
-@router.callback_query(F.data == 'pay:buy')
-async def buy_credits(callback: CallbackQuery, session: AsyncSession) -> None:
+async def send_buy_options(message: Message, session: AsyncSession) -> bool:
     service = PaymentsService(session)
     products = await service.list_products()
-    lang = get_lang(callback.from_user)
+    lang = get_lang(message.from_user)
     if not products:
-        await callback.message.answer(t(lang, "payment_packages_missing"))
-        await callback.answer()
-        await safe_cleanup_callback(callback)
-        return
+        await message.answer(t(lang, "payment_packages_missing"))
+        return False
+
     buttons = []
     for p in products:
-        buttons.append([
-            InlineKeyboardButton(
-                text=f'{p.title} - {p.stars_amount} звезд',
-                callback_data=f'pay:product:{p.id}',
-            )
-        ])
-    await callback.message.answer(t(lang, "payment_choose"), reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{p.title} - {p.stars_amount} звезд",
+                    callback_data=f"pay:product:{p.id}",
+                )
+            ]
+        )
+    await message.answer(t(lang, "payment_choose"), reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+    return True
+
+
+@router.callback_query(F.data == 'pay:buy')
+async def buy_credits(callback: CallbackQuery, session: AsyncSession) -> None:
+    await send_buy_options(callback.message, session)
     await callback.answer()
     await safe_cleanup_callback(callback)
 

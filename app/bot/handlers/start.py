@@ -1,11 +1,12 @@
 ﻿from __future__ import annotations
 
 from aiogram import F, Router
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandObject
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.handlers.payments import send_buy_options
 from app.bot.i18n import get_lang, t, tf
 from app.bot.keyboards.main import main_menu
 from app.bot.utils import safe_cleanup_callback
@@ -19,7 +20,7 @@ router = Router()
 
 
 @router.message(Command('start'))
-async def cmd_start(message: Message, session: AsyncSession) -> None:
+async def cmd_start(message: Message, session: AsyncSession, command: CommandObject) -> None:
     settings = get_settings()
     credits = CreditsService(session)
     user = await credits.ensure_user(message.from_user.id, message.from_user.username, message.from_user.id in settings.admin_ids())
@@ -36,6 +37,10 @@ async def cmd_start(message: Message, session: AsyncSession) -> None:
     if bonus_applied:
         text += f"\n{tf(lang, 'start_bonus', credits=settings.signup_bonus_credits)}"
     await message.answer(text, reply_markup=main_menu(lang))
+
+    start_arg = (command.args or "").strip().lower()
+    if start_arg in {"buy", "topup", "stars"}:
+        await send_buy_options(message, session)
 
 
 @router.callback_query(F.data == 'help')

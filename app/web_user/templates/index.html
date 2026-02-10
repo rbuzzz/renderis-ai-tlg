@@ -115,6 +115,60 @@
         background: rgba(64, 212, 154, 0.18);
         border: 1px solid rgba(64, 212, 154, 0.4);
       }
+      .topup-menu {
+        position: relative;
+      }
+      .topup-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 1px solid #3a556f;
+        background: linear-gradient(135deg, #1a2f4b 0%, #13253b 100%);
+        color: var(--text);
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      .topup-dropdown {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 8px);
+        width: 220px;
+        border-radius: 14px;
+        border: 1px solid #2a3d57;
+        background: #0f1b2b;
+        padding: 6px;
+        display: none;
+        z-index: 30;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+        transform-origin: top right;
+        animation: menu-in 0.16s ease;
+      }
+      .topup-dropdown.open {
+        display: block;
+      }
+      .topup-item {
+        width: 100%;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--text);
+        padding: 10px 12px;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      .topup-item:hover {
+        background: #162640;
+        border-color: #2a3d57;
+      }
+      @keyframes menu-in {
+        from { opacity: 0; transform: scale(0.96); }
+        to { opacity: 1; transform: scale(1); }
+      }
       .user-menu {
         position: relative;
       }
@@ -671,6 +725,64 @@
         font-size: 11px;
         color: var(--muted);
       }
+      .topup-modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(5, 11, 19, 0.72);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        z-index: 60;
+      }
+      .topup-modal.open {
+        display: flex;
+      }
+      .topup-modal-card {
+        width: min(560px, 100%);
+        border-radius: 18px;
+        border: 1px solid #2a3d57;
+        background: #111f33;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+        overflow: hidden;
+        animation: modal-in 0.18s ease;
+      }
+      .topup-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 14px 16px;
+        border-bottom: 1px solid #243652;
+      }
+      .topup-modal-title {
+        font-size: 18px;
+        font-weight: 700;
+      }
+      .topup-modal-close {
+        width: 32px;
+        height: 32px;
+        border-radius: 10px;
+        border: 1px solid #2a3d57;
+        background: #0f1b2b;
+        color: var(--text);
+        cursor: pointer;
+        font-size: 18px;
+        line-height: 1;
+      }
+      .topup-modal-body {
+        padding: 16px;
+      }
+      .topup-section {
+        display: none;
+      }
+      .topup-section.active {
+        display: block;
+      }
+      @keyframes modal-in {
+        from { opacity: 0; transform: translateY(10px) scale(0.98); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
       @media (max-width: 980px) {
         body {
           padding: 14px;
@@ -693,7 +805,14 @@
         .lang-menu {
           width: 100%;
         }
+        .topup-menu {
+          width: 100%;
+        }
         .lang-button {
+          width: 100%;
+          justify-content: space-between;
+        }
+        .topup-button {
           width: 100%;
           justify-content: space-between;
         }
@@ -701,6 +820,10 @@
           right: 0;
           top: calc(100% + 6px);
           min-width: 100%;
+        }
+        .topup-dropdown {
+          right: 0;
+          width: 100%;
         }
         .balance {
           width: 100%;
@@ -853,6 +976,17 @@
         </div>
         {% if logged_in %}
           <div class="balance" id="balanceLabel">--</div>
+          <div class="topup-menu" id="topupMenu">
+            <button class="topup-button" id="topupButton" type="button" aria-haspopup="true" aria-expanded="false">
+              <span>💳 {{ labels['topup_button'] }}</span>
+              <span class="user-caret">▾</span>
+            </button>
+            <div class="topup-dropdown" id="topupDropdown">
+              <button class="topup-item" id="topupRedeemOption" type="button">🎟️ {{ labels['topup_redeem_option'] }}</button>
+              <button class="topup-item" id="topupStarsOption" type="button">⭐ {{ labels['topup_stars_option'] }}</button>
+              <button class="topup-item" id="topupCryptoOption" type="button">🪙 {{ labels['topup_crypto_option'] }}</button>
+            </div>
+          </div>
           <div class="user-menu" id="userMenu">
             <button class="user-button" id="userButton" type="button" aria-haspopup="true" aria-expanded="false">
               <div class="user-avatar" id="userAvatar">R</div>
@@ -936,49 +1070,45 @@
       </div>
     </div>
 
-    <div class="panel redeem-panel" style="margin-top: 20px;">
-      <button class="redeem-toggle" id="promoToggle" type="button" aria-expanded="false" aria-controls="promoContent">
-        <span class="redeem-title">{{ labels['redeem'] }}</span>
-        <span class="redeem-chevron" aria-hidden="true">▾</span>
-      </button>
-      <div class="redeem-content" id="promoContent">
-        <div class="redeem-content-inner">
-          <div class="redeem-row">
-            <input id="promoInput" type="text" class="promo-input" placeholder="{{ labels['redeem_placeholder'] }}" />
-            <button id="promoBtn" class="promo-btn">{{ labels['redeem_button'] }}</button>
+    {% if logged_in %}
+      <div class="topup-modal" id="topupModal" aria-hidden="true">
+        <div class="topup-modal-card" role="dialog" aria-modal="true" aria-labelledby="topupModalTitle">
+          <div class="topup-modal-header">
+            <div class="topup-modal-title" id="topupModalTitle"></div>
+            <button class="topup-modal-close" id="topupModalClose" type="button" aria-label="Close">×</button>
           </div>
-          <div class="status" id="promoStatus"></div>
+          <div class="topup-modal-body">
+            <div class="topup-section" id="topupSectionRedeem">
+              <div class="redeem-row">
+                <input id="promoInput" type="text" class="promo-input" placeholder="{{ labels['redeem_placeholder'] }}" />
+                <button id="promoBtn" class="promo-btn">{{ labels['redeem_button'] }}</button>
+              </div>
+              <div class="status" id="promoStatus"></div>
+            </div>
+            <div class="topup-section" id="topupSectionCrypto">
+              <div class="crypto-row">
+                <select id="cryptoPackage" class="crypto-select" aria-label="{{ labels['crypto_select_package'] }}"></select>
+                <button id="cryptoCreateBtn" class="promo-btn" type="button">{{ labels['crypto_create_invoice'] }}</button>
+              </div>
+              <div class="crypto-actions">
+                <a id="cryptoPayLink" class="action-btn" href="#" target="_blank" rel="noopener" style="display:none;">
+                  💸 {{ labels['crypto_open_invoice'] }}
+                </a>
+                <button id="cryptoCheckBtn" class="action-btn" type="button" disabled>
+                  🔄 {{ labels['crypto_check_status'] }}
+                </button>
+              </div>
+              <div class="status" id="cryptoStatus"></div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-
-    <div class="panel redeem-panel" style="margin-top: 14px;">
-      <button class="redeem-toggle" id="cryptoToggle" type="button" aria-expanded="false" aria-controls="cryptoContent">
-        <span class="redeem-title">{{ labels['crypto_title'] }}</span>
-        <span class="redeem-chevron" aria-hidden="true">▾</span>
-      </button>
-      <div class="redeem-content" id="cryptoContent">
-        <div class="redeem-content-inner">
-          <div class="crypto-row">
-            <select id="cryptoPackage" class="crypto-select" aria-label="{{ labels['crypto_select_package'] }}"></select>
-            <button id="cryptoCreateBtn" class="promo-btn" type="button">{{ labels['crypto_create_invoice'] }}</button>
-          </div>
-          <div class="crypto-actions">
-            <a id="cryptoPayLink" class="action-btn" href="#" target="_blank" rel="noopener" style="display:none;">
-              💸 {{ labels['crypto_open_invoice'] }}
-            </a>
-            <button id="cryptoCheckBtn" class="action-btn" type="button" disabled>
-              🔄 {{ labels['crypto_check_status'] }}
-            </button>
-          </div>
-          <div class="status" id="cryptoStatus"></div>
-        </div>
-      </div>
-    </div>
+    {% endif %}
 
     <script>
       const labels = {{ labels | tojson }};
       const loggedIn = {{ 'true' if logged_in else 'false' }};
+      const botUsername = {{ bot_username | tojson }};
       let models = [];
       let currentModel = null;
       let optionsState = {};
@@ -1054,6 +1184,20 @@
 
       function setCryptoStatus(message, state = '') {
         const status = document.getElementById('cryptoStatus');
+        if (!status) return;
+        status.textContent = message || '';
+        status.classList.remove('error', 'success');
+        if (state === 'error') {
+          status.classList.add('error');
+        }
+        if (state === 'success') {
+          status.classList.add('success');
+        }
+      }
+
+      function setPromoStatus(message, state = '') {
+        const status = document.getElementById('promoStatus');
+        if (!status) return;
         status.textContent = message || '';
         status.classList.remove('error', 'success');
         if (state === 'error') {
@@ -1081,6 +1225,7 @@
 
       function fillCryptoPackages() {
         const select = document.getElementById('cryptoPackage');
+        if (!select) return;
         select.innerHTML = '';
         if (!cryptoPackages.length) {
           const option = document.createElement('option');
@@ -1088,11 +1233,13 @@
           option.textContent = labels.crypto_packages_empty;
           select.appendChild(option);
           select.disabled = true;
-          document.getElementById('cryptoCreateBtn').disabled = true;
+          const createBtn = document.getElementById('cryptoCreateBtn');
+          if (createBtn) createBtn.disabled = true;
           return;
         }
         select.disabled = false;
-        document.getElementById('cryptoCreateBtn').disabled = false;
+        const createBtn = document.getElementById('cryptoCreateBtn');
+        if (createBtn) createBtn.disabled = false;
         cryptoPackages.forEach((item) => {
           const option = document.createElement('option');
           option.value = String(item.id);
@@ -1104,6 +1251,7 @@
       async function loadCryptoPackages() {
         const payLink = document.getElementById('cryptoPayLink');
         const checkBtn = document.getElementById('cryptoCheckBtn');
+        if (!payLink || !checkBtn) return;
         if (!loggedIn) {
           cryptoPackages = [];
           fillCryptoPackages();
@@ -1502,20 +1650,20 @@
 
       async function redeemPromo() {
         const input = document.getElementById('promoInput');
+        if (!input) return;
         const code = input.value.trim();
         if (!code) return;
         const form = new FormData();
         form.append('code', code);
         const res = await fetch('/api/redeem', { method: 'POST', body: form });
-        const status = document.getElementById('promoStatus');
         if (res.ok) {
           const data = await res.json();
-          status.textContent = `${labels.promo_added}: ${data.added || 0}`;
+          setPromoStatus(`${labels.promo_added}: ${data.added || 0}`, 'success');
           input.value = '';
           await loadMe();
         } else {
           const data = await res.json();
-          status.textContent = `${labels.promo_error}: ${data.error || 'unknown'}`;
+          setPromoStatus(`${labels.promo_error}: ${data.error || 'unknown'}`, 'error');
         }
       }
 
@@ -1525,6 +1673,7 @@
           return;
         }
         const select = document.getElementById('cryptoPackage');
+        if (!select) return;
         const productId = Number(select.value || 0);
         if (!productId) {
           setCryptoStatus(labels.crypto_packages_empty, 'error');
@@ -1534,6 +1683,7 @@
         const createBtn = document.getElementById('cryptoCreateBtn');
         const payLink = document.getElementById('cryptoPayLink');
         const checkBtn = document.getElementById('cryptoCheckBtn');
+        if (!createBtn || !payLink || !checkBtn) return;
         createBtn.disabled = true;
         setCryptoStatus(labels.crypto_loading_packages);
 
@@ -1632,25 +1782,83 @@
         }
       }
 
-      const promoToggle = document.getElementById('promoToggle');
-      const promoContent = document.getElementById('promoContent');
-      promoToggle.onclick = () => {
-        const expanded = promoToggle.getAttribute('aria-expanded') === 'true';
-        promoToggle.setAttribute('aria-expanded', String(!expanded));
-        promoContent.classList.toggle('open', !expanded);
-      };
-      const cryptoToggle = document.getElementById('cryptoToggle');
-      const cryptoContent = document.getElementById('cryptoContent');
-      cryptoToggle.onclick = () => {
-        const expanded = cryptoToggle.getAttribute('aria-expanded') === 'true';
-        cryptoToggle.setAttribute('aria-expanded', String(!expanded));
-        cryptoContent.classList.toggle('open', !expanded);
-      };
+      const topupMenu = document.getElementById('topupMenu');
+      const topupButton = document.getElementById('topupButton');
+      const topupDropdown = document.getElementById('topupDropdown');
+      const topupRedeemOption = document.getElementById('topupRedeemOption');
+      const topupStarsOption = document.getElementById('topupStarsOption');
+      const topupCryptoOption = document.getElementById('topupCryptoOption');
+      const topupModal = document.getElementById('topupModal');
+      const topupModalClose = document.getElementById('topupModalClose');
+      const topupModalTitle = document.getElementById('topupModalTitle');
+      const topupSectionRedeem = document.getElementById('topupSectionRedeem');
+      const topupSectionCrypto = document.getElementById('topupSectionCrypto');
+
+      function closeTopupDropdown() {
+        if (!topupDropdown) return;
+        topupDropdown.classList.remove('open');
+        if (topupButton) {
+          topupButton.setAttribute('aria-expanded', 'false');
+        }
+      }
+
+      function openTopupModal(mode) {
+        if (!topupModal || !topupModalTitle || !topupSectionRedeem || !topupSectionCrypto) return;
+        closeTopupDropdown();
+        topupModal.classList.add('open');
+        topupModal.setAttribute('aria-hidden', 'false');
+        topupSectionRedeem.classList.remove('active');
+        topupSectionCrypto.classList.remove('active');
+        if (mode === 'redeem') {
+          topupModalTitle.textContent = labels.topup_modal_redeem_title;
+          topupSectionRedeem.classList.add('active');
+          setPromoStatus('');
+          const input = document.getElementById('promoInput');
+          if (input) {
+            setTimeout(() => input.focus(), 60);
+          }
+          return;
+        }
+        topupModalTitle.textContent = labels.topup_modal_crypto_title;
+        topupSectionCrypto.classList.add('active');
+        setCryptoStatus('');
+        void loadCryptoPackages();
+      }
+
+      function closeTopupModal() {
+        if (!topupModal) return;
+        topupModal.classList.remove('open');
+        topupModal.setAttribute('aria-hidden', 'true');
+      }
+
+      function openTelegramStarsTopup() {
+        closeTopupDropdown();
+        if (!botUsername) {
+          openTopupModal('redeem');
+          setPromoStatus(labels.topup_stars_unavailable, 'error');
+          return;
+        }
+        const deepLink = `https://t.me/${botUsername}?start=buy`;
+        const runStatus = document.getElementById('runStatus');
+        if (runStatus) {
+          runStatus.textContent = labels.topup_stars_redirect;
+        }
+        window.location.href = deepLink;
+      }
 
       document.getElementById('runBtn').onclick = runGeneration;
-      document.getElementById('promoBtn').onclick = redeemPromo;
-      document.getElementById('cryptoCreateBtn').onclick = createCryptoInvoice;
-      document.getElementById('cryptoCheckBtn').onclick = () => checkCryptoStatus(true);
+      const promoBtn = document.getElementById('promoBtn');
+      if (promoBtn) {
+        promoBtn.onclick = redeemPromo;
+      }
+      const cryptoCreateBtn = document.getElementById('cryptoCreateBtn');
+      if (cryptoCreateBtn) {
+        cryptoCreateBtn.onclick = createCryptoInvoice;
+      }
+      const cryptoCheckBtn = document.getElementById('cryptoCheckBtn');
+      if (cryptoCheckBtn) {
+        cryptoCheckBtn.onclick = () => checkCryptoStatus(true);
+      }
       document.getElementById('thumbsPrev').onclick = (e) => {
         e.preventDefault();
         if (thumbsPage <= 0) return;
@@ -1666,10 +1874,49 @@
         renderThumbs(galleryItems[galleryIndex] || null, false);
         window.requestAnimationFrame(() => window.scrollTo({ top: currentScrollY, left: 0 }));
       };
-      document.getElementById('promoInput').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          redeemPromo();
+      const promoInputEl = document.getElementById('promoInput');
+      if (promoInputEl) {
+        promoInputEl.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            redeemPromo();
+          }
+        });
+      }
+      if (topupButton && topupDropdown) {
+        topupButton.addEventListener('click', (event) => {
+          event.stopPropagation();
+          const open = !topupDropdown.classList.contains('open');
+          closeTopDropdowns();
+          if (open) {
+            topupDropdown.classList.add('open');
+            topupButton.setAttribute('aria-expanded', 'true');
+          }
+        });
+      }
+      if (topupRedeemOption) {
+        topupRedeemOption.addEventListener('click', () => openTopupModal('redeem'));
+      }
+      if (topupStarsOption) {
+        topupStarsOption.addEventListener('click', openTelegramStarsTopup);
+      }
+      if (topupCryptoOption) {
+        topupCryptoOption.addEventListener('click', () => openTopupModal('crypto'));
+      }
+      if (topupModalClose) {
+        topupModalClose.addEventListener('click', closeTopupModal);
+      }
+      if (topupModal) {
+        topupModal.addEventListener('click', (event) => {
+          if (event.target === topupModal) {
+            closeTopupModal();
+          }
+        });
+      }
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          closeTopupModal();
+          closeTopDropdowns();
         }
       });
       window.addEventListener('resize', () => {
@@ -1777,7 +2024,6 @@
 
       loadMe();
       loadModels();
-      loadCryptoPackages();
       loadHistory();
       setInterval(loadHistory, 15000);
       let quoteTimer = null;
@@ -1852,6 +2098,12 @@
         }
         if (langButton) {
           langButton.setAttribute('aria-expanded', 'false');
+        }
+        if (topupDropdown) {
+          topupDropdown.classList.remove('open');
+        }
+        if (topupButton) {
+          topupButton.setAttribute('aria-expanded', 'false');
         }
       }
 
