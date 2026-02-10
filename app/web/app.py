@@ -1251,6 +1251,9 @@ def create_app() -> FastAPI:
                 threads.append(
                     {
                         "id": thread.id,
+                        "user_id": user.id,
+                        "telegram_id": user.telegram_id,
+                        "username": user.username or "",
                         "user_label": label,
                         "last_message_at": thread.last_message_at.isoformat(),
                         "status": thread.status,

@@ -25,6 +25,29 @@
     border-bottom: 1px solid var(--line);
     font-weight: 700;
   }
+  .chat-pane header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .chat-header-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .chat-user-link {
+    font-size: 12px;
+    color: var(--muted);
+    text-decoration: none;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
+  .chat-user-link:hover {
+    color: var(--text);
+    text-decoration: none;
+  }
   .chat-items {
     overflow-y: auto;
     flex: 1;
@@ -150,6 +173,8 @@
   const chatSend = document.getElementById('chatSend');
   const chatStatus = document.getElementById('chatStatus');
   let currentThread = null;
+  let currentThreadUserId = null;
+  let currentThreadLabel = '';
 
   function setStatus(text, isError = false) {
     if (!chatStatus) return;
@@ -161,6 +186,28 @@
     if (!value) return '';
     const d = new Date(value);
     return d.toLocaleString();
+  }
+
+  function renderChatHeader() {
+    chatHeader.innerHTML = '';
+    if (!currentThread) {
+      chatHeader.textContent = 'Выберите чат';
+      return;
+    }
+    const title = document.createElement('span');
+    title.textContent = `Чат: ${currentThreadLabel}`;
+    chatHeader.appendChild(title);
+
+    if (currentThreadUserId) {
+      const meta = document.createElement('div');
+      meta.className = 'chat-header-meta';
+      const link = document.createElement('a');
+      link.className = 'chat-user-link';
+      link.href = `/admin/users/${currentThreadUserId}`;
+      link.textContent = 'Профиль пользователя';
+      meta.appendChild(link);
+      chatHeader.appendChild(meta);
+    }
   }
 
   async function loadThreads() {
@@ -188,8 +235,23 @@
     threads.forEach((t) => {
       const div = document.createElement('div');
       div.className = 'chat-item' + (currentThread === t.id ? ' active' : '');
-      div.innerHTML = `<strong>${t.user_label}</strong><small>${fmtTime(t.last_message_at)}</small>`;
-      div.onclick = () => selectThread(t.id, t.user_label);
+      const title = document.createElement('strong');
+      title.textContent = t.user_label;
+      const time = document.createElement('small');
+      time.textContent = fmtTime(t.last_message_at);
+      div.appendChild(title);
+      div.appendChild(time);
+      if (t.user_id) {
+        const profileLine = document.createElement('small');
+        const profileLink = document.createElement('a');
+        profileLink.className = 'row-link';
+        profileLink.href = `/admin/users/${t.user_id}`;
+        profileLink.textContent = 'Профиль';
+        profileLink.onclick = (e) => e.stopPropagation();
+        profileLine.appendChild(profileLink);
+        div.appendChild(profileLine);
+      }
+      div.onclick = () => selectThread(t.id, t.user_label, t.user_id);
       chatItems.appendChild(div);
     });
     if (!threads.length) {
@@ -204,7 +266,7 @@
     const requested = urlParams.get('thread');
     if (!currentThread && threads.length) {
       const pick = requested ? threads.find((t) => String(t.id) === String(requested)) : threads[0];
-      if (pick) selectThread(pick.id, pick.user_label);
+      if (pick) selectThread(pick.id, pick.user_label, pick.user_id);
     }
   }
 
@@ -227,9 +289,11 @@
     chatMessages.scrollTop = chatMessages.scrollHeight;
   }
 
-  async function selectThread(threadId, label) {
+  async function selectThread(threadId, label, userId) {
     currentThread = threadId;
-    chatHeader.textContent = `Чат: ${label}`;
+    currentThreadLabel = label || '';
+    currentThreadUserId = userId || null;
+    renderChatHeader();
     await loadMessages();
     await loadThreads();
   }
