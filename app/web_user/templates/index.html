@@ -1326,28 +1326,66 @@
         return Number.isFinite(number) ? number : fallback;
       }
 
-      function getCryptoBaselineRate() {
-        if (!cryptoPackages.length) return 0;
-        const rates = cryptoPackages
-          .map((item) => toFiniteNumber(item.usd_per_credit, 0))
-          .filter((value) => value > 0);
-        if (!rates.length) return 0;
-        return Math.max(...rates);
+      function getCryptoPackageCredits(item) {
+        return Math.max(0, Math.round(toFiniteNumber(item.credits_amount, 0)));
       }
 
-      function getCryptoBestValueId() {
+      function getCryptoPackageCents(item) {
+        return Math.max(0, Math.round(toFiniteNumber(item.amount, 0) * 100));
+      }
+
+      function getCryptoPackageRate(item) {
+        const credits = getCryptoPackageCredits(item);
+        if (credits <= 0) return 0;
+        return getCryptoPackageCents(item) / credits;
+      }
+
+      function compareCryptoRates(a, b) {
+        const creditsA = getCryptoPackageCredits(a);
+        const creditsB = getCryptoPackageCredits(b);
+        const centsA = getCryptoPackageCents(a);
+        const centsB = getCryptoPackageCents(b);
+        if (creditsA <= 0 && creditsB <= 0) return 0;
+        if (creditsA <= 0) return 1;
+        if (creditsB <= 0) return -1;
+        const left = centsA * creditsB;
+        const right = centsB * creditsA;
+        if (left < right) return -1;
+        if (left > right) return 1;
+        return 0;
+      }
+
+      function getCryptoBaselineRate() {
         if (!cryptoPackages.length) return 0;
-        let bestId = 0;
-        let bestRate = Infinity;
+        let worst = null;
         cryptoPackages.forEach((item) => {
-          const rate = toFiniteNumber(item.usd_per_credit, 0);
-          if (rate > 0 && rate < bestRate) {
-            bestRate = rate;
-            bestId = Number(item.id || 0);
+          if (getCryptoPackageCredits(item) <= 0) return;
+          if (!worst || compareCryptoRates(item, worst) > 0) {
+            worst = item;
           }
         });
-        if (bestId) return bestId;
-        return Number(cryptoPackages[0].id || 0);
+        if (!worst) return 0;
+        return getCryptoPackageRate(worst);
+      }
+
+      function getCryptoBestValueSet() {
+        const ids = new Set();
+        if (!cryptoPackages.length) return ids;
+        let best = null;
+        cryptoPackages.forEach((item) => {
+          if (getCryptoPackageCredits(item) <= 0) return;
+          if (!best || compareCryptoRates(item, best) < 0) {
+            best = item;
+          }
+        });
+        if (!best) return ids;
+        cryptoPackages.forEach((item) => {
+          if (getCryptoPackageCredits(item) <= 0) return;
+          if (compareCryptoRates(item, best) === 0) {
+            ids.add(Number(item.id || 0));
+          }
+        });
+        return ids;
       }
 
       function renderCryptoPackageCards() {
@@ -1359,7 +1397,7 @@
 
         const selectedId = Number(select.value || cryptoPackages[0].id || 0);
         const baselineRate = getCryptoBaselineRate();
-        const bestValueId = getCryptoBestValueId();
+        const bestValueSet = getCryptoBestValueSet();
 
         cryptoPackages.forEach((item) => {
           const card = document.createElement('button');
@@ -1372,7 +1410,7 @@
 
           const badges = document.createElement('div');
           badges.className = 'crypto-package-badges';
-          if (Number(item.id) === bestValueId) {
+          if (bestValueSet.has(Number(item.id || 0))) {
             const best = document.createElement('span');
             best.className = 'crypto-badge best';
             best.textContent = labels.crypto_best_value;
@@ -1387,7 +1425,7 @@
             badges.appendChild(bonusBadge);
           }
 
-          const rate = toFiniteNumber(item.usd_per_credit, 0);
+          const rate = getCryptoPackageRate(item);
           if (baselineRate > 0 && rate > 0 && rate < baselineRate) {
             const savePct = Math.round(((baselineRate - rate) / baselineRate) * 100);
             if (savePct > 0) {
