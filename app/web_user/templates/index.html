@@ -1337,21 +1337,18 @@
       function getCryptoPackageRate(item) {
         const credits = getCryptoPackageCredits(item);
         if (credits <= 0) return 0;
-        return getCryptoPackageCents(item) / credits;
+        const rawRate = getCryptoPackageCents(item) / credits;
+        return Math.round(rawRate * 1000) / 1000;
       }
 
       function compareCryptoRates(a, b) {
-        const creditsA = getCryptoPackageCredits(a);
-        const creditsB = getCryptoPackageCredits(b);
-        const centsA = getCryptoPackageCents(a);
-        const centsB = getCryptoPackageCents(b);
-        if (creditsA <= 0 && creditsB <= 0) return 0;
-        if (creditsA <= 0) return 1;
-        if (creditsB <= 0) return -1;
-        const left = centsA * creditsB;
-        const right = centsB * creditsA;
-        if (left < right) return -1;
-        if (left > right) return 1;
+        const rateA = getCryptoPackageRate(a);
+        const rateB = getCryptoPackageRate(b);
+        if (rateA <= 0 && rateB <= 0) return 0;
+        if (rateA <= 0) return 1;
+        if (rateB <= 0) return -1;
+        if (rateA < rateB) return -1;
+        if (rateA > rateB) return 1;
         return 0;
       }
 
