@@ -162,7 +162,6 @@ async def support_templates(callback: CallbackQuery, session: AsyncSession) -> N
         return
     await callback.message.answer("Шаблоны пока не настроены.")
     await callback.answer()
-    await safe_cleanup_callback(callback)
 
 
 @router.callback_query(F.data == "support:reply_cancel")
@@ -200,7 +199,6 @@ async def support_reply(callback: CallbackQuery, state: FSMContext, session: Asy
     )
     await state.update_data(support_thread_id=thread_id, support_prompt_id=prompt.message_id)
     await callback.answer()
-    await safe_cleanup_callback(callback)
 
 
 @router.message(AdminFlow.support_reply)
