@@ -59,8 +59,8 @@
       .subtitle { color: var(--muted); font-size: 14px; margin-top: 4px; }
       .top-actions {
         display: flex;
-        align-items: center;
-        gap: 12px;
+        align-items: stretch;
+        gap: 10px;
       }
       .lang-menu {
         position: relative;
@@ -68,15 +68,18 @@
       .lang-button {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
-        padding: 8px 12px;
+        justify-content: center;
+        gap: 10px;
+        min-height: 54px;
+        padding: 0 18px;
         border-radius: 999px;
         border: 1px solid #2a3d57;
         background: #0f1b2b;
         color: var(--text);
         cursor: pointer;
         font-weight: 600;
-        font-size: 13px;
+        font-size: 15px;
+        line-height: 1;
         white-space: nowrap;
       }
       .lang-name {
@@ -87,7 +90,7 @@
       .lang-dropdown {
         position: absolute;
         right: 0;
-        top: 46px;
+        top: calc(100% + 8px);
         min-width: 180px;
         max-height: 260px;
         overflow-y: auto;
@@ -121,15 +124,18 @@
       .topup-button {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
-        padding: 8px 14px;
+        justify-content: center;
+        gap: 10px;
+        min-height: 54px;
+        padding: 0 18px;
         border-radius: 999px;
-        border: 1px solid #3a556f;
+        border: 1px solid #2a3d57;
         background: linear-gradient(135deg, #1a2f4b 0%, #13253b 100%);
         color: var(--text);
         cursor: pointer;
         font-weight: 700;
-        font-size: 13px;
+        font-size: 15px;
+        line-height: 1;
         white-space: nowrap;
       }
       .topup-dropdown {
@@ -175,18 +181,22 @@
       .user-button {
         display: inline-flex;
         align-items: center;
+        justify-content: center;
         gap: 10px;
-        padding: 6px 10px;
+        min-height: 54px;
+        padding: 0 14px;
         border-radius: 999px;
         border: 1px solid #2a3d57;
         background: #0f1b2b;
         color: var(--text);
         cursor: pointer;
-        font-weight: 600;
+        font-weight: 700;
+        font-size: 15px;
+        line-height: 1;
       }
       .user-avatar {
-        width: 32px;
-        height: 32px;
+        width: 36px;
+        height: 36px;
         border-radius: 50%;
         background: #1b2b45;
         border: 1px solid #2b3f59;
@@ -200,7 +210,7 @@
         background-position: center;
       }
       .user-name {
-        font-size: 14px;
+        font-size: 15px;
         white-space: nowrap;
         max-width: 180px;
         overflow: hidden;
@@ -213,7 +223,7 @@
       .user-dropdown {
         position: absolute;
         right: 0;
-        top: 46px;
+        top: calc(100% + 8px);
         min-width: 160px;
         background: #0f1b2b;
         border: 1px solid #2a3d57;
@@ -242,11 +252,19 @@
         padding: 6px 10px;
       }
       .balance {
-        background: var(--card);
-        border: 1px solid var(--line);
-        padding: 8px 14px;
-        border-radius: 12px;
-        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 54px;
+        padding: 0 20px;
+        border-radius: 999px;
+        background: #15243a;
+        border: 1px solid #2a3d57;
+        color: var(--text);
+        font-weight: 700;
+        font-size: 15px;
+        line-height: 1;
+        white-space: nowrap;
       }
       .logout {
         color: var(--muted);
@@ -827,7 +845,7 @@
         }
         .balance {
           width: 100%;
-          text-align: center;
+          justify-content: center;
         }
         .user-menu {
           width: 100%;
