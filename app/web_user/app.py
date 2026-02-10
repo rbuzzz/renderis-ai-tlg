@@ -200,6 +200,31 @@ def _base_public_url(url: str) -> str:
     return base
 
 
+async def _proxy_admin_asset(settings, path: str, is_head: bool) -> Response | None:
+    if not settings.admin_web_public_url:
+        return None
+    base = _base_public_url(settings.admin_web_public_url)
+    if not base:
+        return None
+    url = f"{base}{path}"
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            resp = await client.head(url) if is_head else await client.get(url)
+    except Exception:
+        return None
+    if resp.status_code != 200:
+        return None
+
+    content_type = resp.headers.get("content-type", "application/octet-stream")
+    cache_control = resp.headers.get("cache-control")
+    headers = {}
+    if cache_control:
+        headers["Cache-Control"] = cache_control
+    if is_head:
+        return Response(status_code=200, media_type=content_type, headers=headers)
+    return Response(content=resp.content, status_code=200, media_type=content_type, headers=headers)
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="Renderis User")
@@ -298,25 +323,36 @@ def create_app() -> FastAPI:
         return RedirectResponse(url=next_url, status_code=302)
 
     @app.api_route("/assets/site-logo", methods=["GET", "HEAD"])
-    async def user_site_logo():
+    async def user_site_logo(request: Request):
         logo_path = _find_site_logo_file(settings.reference_storage_path)
         if logo_path:
             return FileResponse(path=str(logo_path))
-        if settings.admin_web_public_url:
-            base = _base_public_url(settings.admin_web_public_url)
-            if base:
-                return RedirectResponse(url=f"{base}/assets/site-logo", status_code=307)
+        proxied = await _proxy_admin_asset(settings, "/assets/site-logo", request.method == "HEAD")
+        if proxied is not None:
+            return proxied
+        return JSONResponse({"error": "not_found"}, status_code=404)
+
+    @app.api_route("/assets/favicon-logo", methods=["GET", "HEAD"])
+    async def user_favicon_logo(request: Request):
+        logo_path = _find_favicon_logo_file(settings.reference_storage_path)
+        if logo_path:
+            return FileResponse(path=str(logo_path))
+        proxied = await _proxy_admin_asset(settings, "/assets/favicon-logo", request.method == "HEAD")
+        if proxied is not None:
+            return proxied
         return JSONResponse({"error": "not_found"}, status_code=404)
 
     @app.api_route("/favicon.svg", methods=["GET", "HEAD"])
-    async def user_favicon_svg():
+    async def user_favicon_svg(request: Request):
+        is_head = request.method == "HEAD"
         svg = _rounded_favicon_svg(settings.reference_storage_path)
         if svg:
+            if is_head:
+                return Response(status_code=200, media_type="image/svg+xml", headers={"Cache-Control": "no-cache"})
             return Response(content=svg, media_type="image/svg+xml", headers={"Cache-Control": "no-cache"})
-        if settings.admin_web_public_url:
-            base = _base_public_url(settings.admin_web_public_url)
-            if base:
-                return RedirectResponse(url=f"{base}/favicon.svg", status_code=307)
+        proxied = await _proxy_admin_asset(settings, "/favicon.svg", is_head)
+        if proxied is not None:
+            return proxied
         return Response(status_code=404)
 
     @app.api_route("/favicon.ico", methods=["GET", "HEAD"])
