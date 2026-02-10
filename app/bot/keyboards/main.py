@@ -14,6 +14,7 @@ def main_menu(lang: str = "ru") -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=t(lang, "menu_buy"), callback_data='pay:buy')],
             [InlineKeyboardButton(text=t(lang, "menu_prices"), callback_data='prices:list')],
             [InlineKeyboardButton(text=t(lang, "menu_history"), callback_data='history:list')],
+            [InlineKeyboardButton(text=t(lang, "menu_settings"), callback_data='settings:open')],
             [InlineKeyboardButton(text=t(lang, "menu_help"), callback_data='help')],
         ]
     )
@@ -34,6 +35,30 @@ def promo_input_menu(lang: str = "ru") -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=t(lang, "payment_promo_cancel"), callback_data='pay:topup:promo:cancel')],
         ]
     )
+
+
+def settings_menu(lang: str = "ru") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t(lang, "settings_language"), callback_data='settings:language')],
+            [InlineKeyboardButton(text=t(lang, "settings_back"), callback_data='settings:back')],
+        ]
+    )
+
+
+def language_menu(current_lang: str, lang: str = "ru", include_back: bool = True) -> InlineKeyboardMarkup:
+    labels = [
+        ("en", "🇬🇧 English"),
+        ("es", "🇪🇸 Espanol"),
+        ("ru", "🇷🇺 Русский"),
+    ]
+    rows: list[list[InlineKeyboardButton]] = []
+    for code, title in labels:
+        prefix = "✅ " if code == current_lang else ""
+        rows.append([InlineKeyboardButton(text=f"{prefix}{title}", callback_data=f"settings:lang:{code}")])
+    if include_back:
+        rows.append([InlineKeyboardButton(text=t(lang, "settings_back"), callback_data='settings:open')])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def generate_category_menu(lang: str = "ru") -> InlineKeyboardMarkup:
