@@ -3,6 +3,26 @@
   <div class="section">
     <a class="row-link" href="/admin/users">← Назад к пользователям</a>
     <h3 style="margin-top: 10px;">Профиль пользователя</h3>
+    {% if saved == "banned" %}
+      <div class="notice">Пользователь забанен.</div>
+    {% elif saved == "unbanned" %}
+      <div class="notice">Бан снят.</div>
+    {% elif saved == "credits_added" %}
+      <div class="notice">Кредиты успешно начислены.</div>
+    {% elif saved == "credits_subtracted" %}
+      <div class="notice">Кредиты успешно списаны.</div>
+    {% elif saved == "balance_set" %}
+      <div class="notice">Баланс установлен.</div>
+    {% elif saved == "balance_unchanged" %}
+      <div class="notice">Баланс не изменился.</div>
+    {% endif %}
+    {% if error == "invalid_amount" %}
+      <div class="notice" style="color: var(--danger);">Введите корректное количество кредитов (&gt; 0).</div>
+    {% elif error == "invalid_balance" %}
+      <div class="notice" style="color: var(--danger);">Введите корректный баланс (0 или больше).</div>
+    {% elif error == "insufficient_balance" %}
+      <div class="notice" style="color: var(--danger);">Недостаточно кредитов для списания.</div>
+    {% endif %}
     <div class="grid">
       <div class="card">
         <h3>Telegram ID</h3>
@@ -27,6 +47,67 @@
         <h3>Активность</h3>
         <div class="subtle">Первый вход: {{ user.first_seen_at_msk }}</div>
         <div class="subtle">Последний вход: {{ user.last_seen_at_msk }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Действия</h3>
+    <div class="grid" style="margin-bottom: 0;">
+      <div class="card">
+        <h3>Статус доступа</h3>
+        {% if user.is_banned %}
+          <div class="subtle" style="margin-bottom: 10px;">Пользователь сейчас забанен.</div>
+          <form method="post" action="/admin/users/{{ user.id }}/unban">
+            <button type="submit">Снять бан</button>
+          </form>
+        {% else %}
+          <div class="subtle" style="margin-bottom: 10px;">Пользователь активен.</div>
+          <form method="post" action="/admin/users/{{ user.id }}/ban">
+            <button type="submit" style="background: var(--danger); color: #fff;">Забанить</button>
+          </form>
+        {% endif %}
+      </div>
+
+      <div class="card">
+        <h3>Начислить кредиты</h3>
+        <form method="post" action="/admin/users/{{ user.id }}/credits/add">
+          <label for="credits_add">Количество</label>
+          <input id="credits_add" name="amount" type="number" min="1" step="1" placeholder="Например: 50" />
+          <div style="margin-top: 10px;">
+            <button type="submit">Начислить</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Списать кредиты</h3>
+        <form method="post" action="/admin/users/{{ user.id }}/credits/subtract">
+          <label for="credits_subtract">Количество</label>
+          <input id="credits_subtract" name="amount" type="number" min="1" step="1" placeholder="Например: 20" />
+          <div style="margin-top: 10px;">
+            <button type="submit">Списать</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Установить баланс</h3>
+        <form method="post" action="/admin/users/{{ user.id }}/credits/set">
+          <label for="credits_set">Новый баланс</label>
+          <input
+            id="credits_set"
+            name="balance"
+            type="number"
+            min="0"
+            step="1"
+            value="{{ user.balance_credits }}"
+            placeholder="Например: 100"
+          />
+          <div style="margin-top: 10px;">
+            <button type="submit">Установить</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>

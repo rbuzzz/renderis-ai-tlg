@@ -22,6 +22,7 @@ from app.db.models import CreditLedger, Generation, Order, Price, PromoCode, Sta
 from app.db.session import create_sessionmaker
 from app.modelspecs.registry import list_models
 from app.services.app_settings import AppSettingsService
+from app.services.credits import CreditsService
 from app.services.kie_balance import KieBalanceService
 from app.services.promos import PromoService
 from app.services.product_pricing import get_product_credits, get_product_stars_price, get_product_usd_price
@@ -492,7 +493,12 @@ def create_app() -> FastAPI:
         )
 
     @app.get("/admin/users/{user_id}", response_class=HTMLResponse)
-    async def admin_user_profile(request: Request, user_id: int):
+    async def admin_user_profile(
+        request: Request,
+        user_id: int,
+        saved: str | None = None,
+        error: str | None = None,
+    ):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
 
@@ -577,8 +583,120 @@ def create_app() -> FastAPI:
                 "orders": orders,
                 "ledger": ledger,
                 "promo_codes": promo_codes,
+                "saved": (saved or "").strip().lower(),
+                "error": (error or "").strip().lower(),
             },
         )
+
+    @app.post("/admin/users/{user_id}/ban")
+    async def admin_user_ban(request: Request, user_id: int):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+        async with app.state.sessionmaker() as session:
+            user = await session.get(User, user_id)
+            if not user:
+                return RedirectResponse(url="/admin/users?error=user_not_found", status_code=302)
+            user.is_banned = True
+            await session.commit()
+        return RedirectResponse(url=f"/admin/users/{user_id}?saved=banned", status_code=302)
+
+    @app.post("/admin/users/{user_id}/unban")
+    async def admin_user_unban(request: Request, user_id: int):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+        async with app.state.sessionmaker() as session:
+            user = await session.get(User, user_id)
+            if not user:
+                return RedirectResponse(url="/admin/users?error=user_not_found", status_code=302)
+            user.is_banned = False
+            await session.commit()
+        return RedirectResponse(url=f"/admin/users/{user_id}?saved=unbanned", status_code=302)
+
+    @app.post("/admin/users/{user_id}/credits/add")
+    async def admin_user_credits_add(
+        request: Request,
+        user_id: int,
+        amount: str = Form(""),
+    ):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+        parsed_amount = _parse_int(amount.strip())
+        if parsed_amount is None or parsed_amount <= 0:
+            return RedirectResponse(url=f"/admin/users/{user_id}?error=invalid_amount", status_code=302)
+        async with app.state.sessionmaker() as session:
+            user = await session.get(User, user_id)
+            if not user:
+                return RedirectResponse(url="/admin/users?error=user_not_found", status_code=302)
+            credits = CreditsService(session)
+            await credits.add_ledger(
+                user,
+                parsed_amount,
+                "admin_adjust_add",
+                meta={"source": "admin_web", "action": "add", "amount": parsed_amount},
+            )
+            await session.commit()
+        return RedirectResponse(url=f"/admin/users/{user_id}?saved=credits_added", status_code=302)
+
+    @app.post("/admin/users/{user_id}/credits/subtract")
+    async def admin_user_credits_subtract(
+        request: Request,
+        user_id: int,
+        amount: str = Form(""),
+    ):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+        parsed_amount = _parse_int(amount.strip())
+        if parsed_amount is None or parsed_amount <= 0:
+            return RedirectResponse(url=f"/admin/users/{user_id}?error=invalid_amount", status_code=302)
+        async with app.state.sessionmaker() as session:
+            user = await session.get(User, user_id)
+            if not user:
+                return RedirectResponse(url="/admin/users?error=user_not_found", status_code=302)
+            if int(user.balance_credits or 0) < parsed_amount:
+                return RedirectResponse(url=f"/admin/users/{user_id}?error=insufficient_balance", status_code=302)
+            credits = CreditsService(session)
+            await credits.add_ledger(
+                user,
+                -parsed_amount,
+                "admin_adjust_subtract",
+                meta={"source": "admin_web", "action": "subtract", "amount": parsed_amount},
+            )
+            await session.commit()
+        return RedirectResponse(url=f"/admin/users/{user_id}?saved=credits_subtracted", status_code=302)
+
+    @app.post("/admin/users/{user_id}/credits/set")
+    async def admin_user_credits_set(
+        request: Request,
+        user_id: int,
+        balance: str = Form(""),
+    ):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+        parsed_balance = _parse_int(balance.strip())
+        if parsed_balance is None or parsed_balance < 0:
+            return RedirectResponse(url=f"/admin/users/{user_id}?error=invalid_balance", status_code=302)
+        async with app.state.sessionmaker() as session:
+            user = await session.get(User, user_id)
+            if not user:
+                return RedirectResponse(url="/admin/users?error=user_not_found", status_code=302)
+            current_balance = int(user.balance_credits or 0)
+            delta = parsed_balance - current_balance
+            if delta != 0:
+                credits = CreditsService(session)
+                await credits.add_ledger(
+                    user,
+                    delta,
+                    "admin_set_balance",
+                    meta={
+                        "source": "admin_web",
+                        "action": "set_balance",
+                        "from": current_balance,
+                        "to": parsed_balance,
+                    },
+                )
+                await session.commit()
+                return RedirectResponse(url=f"/admin/users/{user_id}?saved=balance_set", status_code=302)
+        return RedirectResponse(url=f"/admin/users/{user_id}?saved=balance_unchanged", status_code=302)
 
     @app.get("/admin/products", response_class=HTMLResponse)
     async def admin_products(request: Request, saved: int | None = None):
