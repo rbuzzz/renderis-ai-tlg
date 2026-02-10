@@ -1352,6 +1352,25 @@
         return 0;
       }
 
+      function pickBetterCryptoPackage(a, b) {
+        if (!a) return b;
+        if (!b) return a;
+        const rateCmp = compareCryptoRates(a, b);
+        if (rateCmp < 0) return a;
+        if (rateCmp > 0) return b;
+        const creditsA = getCryptoPackageCredits(a);
+        const creditsB = getCryptoPackageCredits(b);
+        if (creditsA > creditsB) return a;
+        if (creditsA < creditsB) return b;
+        const sortA = toFiniteNumber(a.sort_order, 0);
+        const sortB = toFiniteNumber(b.sort_order, 0);
+        if (sortA < sortB) return a;
+        if (sortA > sortB) return b;
+        const idA = Number(a.id || 0);
+        const idB = Number(b.id || 0);
+        return idA <= idB ? a : b;
+      }
+
       function getCryptoBaselineRate() {
         if (!cryptoPackages.length) return 0;
         let worst = null;
@@ -1365,24 +1384,14 @@
         return getCryptoPackageRate(worst);
       }
 
-      function getCryptoBestValueSet() {
-        const ids = new Set();
-        if (!cryptoPackages.length) return ids;
+      function getCryptoBestValueId() {
+        if (!cryptoPackages.length) return 0;
         let best = null;
         cryptoPackages.forEach((item) => {
           if (getCryptoPackageCredits(item) <= 0) return;
-          if (!best || compareCryptoRates(item, best) < 0) {
-            best = item;
-          }
+          best = pickBetterCryptoPackage(best, item);
         });
-        if (!best) return ids;
-        cryptoPackages.forEach((item) => {
-          if (getCryptoPackageCredits(item) <= 0) return;
-          if (compareCryptoRates(item, best) === 0) {
-            ids.add(Number(item.id || 0));
-          }
-        });
-        return ids;
+        return Number(best?.id || 0);
       }
 
       function renderCryptoPackageCards() {
@@ -1394,7 +1403,7 @@
 
         const selectedId = Number(select.value || cryptoPackages[0].id || 0);
         const baselineRate = getCryptoBaselineRate();
-        const bestValueSet = getCryptoBestValueSet();
+        const bestValueId = getCryptoBestValueId();
 
         cryptoPackages.forEach((item) => {
           const card = document.createElement('button');
@@ -1407,7 +1416,7 @@
 
           const badges = document.createElement('div');
           badges.className = 'crypto-package-badges';
-          if (bestValueSet.has(Number(item.id || 0))) {
+          if (Number(item.id || 0) === bestValueId) {
             const best = document.createElement('span');
             best.className = 'crypto-badge best';
             best.textContent = labels.crypto_best_value;
