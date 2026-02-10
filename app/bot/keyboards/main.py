@@ -19,6 +19,23 @@ def main_menu(lang: str = "ru") -> InlineKeyboardMarkup:
     )
 
 
+def topup_menu(lang: str = "ru") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t(lang, "payment_topup_promo"), callback_data='pay:topup:promo')],
+            [InlineKeyboardButton(text=t(lang, "payment_topup_stars"), callback_data='pay:topup:stars')],
+        ]
+    )
+
+
+def promo_input_menu(lang: str = "ru") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t(lang, "payment_promo_cancel"), callback_data='pay:topup:promo:cancel')],
+        ]
+    )
+
+
 def generate_category_menu(lang: str = "ru") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[

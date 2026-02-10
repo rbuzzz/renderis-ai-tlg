@@ -2,11 +2,12 @@
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.handlers.payments import send_buy_options
+from app.bot.handlers.payments import send_buy_options, send_topup_options
 from app.bot.i18n import get_lang, t, tf
 from app.bot.keyboards.main import main_menu
 from app.bot.utils import safe_cleanup_callback
@@ -20,7 +21,8 @@ router = Router()
 
 
 @router.message(Command('start'))
-async def cmd_start(message: Message, session: AsyncSession, command: CommandObject) -> None:
+async def cmd_start(message: Message, session: AsyncSession, command: CommandObject, state: FSMContext) -> None:
+    await state.clear()
     settings = get_settings()
     credits = CreditsService(session)
     user = await credits.ensure_user(message.from_user.id, message.from_user.username, message.from_user.id in settings.admin_ids())
@@ -39,7 +41,9 @@ async def cmd_start(message: Message, session: AsyncSession, command: CommandObj
     await message.answer(text, reply_markup=main_menu(lang))
 
     start_arg = (command.args or "").strip().lower()
-    if start_arg in {"buy", "topup", "stars"}:
+    if start_arg in {"buy", "topup"}:
+        await send_topup_options(message)
+    elif start_arg in {"stars"}:
         await send_buy_options(message, session)
 
 

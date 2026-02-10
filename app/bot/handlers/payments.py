@@ -4,15 +4,20 @@ import uuid
 from decimal import Decimal, ROUND_HALF_UP
 
 from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice, Message, PreCheckoutQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.i18n import get_lang, t, tf
+from app.bot.keyboards.main import promo_input_menu, topup_menu
+from app.bot.states import TopUpFlow
 from app.bot.utils import safe_cleanup_callback
 from app.config import get_settings
+from app.db.models import PromoCode
 from app.services.credits import CreditsService
 from app.services.payments import PaymentsService
 from app.services.product_pricing import get_product_credits, get_product_stars_price
+from app.services.promos import PromoService
 
 
 router = Router()
@@ -63,6 +68,11 @@ def _payment_description(lang: str, product) -> str:
     return f"{description}. {tf(lang, 'crypto_base_bonus_line', base=base, bonus=bonus)}"
 
 
+async def send_topup_options(message: Message) -> None:
+    lang = get_lang(message.from_user)
+    await message.answer(t(lang, "payment_topup_choose"), reply_markup=topup_menu(lang))
+
+
 async def send_buy_options(message: Message, session: AsyncSession) -> bool:
     service = PaymentsService(session)
     products = await service.list_products()
@@ -98,10 +108,94 @@ async def send_buy_options(message: Message, session: AsyncSession) -> bool:
 
 
 @router.callback_query(F.data == "pay:buy")
-async def buy_credits(callback: CallbackQuery, session: AsyncSession) -> None:
+async def buy_credits(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    await send_topup_options(callback.message)
+    await callback.answer()
+    await safe_cleanup_callback(callback)
+
+
+@router.callback_query(F.data == "pay:topup:stars")
+async def buy_stars(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    await state.clear()
     await send_buy_options(callback.message, session)
     await callback.answer()
     await safe_cleanup_callback(callback)
+
+
+@router.callback_query(F.data == "pay:topup:promo")
+async def buy_promo(callback: CallbackQuery, state: FSMContext) -> None:
+    lang = get_lang(callback.from_user)
+    await state.set_state(TopUpFlow.entering_promo_code)
+    await callback.message.answer(t(lang, "payment_promo_enter"), reply_markup=promo_input_menu(lang))
+    await callback.answer()
+    await safe_cleanup_callback(callback)
+
+
+@router.callback_query(F.data == "pay:topup:promo:cancel")
+async def buy_promo_cancel(callback: CallbackQuery, state: FSMContext) -> None:
+    lang = get_lang(callback.from_user)
+    await state.clear()
+    await callback.message.answer(t(lang, "payment_promo_cancelled"))
+    await callback.answer()
+    await safe_cleanup_callback(callback)
+
+
+@router.message(TopUpFlow.entering_promo_code, F.text)
+async def promo_code_input(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    lang = get_lang(message.from_user)
+    raw = (message.text or "").strip()
+    if not raw:
+        await message.answer(t(lang, "payment_promo_enter"), reply_markup=promo_input_menu(lang))
+        return
+
+    if raw.lower() in {"/cancel", "cancel"}:
+        await state.clear()
+        await message.answer(t(lang, "payment_promo_cancelled"))
+        return
+
+    if raw.startswith("/") or " " in raw:
+        await message.answer(t(lang, "payment_promo_enter"), reply_markup=promo_input_menu(lang))
+        return
+
+    code = raw.upper()
+    credits = CreditsService(session)
+    user = await credits.get_user(message.from_user.id)
+    if not user:
+        await state.clear()
+        await message.answer(t(lang, "history_user_not_found"))
+        return
+
+    service = PromoService(session)
+    status = await service.redeem(user, code)
+    if status == "invalid":
+        await message.answer(t(lang, "promo_invalid"), reply_markup=promo_input_menu(lang))
+        return
+    if status == "used":
+        await message.answer(t(lang, "promo_used"), reply_markup=promo_input_menu(lang))
+        return
+
+    promo_row = await session.get(PromoCode, code)
+    if not promo_row:
+        await message.answer(t(lang, "promo_not_found"), reply_markup=promo_input_menu(lang))
+        return
+
+    await credits.add_ledger(
+        user,
+        promo_row.credits_amount,
+        "promo_redeem",
+        meta={"code": promo_row.code},
+        idempotency_key=f"promo:{promo_row.code}:{user.id}",
+    )
+    await session.commit()
+    await state.clear()
+    await message.answer(tf(lang, "promo_activated", credits=promo_row.credits_amount))
+
+
+@router.message(TopUpFlow.entering_promo_code)
+async def promo_code_input_invalid(message: Message) -> None:
+    lang = get_lang(message.from_user)
+    await message.answer(t(lang, "payment_promo_enter"), reply_markup=promo_input_menu(lang))
 
 
 @router.callback_query(F.data.startswith("pay:product:"))
