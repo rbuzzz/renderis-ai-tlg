@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
@@ -108,6 +109,10 @@ class StarProduct(Base):
     title: Mapped[str] = mapped_column(String(128))
     stars_amount: Mapped[int] = mapped_column(Integer)
     credits_amount: Mapped[int] = mapped_column(Integer)
+    credits_base: Mapped[int] = mapped_column(Integer, default=0)
+    credits_bonus: Mapped[int] = mapped_column(Integer, default=0)
+    price_stars: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    price_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 

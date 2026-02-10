@@ -106,6 +106,10 @@ async def main() -> None:
             if existing:
                 existing.stars_amount = stars
                 existing.credits_amount = credits
+                existing.credits_base = credits
+                existing.credits_bonus = 0
+                existing.price_stars = None
+                existing.price_usd = None
                 existing.active = True
                 existing.sort_order = order
                 continue
@@ -114,6 +118,10 @@ async def main() -> None:
                     title=title,
                     stars_amount=stars,
                     credits_amount=credits,
+                    credits_base=credits,
+                    credits_bonus=0,
+                    price_stars=None,
+                    price_usd=None,
                     active=True,
                     sort_order=order,
                 )

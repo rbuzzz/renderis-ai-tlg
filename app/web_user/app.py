@@ -8,7 +8,6 @@ import json
 import os
 import time
 import uuid
-from decimal import Decimal, ROUND_HALF_UP
 from urllib.parse import urlparse
 from pathlib import Path
 from typing import Any, Dict, List
@@ -36,6 +35,7 @@ from app.services.kie_client import KieClient, KieError
 from app.services.poller import PollManager
 from app.services.promos import PromoService
 from app.services.app_settings import AppSettingsService
+from app.services.product_pricing import get_product_credits, get_product_usd_price
 from app.utils.text import clamp_text
 from app.utils.time import utcnow
 
@@ -66,15 +66,6 @@ def _invoice_status_from_info(info: dict[str, Any] | None) -> str:
     if not info:
         return ""
     return _normalize_invoice_status(info.get("status") or info.get("invoice_status") or info.get("status_invoice"))
-
-
-def _credit_price_usd(credits_amount: int, stars_per_credit: float, usd_per_star: float) -> float:
-    usd_per_credit = Decimal(str(stars_per_credit)) * Decimal(str(usd_per_star))
-    total = Decimal(str(credits_amount)) * usd_per_credit
-    rounded = total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    if rounded <= Decimal("0"):
-        rounded = Decimal("0.01")
-    return float(rounded)
 
 
 async def _cryptocloud_pricing(session) -> tuple[float, float]:
@@ -512,13 +503,16 @@ def create_app() -> FastAPI:
             products = rows.scalars().all()
             packages = []
             for product in products:
-                amount = _credit_price_usd(product.credits_amount, stars_per_credit, usd_per_star)
+                credits_total = get_product_credits(product)
+                amount = get_product_usd_price(product, stars_per_credit, usd_per_star)
                 packages.append(
                     {
                         "id": product.id,
                         "title": product.title,
-                        "credits_amount": product.credits_amount,
-                        "amount": amount,
+                        "credits_amount": credits_total,
+                        "credits_base": int(product.credits_base if product.credits_base is not None else product.credits_amount),
+                        "credits_bonus": int(product.credits_bonus or 0),
+                        "amount": float(amount),
                         "currency": settings.cryptocloud_currency.upper(),
                     }
                 )
@@ -555,7 +549,8 @@ def create_app() -> FastAPI:
                 return JSONResponse({"error": "product_not_found"}, status_code=404)
 
             stars_per_credit, usd_per_star = await _cryptocloud_pricing(session)
-            amount = _credit_price_usd(product.credits_amount, stars_per_credit, usd_per_star)
+            credits_total = get_product_credits(product)
+            amount = get_product_usd_price(product, stars_per_credit, usd_per_star)
             local_order_id = f"cc_{uuid.uuid4().hex}"
             order_payload = f"cc:{product.id}:{local_order_id}"
             client = CryptoCloudClient(
@@ -564,7 +559,7 @@ def create_app() -> FastAPI:
             )
             try:
                 invoice = await client.create_invoice(
-                    amount=amount,
+                    amount=float(amount),
                     currency=settings.cryptocloud_currency.upper(),
                     order_id=local_order_id,
                     locale=_crypto_locale(_get_lang(request)),
@@ -587,7 +582,7 @@ def create_app() -> FastAPI:
                 provider_payment_charge_id=invoice_uuid,
                 payload=order_payload,
                 stars_amount=0,
-                credits_amount=product.credits_amount,
+                credits_amount=credits_total,
                 status=f"cc_{invoice_status}"[:32],
                 created_at=utcnow(),
             )
@@ -599,8 +594,8 @@ def create_app() -> FastAPI:
             "invoice_uuid": invoice_uuid,
             "pay_url": pay_url,
             "invoice_status": invoice_status,
-            "credits_amount": product.credits_amount,
-            "amount": amount,
+            "credits_amount": credits_total,
+            "amount": float(amount),
             "currency": settings.cryptocloud_currency.upper(),
         }
 

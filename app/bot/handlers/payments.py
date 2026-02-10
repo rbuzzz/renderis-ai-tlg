@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.services.payments import PaymentsService
 from app.services.credits import CreditsService
+from app.services.product_pricing import get_product_credits, get_product_stars_price
 from app.bot.utils import safe_cleanup_callback
 from app.bot.i18n import get_lang, t, tf
 
@@ -26,10 +27,12 @@ async def send_buy_options(message: Message, session: AsyncSession) -> bool:
 
     buttons = []
     for p in products:
+        stars_price = get_product_stars_price(p)
+        credits_total = get_product_credits(p)
         buttons.append(
             [
                 InlineKeyboardButton(
-                    text=f"{p.title} - {p.stars_amount} звезд",
+                    text=f"{p.title} - {stars_price} звезд / {credits_total} кр.",
                     callback_data=f"pay:product:{p.id}",
                 )
             ]
@@ -56,12 +59,14 @@ async def pay_product(callback: CallbackQuery, session: AsyncSession) -> None:
         return
 
     payload = f'stars:{product.id}:{uuid.uuid4()}'
-    prices = [LabeledPrice(label=product.title, amount=product.stars_amount)]
+    credits_total = get_product_credits(product)
+    stars_price = get_product_stars_price(product)
+    prices = [LabeledPrice(label=product.title, amount=stars_price)]
     settings = get_settings()
 
     await callback.message.answer_invoice(
         title=product.title,
-        description=tf(lang, "payment_desc", credits=product.credits_amount),
+        description=tf(lang, "payment_desc", credits=credits_total),
         payload=payload,
         provider_token=settings.stars_provider_token,
         currency=settings.stars_currency,
@@ -91,6 +96,8 @@ async def successful_payment(message: Message, session: AsyncSession) -> None:
     if not product:
         await message.answer(t(lang, "payment_package_not_found"))
         return
+    credits_total = get_product_credits(product)
+    stars_price = get_product_stars_price(product)
 
     credits_service = CreditsService(session)
     user = await credits_service.get_user(message.from_user.id)
@@ -103,8 +110,8 @@ async def successful_payment(message: Message, session: AsyncSession) -> None:
         payment.telegram_payment_charge_id,
         payment.provider_payment_charge_id,
         payload,
-        product.stars_amount,
-        product.credits_amount,
+        stars_price,
+        credits_total,
     )
     await session.commit()
 
@@ -112,4 +119,4 @@ async def successful_payment(message: Message, session: AsyncSession) -> None:
         await message.answer(t(lang, "payment_processed"))
         return
 
-    await message.answer(tf(lang, "payment_success", credits=product.credits_amount))
+    await message.answer(tf(lang, "payment_success", credits=credits_total))
