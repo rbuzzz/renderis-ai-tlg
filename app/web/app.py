@@ -562,6 +562,7 @@ def create_app() -> FastAPI:
                         "credits_amount": int(promo.credits_amount or 0),
                         "batch_id": promo.batch_id or "—",
                         "redeemed_at_msk": _format_msk(promo.redeemed_at) or "—",
+                        "active": bool(promo.active),
                     }
                 )
 
@@ -697,6 +698,38 @@ def create_app() -> FastAPI:
                 await session.commit()
                 return RedirectResponse(url=f"/admin/users/{user_id}?saved=balance_set", status_code=302)
         return RedirectResponse(url=f"/admin/users/{user_id}?saved=balance_unchanged", status_code=302)
+
+    @app.post("/admin/users/{user_id}/promos/{code}/revoke")
+    async def admin_user_promo_revoke(request: Request, user_id: int, code: str):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+        promo_code = (code or "").strip().upper()
+        if not promo_code:
+            return RedirectResponse(url=f"/admin/users/{user_id}?error=promo_not_found", status_code=302)
+        async with app.state.sessionmaker() as session:
+            user = await session.get(User, user_id)
+            if not user:
+                return RedirectResponse(url="/admin/users?error=user_not_found", status_code=302)
+
+            promo = await session.get(PromoCode, promo_code)
+            if not promo or promo.redeemed_by_user_id != user.id:
+                return RedirectResponse(url=f"/admin/users/{user_id}?error=promo_not_found", status_code=302)
+            if not promo.active:
+                return RedirectResponse(url=f"/admin/users/{user_id}?error=promo_already_revoked", status_code=302)
+
+            credits_delta = int(promo.credits_amount or 0)
+            if credits_delta > 0:
+                credits_service = CreditsService(session)
+                await credits_service.add_ledger(
+                    user,
+                    -credits_delta,
+                    "admin_promo_revoke",
+                    meta={"source": "admin_web", "action": "promo_revoke", "code": promo.code, "credits": credits_delta},
+                )
+            promo.active = False
+            await session.commit()
+
+        return RedirectResponse(url=f"/admin/users/{user_id}?saved=promo_revoked", status_code=302)
 
     @app.get("/admin/products", response_class=HTMLResponse)
     async def admin_products(request: Request, saved: int | None = None):

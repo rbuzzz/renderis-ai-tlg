@@ -15,6 +15,8 @@
       <div class="notice">Баланс установлен.</div>
     {% elif saved == "balance_unchanged" %}
       <div class="notice">Баланс не изменился.</div>
+    {% elif saved == "promo_revoked" %}
+      <div class="notice">Промокод отменен, кредиты списаны.</div>
     {% endif %}
     {% if error == "invalid_amount" %}
       <div class="notice" style="color: var(--danger);">Введите корректное количество кредитов (&gt; 0).</div>
@@ -22,6 +24,10 @@
       <div class="notice" style="color: var(--danger);">Введите корректный баланс (0 или больше).</div>
     {% elif error == "insufficient_balance" %}
       <div class="notice" style="color: var(--danger);">Недостаточно кредитов для списания.</div>
+    {% elif error == "promo_not_found" %}
+      <div class="notice" style="color: var(--danger);">Промокод не найден у этого пользователя.</div>
+    {% elif error == "promo_already_revoked" %}
+      <div class="notice" style="color: var(--danger);">Этот промокод уже отменен.</div>
     {% endif %}
     <div class="grid">
       <div class="card">
@@ -188,6 +194,8 @@
             <th>Кредитов</th>
             <th>Батч</th>
             <th>Активирован (МСК)</th>
+            <th>Статус</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -197,9 +205,23 @@
             <td>{{ p.credits_amount }}</td>
             <td>{{ p.batch_id }}</td>
             <td class="muted">{{ p.redeemed_at_msk }}</td>
+            <td>
+              {% if p.active %}
+                <span class="badge ok">Активен</span>
+              {% else %}
+                <span class="badge warn">Отменен</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if p.active %}
+                <form method="post" action="/admin/users/{{ user.id }}/promos/{{ p.code }}/revoke">
+                  <button type="submit" style="background: var(--danger); color: #fff;">Отменить</button>
+                </form>
+              {% endif %}
+            </td>
           </tr>
           {% else %}
-          <tr><td colspan="4" class="muted">Нет активированных промо-кодов</td></tr>
+          <tr><td colspan="6" class="muted">Нет активированных промо-кодов</td></tr>
           {% endfor %}
         </tbody>
       </table>
