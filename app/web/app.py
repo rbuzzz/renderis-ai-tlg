@@ -20,7 +20,19 @@ from aiogram.enums import ParseMode
 from aiogram.types import FSInputFile
 
 from app.config import get_settings
-from app.db.models import CreditLedger, Generation, Order, Price, PromoCode, StarProduct, SupportMessage, SupportThread, User
+from app.db.models import (
+    AdminChangeComment,
+    AdminChangeRequest,
+    CreditLedger,
+    Generation,
+    Order,
+    Price,
+    PromoCode,
+    StarProduct,
+    SupportMessage,
+    SupportThread,
+    User,
+)
 from app.db.session import create_sessionmaker
 from app.modelspecs.registry import list_models
 from app.services.app_settings import AppSettingsService
@@ -29,6 +41,19 @@ from app.services.kie_balance import KieBalanceService
 from app.services.promos import PromoService
 from app.services.product_pricing import get_product_credits, get_product_stars_price, get_product_usd_price
 from app.services.support import SupportService
+from app.services.change_requests import (
+    CHANGE_ADD_CREDITS,
+    CHANGE_REVOKE_PROMO,
+    CHANGE_SET_BALANCE,
+    CHANGE_SUBTRACT_CREDITS,
+    STATUS_APPLIED,
+    STATUS_CANCELLED,
+    STATUS_DRAFT,
+    STATUS_NEEDS_INFO,
+    STATUS_PENDING,
+    STATUS_REJECTED,
+    ChangeRequestService,
+)
 
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
@@ -62,8 +87,66 @@ def _can_manage(request: Request) -> bool:
     return _is_logged_in(request) and _session_role(request) == "admin"
 
 
+def _session_login(request: Request) -> str:
+    return str(request.session.get("admin_login") or "").strip()
+
+
 def _forbidden_redirect() -> RedirectResponse:
     return RedirectResponse(url="/admin?error=forbidden", status_code=302)
+
+
+def _change_type_title(change_type: str) -> str:
+    if change_type == CHANGE_ADD_CREDITS:
+        return "Начислить кредиты"
+    if change_type == CHANGE_SUBTRACT_CREDITS:
+        return "Списать кредиты"
+    if change_type == CHANGE_SET_BALANCE:
+        return "Установить баланс"
+    if change_type == CHANGE_REVOKE_PROMO:
+        return "Отозвать промо-код"
+    return change_type
+
+
+def _change_status_title(status: str) -> str:
+    if status == STATUS_DRAFT:
+        return "Черновик"
+    if status == STATUS_PENDING:
+        return "На согласовании"
+    if status == STATUS_NEEDS_INFO:
+        return "Нужен комментарий"
+    if status == STATUS_REJECTED:
+        return "Отклонено"
+    if status == STATUS_CANCELLED:
+        return "Отменено"
+    if status == STATUS_APPLIED:
+        return "Применено"
+    return status
+
+
+def _change_status_badge(status: str) -> str:
+    if status == STATUS_APPLIED:
+        return "ok"
+    if status in {STATUS_REJECTED, STATUS_CANCELLED}:
+        return "danger"
+    if status in {STATUS_PENDING, STATUS_NEEDS_INFO}:
+        return "warn"
+    return ""
+
+
+def _change_action_preview(
+    *,
+    change_type: str,
+    credits_amount: int | None,
+    balance_value: int | None,
+    promo_code: str | None,
+) -> str:
+    if change_type in {CHANGE_ADD_CREDITS, CHANGE_SUBTRACT_CREDITS}:
+        return str(int(credits_amount or 0))
+    if change_type == CHANGE_SET_BALANCE:
+        return str(int(balance_value or 0))
+    if change_type == CHANGE_REVOKE_PROMO:
+        return (promo_code or "").strip().upper() or "—"
+    return "—"
 
 
 def _model_name_map() -> dict[str, str]:
@@ -395,6 +478,7 @@ def create_app() -> FastAPI:
             )
         request.session["admin_logged_in"] = True
         request.session["admin_role"] = role
+        request.session["admin_login"] = username
         return RedirectResponse(url="/admin", status_code=302)
 
     @app.get("/logout")
@@ -654,7 +738,10 @@ def create_app() -> FastAPI:
                 .limit(100)
             )
             promo_codes = []
+            active_promo_codes = []
             for promo in promo_rows.scalars().all():
+                if promo.active:
+                    active_promo_codes.append(promo.code)
                 promo_codes.append(
                     {
                         "code": promo.code,
@@ -683,12 +770,405 @@ def create_app() -> FastAPI:
                 "orders": orders,
                 "ledger": ledger,
                 "promo_codes": promo_codes,
+                "active_promo_codes": active_promo_codes,
                 "saved": (saved or "").strip().lower(),
                 "error": (error or "").strip().lower(),
                 "can_manage": _can_manage(request),
                 "is_subadmin": _is_subadmin(request),
             },
         )
+
+    @app.get("/admin/change-requests", response_class=HTMLResponse)
+    async def admin_change_requests(
+        request: Request,
+        status: str = "active",
+        user_id: int | None = None,
+        saved: str | None = None,
+        error: str | None = None,
+    ):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+
+        status = (status or "active").strip().lower()
+        if status not in {"active", "all"}:
+            status = "active"
+
+        is_admin = _can_manage(request)
+        admin_login = _session_login(request) or ("admin" if is_admin else "subadmin")
+
+        async with app.state.sessionmaker() as session:
+            users_rows = await session.execute(select(User).order_by(User.last_seen_at.desc()).limit(300))
+            users = [
+                {
+                    "id": item.id,
+                    "telegram_id": item.telegram_id,
+                    "username": item.username or "",
+                    "label": f"{item.telegram_id} ({item.username or '-'})",
+                }
+                for item in users_rows.scalars().all()
+            ]
+
+            query = select(AdminChangeRequest, User).join(User, User.id == AdminChangeRequest.target_user_id)
+            if not is_admin:
+                query = query.where(AdminChangeRequest.created_by_login == admin_login)
+            if user_id:
+                query = query.where(AdminChangeRequest.target_user_id == user_id)
+            if status == "active":
+                query = query.where(
+                    AdminChangeRequest.status.in_([STATUS_DRAFT, STATUS_PENDING, STATUS_NEEDS_INFO])
+                )
+            query = query.order_by(AdminChangeRequest.updated_at.desc(), AdminChangeRequest.id.desc())
+            rows = await session.execute(query.limit(400))
+
+            items = []
+            request_ids: list[int] = []
+            for req, user in rows.all():
+                request_ids.append(req.id)
+                items.append(
+                    {
+                        "id": req.id,
+                        "status": req.status,
+                        "status_title": _change_status_title(req.status),
+                        "status_badge": _change_status_badge(req.status),
+                        "change_type": req.change_type,
+                        "change_type_title": _change_type_title(req.change_type),
+                        "action_value": _change_action_preview(
+                            change_type=req.change_type,
+                            credits_amount=req.credits_amount,
+                            balance_value=req.balance_value,
+                            promo_code=req.promo_code,
+                        ),
+                        "reason": req.reason,
+                        "target_user_id": user.id,
+                        "target_telegram_id": user.telegram_id,
+                        "target_username": user.username or "",
+                        "created_by_login": req.created_by_login,
+                        "created_at_msk": _format_msk(req.created_at) or "—",
+                        "updated_at_msk": _format_msk(req.updated_at) or "—",
+                        "submitted_at_msk": _format_msk(req.submitted_at) or "—",
+                        "reviewed_at_msk": _format_msk(req.reviewed_at) or "—",
+                        "reviewed_by_login": req.reviewed_by_login or "—",
+                        "apply_error": req.apply_error or "",
+                        "can_submit": (not is_admin) and req.status in {STATUS_DRAFT, STATUS_NEEDS_INFO},
+                        "can_cancel": (not is_admin) and req.status in {STATUS_DRAFT, STATUS_PENDING, STATUS_NEEDS_INFO},
+                        "can_comment": req.status in {STATUS_PENDING, STATUS_NEEDS_INFO},
+                        "can_approve": is_admin and req.status in {STATUS_PENDING, STATUS_NEEDS_INFO},
+                        "can_ask_info": is_admin and req.status == STATUS_PENDING,
+                        "can_reject": is_admin and req.status in {STATUS_PENDING, STATUS_NEEDS_INFO},
+                    }
+                )
+
+            comments_map: dict[int, list[dict]] = {}
+            if request_ids:
+                comment_rows = await session.execute(
+                    select(AdminChangeComment)
+                    .where(AdminChangeComment.request_id.in_(request_ids))
+                    .order_by(AdminChangeComment.request_id.asc(), AdminChangeComment.created_at.asc())
+                )
+                for comment in comment_rows.scalars().all():
+                    comments_map.setdefault(comment.request_id, []).append(
+                        {
+                            "author_role": comment.author_role,
+                            "author_login": comment.author_login,
+                            "message": comment.message,
+                            "created_at_msk": _format_msk(comment.created_at) or "—",
+                        }
+                    )
+
+        for item in items:
+            item["comments"] = comments_map.get(item["id"], [])
+
+        return app.state.templates.TemplateResponse(
+            "change_requests.html",
+            {
+                "request": request,
+                "title": "Renderis Admin — Предложения",
+                "active_tab": "change_requests",
+                "can_manage": is_admin,
+                "is_subadmin": _is_subadmin(request),
+                "is_admin_view": is_admin,
+                "items": items,
+                "users": users,
+                "selected_user_id": user_id or 0,
+                "status_filter": status,
+                "saved": (saved or "").strip().lower(),
+                "error": (error or "").strip().lower(),
+            },
+        )
+
+    @app.post("/admin/change-requests/create")
+    async def admin_change_requests_create(
+        request: Request,
+        target_user_id: str = Form(""),
+        change_type: str = Form(""),
+        credits_amount: str = Form(""),
+        balance_value: str = Form(""),
+        promo_code: str = Form(""),
+        reason: str = Form(""),
+    ):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+        if _can_manage(request):
+            return _forbidden_redirect()
+
+        if not reason.strip():
+            return RedirectResponse(url="/admin/change-requests?error=reason_required", status_code=302)
+
+        parsed_user_id = _parse_int(target_user_id.strip())
+        parsed_credits = _parse_int(credits_amount.strip()) if credits_amount.strip() else None
+        parsed_balance = _parse_int(balance_value.strip()) if balance_value.strip() else None
+        login = _session_login(request) or "subadmin"
+
+        async with app.state.sessionmaker() as session:
+            if not parsed_user_id:
+                return RedirectResponse(url="/admin/change-requests?error=user_not_found", status_code=302)
+            user = await session.get(User, parsed_user_id)
+            if not user:
+                return RedirectResponse(url="/admin/change-requests?error=user_not_found", status_code=302)
+
+            service = ChangeRequestService(session)
+            req, err = await service.create_draft(
+                change_type=(change_type or "").strip(),
+                user=user,
+                reason=reason,
+                created_by_login=login,
+                created_by_role="subadmin",
+                credits_amount=parsed_credits,
+                balance_value=parsed_balance,
+                promo_code=promo_code,
+            )
+            if err or not req:
+                return RedirectResponse(url=f"/admin/change-requests?error={err or 'invalid_data'}", status_code=302)
+
+            await service.add_comment(
+                req=req,
+                author_role="subadmin",
+                author_login=login,
+                author_telegram_id=None,
+                message=f"Создано предложение. Причина: {reason.strip()}",
+            )
+            await session.commit()
+
+        return RedirectResponse(url=f"/admin/change-requests?saved=created&user_id={parsed_user_id}", status_code=302)
+
+    @app.post("/admin/change-requests/{request_id}/submit")
+    async def admin_change_requests_submit(request: Request, request_id: int):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+        if _can_manage(request):
+            return _forbidden_redirect()
+
+        login = _session_login(request) or "subadmin"
+        async with app.state.sessionmaker() as session:
+            req = await session.get(AdminChangeRequest, request_id)
+            if not req or req.created_by_login != login:
+                return RedirectResponse(url="/admin/change-requests?error=not_found", status_code=302)
+            service = ChangeRequestService(session)
+            ok, err = await service.submit(req)
+            if not ok:
+                return RedirectResponse(url=f"/admin/change-requests?error={err or 'submit_failed'}", status_code=302)
+            await service.add_comment(
+                req=req,
+                author_role="subadmin",
+                author_login=login,
+                author_telegram_id=None,
+                message="Отправлено на согласование.",
+            )
+            await session.commit()
+        return RedirectResponse(url="/admin/change-requests?saved=submitted", status_code=302)
+
+    @app.post("/admin/change-requests/submit-all")
+    async def admin_change_requests_submit_all(request: Request):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+        if _can_manage(request):
+            return _forbidden_redirect()
+
+        login = _session_login(request) or "subadmin"
+        async with app.state.sessionmaker() as session:
+            rows = await session.execute(
+                select(AdminChangeRequest).where(
+                    AdminChangeRequest.created_by_login == login,
+                    AdminChangeRequest.status.in_([STATUS_DRAFT, STATUS_NEEDS_INFO]),
+                )
+            )
+            service = ChangeRequestService(session)
+            changed = 0
+            for req in rows.scalars().all():
+                ok, _ = await service.submit(req)
+                if ok:
+                    changed += 1
+                    await service.add_comment(
+                        req=req,
+                        author_role="subadmin",
+                        author_login=login,
+                        author_telegram_id=None,
+                        message="Отправлено на согласование.",
+                    )
+            await session.commit()
+        return RedirectResponse(url=f"/admin/change-requests?saved=submitted_all_{changed}", status_code=302)
+
+    @app.post("/admin/change-requests/{request_id}/cancel")
+    async def admin_change_requests_cancel(
+        request: Request,
+        request_id: int,
+        message: str = Form(""),
+    ):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+        if _can_manage(request):
+            return _forbidden_redirect()
+
+        login = _session_login(request) or "subadmin"
+        async with app.state.sessionmaker() as session:
+            req = await session.get(AdminChangeRequest, request_id)
+            if not req or req.created_by_login != login:
+                return RedirectResponse(url="/admin/change-requests?error=not_found", status_code=302)
+            service = ChangeRequestService(session)
+            ok, err = await service.cancel(req)
+            if not ok:
+                return RedirectResponse(url=f"/admin/change-requests?error={err or 'cancel_failed'}", status_code=302)
+            comment_message = (message or "").strip() or "Предложение отменено субадмином."
+            await service.add_comment(
+                req=req,
+                author_role="subadmin",
+                author_login=login,
+                author_telegram_id=None,
+                message=comment_message,
+            )
+            await session.commit()
+        return RedirectResponse(url="/admin/change-requests?saved=cancelled", status_code=302)
+
+    @app.post("/admin/change-requests/{request_id}/comment")
+    async def admin_change_requests_comment(
+        request: Request,
+        request_id: int,
+        message: str = Form(""),
+    ):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+
+        text = (message or "").strip()
+        if not text:
+            return RedirectResponse(url="/admin/change-requests?error=comment_required", status_code=302)
+
+        is_admin = _can_manage(request)
+        login = _session_login(request) or ("admin" if is_admin else "subadmin")
+        async with app.state.sessionmaker() as session:
+            req = await session.get(AdminChangeRequest, request_id)
+            if not req:
+                return RedirectResponse(url="/admin/change-requests?error=not_found", status_code=302)
+            if (not is_admin) and req.created_by_login != login:
+                return RedirectResponse(url="/admin/change-requests?error=not_found", status_code=302)
+            service = ChangeRequestService(session)
+            await service.add_comment(
+                req=req,
+                author_role="admin" if is_admin else "subadmin",
+                author_login=login,
+                author_telegram_id=None,
+                message=text,
+            )
+            if (not is_admin) and req.status == STATUS_NEEDS_INFO:
+                await service.submit(req)
+            await session.commit()
+        return RedirectResponse(url="/admin/change-requests?saved=comment_added", status_code=302)
+
+    @app.post("/admin/change-requests/{request_id}/needs-info")
+    async def admin_change_requests_needs_info(
+        request: Request,
+        request_id: int,
+        message: str = Form(""),
+    ):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+        if not _can_manage(request):
+            return _forbidden_redirect()
+
+        text = (message or "").strip()
+        if not text:
+            return RedirectResponse(url="/admin/change-requests?error=comment_required", status_code=302)
+
+        login = _session_login(request) or "admin"
+        async with app.state.sessionmaker() as session:
+            req = await session.get(AdminChangeRequest, request_id)
+            if not req:
+                return RedirectResponse(url="/admin/change-requests?error=not_found", status_code=302)
+            service = ChangeRequestService(session)
+            ok, err = await service.mark_needs_info(req, reviewer_login=login, reviewer_telegram_id=None)
+            if not ok:
+                return RedirectResponse(url=f"/admin/change-requests?error={err or 'status_error'}", status_code=302)
+            await service.add_comment(
+                req=req,
+                author_role="admin",
+                author_login=login,
+                author_telegram_id=None,
+                message=text,
+            )
+            await session.commit()
+        return RedirectResponse(url="/admin/change-requests?saved=needs_info", status_code=302)
+
+    @app.post("/admin/change-requests/{request_id}/reject")
+    async def admin_change_requests_reject(
+        request: Request,
+        request_id: int,
+        message: str = Form(""),
+    ):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+        if not _can_manage(request):
+            return _forbidden_redirect()
+
+        text = (message or "").strip()
+        if not text:
+            return RedirectResponse(url="/admin/change-requests?error=comment_required", status_code=302)
+
+        login = _session_login(request) or "admin"
+        async with app.state.sessionmaker() as session:
+            req = await session.get(AdminChangeRequest, request_id)
+            if not req:
+                return RedirectResponse(url="/admin/change-requests?error=not_found", status_code=302)
+            service = ChangeRequestService(session)
+            ok, err = await service.reject(req, reviewer_login=login, reviewer_telegram_id=None)
+            if not ok:
+                return RedirectResponse(url=f"/admin/change-requests?error={err or 'status_error'}", status_code=302)
+            await service.add_comment(
+                req=req,
+                author_role="admin",
+                author_login=login,
+                author_telegram_id=None,
+                message=text,
+            )
+            await session.commit()
+        return RedirectResponse(url="/admin/change-requests?saved=rejected", status_code=302)
+
+    @app.post("/admin/change-requests/{request_id}/approve")
+    async def admin_change_requests_approve(request: Request, request_id: int):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+        if not _can_manage(request):
+            return _forbidden_redirect()
+
+        login = _session_login(request) or "admin"
+        async with app.state.sessionmaker() as session:
+            req = await session.get(AdminChangeRequest, request_id)
+            if not req:
+                return RedirectResponse(url="/admin/change-requests?error=not_found", status_code=302)
+            service = ChangeRequestService(session)
+            ok, err = await service.apply_request(req, reviewer_login=login, reviewer_telegram_id=None)
+            if not ok:
+                req.apply_error = err
+                req.updated_at = datetime.now(timezone.utc)
+                await session.commit()
+                return RedirectResponse(url=f"/admin/change-requests?error={err or 'apply_failed'}", status_code=302)
+            await service.add_comment(
+                req=req,
+                author_role="admin",
+                author_login=login,
+                author_telegram_id=None,
+                message="Предложение утверждено и применено.",
+            )
+            await session.commit()
+        return RedirectResponse(url="/admin/change-requests?saved=approved", status_code=302)
 
     @app.post("/admin/users/{user_id}/ban")
     async def admin_user_ban(request: Request, user_id: int):

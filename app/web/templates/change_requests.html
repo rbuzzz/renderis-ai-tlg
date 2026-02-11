@@ -1,0 +1,253 @@
+{% extends "layout.html" %}
+{% block content %}
+  <div class="section">
+    <h3>Предложения для админа</h3>
+
+    {% if saved == "created" %}
+      <div class="notice">Черновик предложения создан.</div>
+    {% elif saved == "submitted" %}
+      <div class="notice">Предложение отправлено на согласование.</div>
+    {% elif saved.startswith("submitted_all_") %}
+      <div class="notice">Черновиков отправлено: {{ saved.replace("submitted_all_", "") }}.</div>
+    {% elif saved == "approved" %}
+      <div class="notice">Предложение утверждено и применено.</div>
+    {% elif saved == "rejected" %}
+      <div class="notice">Предложение отклонено.</div>
+    {% elif saved == "needs_info" %}
+      <div class="notice">Запрошен дополнительный комментарий от субадмина.</div>
+    {% elif saved == "comment_added" %}
+      <div class="notice">Комментарий добавлен.</div>
+    {% elif saved == "cancelled" %}
+      <div class="notice">Предложение отменено.</div>
+    {% endif %}
+
+    {% if error %}
+      <div class="notice" style="color: var(--danger); margin-bottom: 10px;">
+        Ошибка: {{ error }}
+      </div>
+    {% endif %}
+
+    <form method="get" action="/admin/change-requests" class="form-row" style="margin-bottom: 12px;">
+      <div>
+        <label>Показать</label>
+        <select name="status" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #2b3f59;background:#0f1b2b;color:var(--text);">
+          <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Активные</option>
+          <option value="all" {% if status_filter == 'all' %}selected{% endif %}>Все</option>
+        </select>
+      </div>
+      <div>
+        <label>Пользователь</label>
+        <select name="user_id" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #2b3f59;background:#0f1b2b;color:var(--text);">
+          <option value="0">Все</option>
+          {% for u in users %}
+            <option value="{{ u.id }}" {% if selected_user_id == u.id %}selected{% endif %}>{{ u.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button type="submit">Применить</button>
+      </div>
+    </form>
+  </div>
+
+  {% if not can_manage %}
+  <div class="section">
+    <h3>Новое предложение</h3>
+    <form method="post" action="/admin/change-requests/create" id="new-request-form">
+      <div class="form-row">
+        <div>
+          <label>Пользователь</label>
+          <select name="target_user_id" required style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #2b3f59;background:#0f1b2b;color:var(--text);">
+            {% for u in users %}
+              <option value="{{ u.id }}">{{ u.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>Тип изменения</label>
+          <select name="change_type" id="change_type_select" required style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #2b3f59;background:#0f1b2b;color:var(--text);">
+            <option value="add_credits">Начислить кредиты</option>
+            <option value="subtract_credits">Списать кредиты</option>
+            <option value="set_balance">Установить баланс</option>
+            <option value="revoke_promo">Отозвать промо-код</option>
+          </select>
+        </div>
+        <div id="credits_amount_wrap">
+          <label>Кредиты</label>
+          <input name="credits_amount" id="credits_amount_input" type="number" min="1" step="1" placeholder="Например: 5" />
+        </div>
+        <div id="balance_value_wrap" style="display:none;">
+          <label>Новый баланс</label>
+          <input name="balance_value" id="balance_value_input" type="number" min="0" step="1" placeholder="Например: 100" />
+        </div>
+        <div id="promo_code_wrap" style="display:none;">
+          <label>Промо-код</label>
+          <input name="promo_code" id="promo_code_input" placeholder="Например: ABCD1234" />
+        </div>
+      </div>
+      <div style="margin-top: 10px;">
+        <label>Причина</label>
+        <textarea name="reason" required rows="3" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #2b3f59;background:#0f1b2b;color:var(--text);"></textarea>
+      </div>
+      <div style="margin-top: 10px; display:flex; gap:10px; flex-wrap: wrap;">
+        <button type="submit">Сохранить черновик</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="section">
+    <h3>
+      {% if can_manage %}
+        Очередь согласования
+      {% else %}
+        Мои предложения
+      {% endif %}
+    </h3>
+
+    {% if not can_manage %}
+      <form method="post" action="/admin/change-requests/submit-all" style="margin-bottom: 12px;">
+        <button type="submit">Отправить все черновики на согласование</button>
+      </form>
+    {% endif %}
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Пользователь</th>
+            <th>Действие</th>
+            <th>Значение</th>
+            <th>Статус</th>
+            <th>Автор</th>
+            <th>Причина</th>
+            <th>Обновлено (МСК)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in items %}
+          <tr>
+            <td>{{ row.id }}</td>
+            <td>
+              <a class="row-link" href="/admin/users/{{ row.target_user_id }}">{{ row.target_telegram_id }}</a>
+              <div class="subtle">{{ row.target_username or "-" }}</div>
+            </td>
+            <td>{{ row.change_type_title }}</td>
+            <td>{{ row.action_value }}</td>
+            <td><span class="badge {{ row.status_badge }}">{{ row.status_title }}</span></td>
+            <td>{{ row.created_by_login }}</td>
+            <td style="max-width: 360px;">
+              <div>{{ row.reason }}</div>
+              {% if row.apply_error %}
+                <div class="subtle" style="color: var(--danger);">Ошибка применения: {{ row.apply_error }}</div>
+              {% endif %}
+            </td>
+            <td class="muted">{{ row.updated_at_msk }}</td>
+            <td>
+              <div style="display:flex; flex-direction:column; gap:6px; min-width: 210px;">
+                {% if row.can_submit %}
+                  <form method="post" action="/admin/change-requests/{{ row.id }}/submit">
+                    <button type="submit">Отправить</button>
+                  </form>
+                {% endif %}
+
+                {% if row.can_cancel %}
+                  <form method="post" action="/admin/change-requests/{{ row.id }}/cancel">
+                    <input name="message" placeholder="Комментарий (опц.)" />
+                    <button type="submit" style="margin-top:6px;background:var(--danger);color:#fff;">Отменить</button>
+                  </form>
+                {% endif %}
+
+                {% if row.can_approve %}
+                  <form method="post" action="/admin/change-requests/{{ row.id }}/approve">
+                    <button type="submit">Утвердить и применить</button>
+                  </form>
+                {% endif %}
+
+                {% if row.can_ask_info %}
+                  <form method="post" action="/admin/change-requests/{{ row.id }}/needs-info">
+                    <input name="message" required placeholder="Вопрос к субадмину" />
+                    <button type="submit" style="margin-top:6px;">Задать вопрос</button>
+                  </form>
+                {% endif %}
+
+                {% if row.can_reject %}
+                  <form method="post" action="/admin/change-requests/{{ row.id }}/reject">
+                    <input name="message" required placeholder="Причина отклонения" />
+                    <button type="submit" style="margin-top:6px;background:var(--danger);color:#fff;">Отклонить</button>
+                  </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td colspan="9" style="padding-top:4px;padding-bottom:10px;">
+              <div class="subtle">Комментарии:</div>
+              {% if row.comments %}
+                <div style="display:flex; flex-direction:column; gap:5px; margin-top:5px;">
+                  {% for c in row.comments %}
+                    <div style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:#0f1b2b;">
+                      <strong>{{ c.author_role }} / {{ c.author_login }}</strong>
+                      <span class="subtle">— {{ c.created_at_msk }}</span>
+                      <div>{{ c.message }}</div>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="subtle">Нет комментариев.</div>
+              {% endif %}
+
+              {% if row.can_comment %}
+                <form method="post" action="/admin/change-requests/{{ row.id }}/comment" style="margin-top:8px;">
+                  <div style="display:flex; gap:8px;">
+                    <input name="message" required placeholder="Добавить комментарий" />
+                    <button type="submit">Отправить</button>
+                  </div>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="9" class="muted">Записей нет.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if not can_manage %}
+  <script>
+    (function () {
+      const typeSelect = document.getElementById("change_type_select");
+      if (!typeSelect) return;
+      const creditsWrap = document.getElementById("credits_amount_wrap");
+      const balanceWrap = document.getElementById("balance_value_wrap");
+      const promoWrap = document.getElementById("promo_code_wrap");
+      const creditsInput = document.getElementById("credits_amount_input");
+      const balanceInput = document.getElementById("balance_value_input");
+      const promoInput = document.getElementById("promo_code_input");
+
+      const sync = () => {
+        const t = typeSelect.value;
+        const isCredits = t === "add_credits" || t === "subtract_credits";
+        const isBalance = t === "set_balance";
+        const isPromo = t === "revoke_promo";
+
+        creditsWrap.style.display = isCredits ? "" : "none";
+        balanceWrap.style.display = isBalance ? "" : "none";
+        promoWrap.style.display = isPromo ? "" : "none";
+
+        creditsInput.required = isCredits;
+        balanceInput.required = isBalance;
+        promoInput.required = isPromo;
+      };
+
+      typeSelect.addEventListener("change", sync);
+      sync();
+    })();
+  </script>
+  {% endif %}
+{% endblock %}

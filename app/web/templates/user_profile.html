@@ -231,6 +231,94 @@
     </div>
   </div>
   {% if not can_manage %}
+  <div class="section">
+    <h3>Предложение админу</h3>
+    <div class="subtle" style="margin-bottom: 10px;">
+      Создайте черновик изменения по этому пользователю и отправьте на согласование.
+    </div>
+    <form method="post" action="/admin/change-requests/create" id="profile-request-form">
+      <input type="hidden" name="target_user_id" value="{{ user.id }}" />
+      <div class="form-row">
+        <div>
+          <label for="profile_change_type">Тип изменения</label>
+          <select
+            id="profile_change_type"
+            name="change_type"
+            required
+            style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #2b3f59;background:#0f1b2b;color:var(--text);"
+          >
+            <option value="add_credits">Начислить кредиты</option>
+            <option value="subtract_credits">Списать кредиты</option>
+            <option value="set_balance">Установить баланс</option>
+            <option value="revoke_promo">Отозвать промо-код</option>
+          </select>
+        </div>
+        <div id="profile_credits_wrap">
+          <label for="profile_credits_amount">Кредиты</label>
+          <input id="profile_credits_amount" name="credits_amount" type="number" min="1" step="1" placeholder="Например: 5" />
+        </div>
+        <div id="profile_balance_wrap" style="display:none;">
+          <label for="profile_balance_value">Новый баланс</label>
+          <input id="profile_balance_value" name="balance_value" type="number" min="0" step="1" placeholder="Например: 100" />
+        </div>
+        <div id="profile_promo_wrap" style="display:none;">
+          <label for="profile_promo_code">Промо-код</label>
+          <input id="profile_promo_code" name="promo_code" list="profile_promo_suggestions" placeholder="Например: ABCD1234" />
+          {% if active_promo_codes %}
+            <datalist id="profile_promo_suggestions">
+              {% for code in active_promo_codes %}
+                <option value="{{ code }}"></option>
+              {% endfor %}
+            </datalist>
+          {% endif %}
+        </div>
+      </div>
+      <div style="margin-top: 10px;">
+        <label for="profile_request_reason">Причина</label>
+        <textarea
+          id="profile_request_reason"
+          name="reason"
+          required
+          rows="3"
+          style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #2b3f59;background:#0f1b2b;color:var(--text);"
+        ></textarea>
+      </div>
+      <div style="margin-top: 10px; display:flex; gap:10px; flex-wrap: wrap;">
+        <button type="submit">Сохранить черновик</button>
+        <a class="row-link" href="/admin/change-requests?user_id={{ user.id }}">Открыть список предложений</a>
+      </div>
+    </form>
+  </div>
+  <script>
+    (function () {
+      const typeSelect = document.getElementById("profile_change_type");
+      if (!typeSelect) return;
+      const creditsWrap = document.getElementById("profile_credits_wrap");
+      const balanceWrap = document.getElementById("profile_balance_wrap");
+      const promoWrap = document.getElementById("profile_promo_wrap");
+      const creditsInput = document.getElementById("profile_credits_amount");
+      const balanceInput = document.getElementById("profile_balance_value");
+      const promoInput = document.getElementById("profile_promo_code");
+
+      const sync = () => {
+        const t = typeSelect.value;
+        const isCredits = t === "add_credits" || t === "subtract_credits";
+        const isBalance = t === "set_balance";
+        const isPromo = t === "revoke_promo";
+
+        creditsWrap.style.display = isCredits ? "" : "none";
+        balanceWrap.style.display = isBalance ? "" : "none";
+        promoWrap.style.display = isPromo ? "" : "none";
+
+        creditsInput.required = isCredits;
+        balanceInput.required = isBalance;
+        promoInput.required = isPromo;
+      };
+
+      typeSelect.addEventListener("change", sync);
+      sync();
+    })();
+  </script>
   <script>
     (function () {
       const managementSelector = [

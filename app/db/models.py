@@ -200,3 +200,43 @@ class SupportMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     thread: Mapped['SupportThread'] = relationship(back_populates='messages')
+
+
+class AdminChangeRequest(Base):
+    __tablename__ = "admin_change_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    status: Mapped[str] = mapped_column(String(16), index=True, default="draft")
+    change_type: Mapped[str] = mapped_column(String(32), index=True)
+    target_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    credits_amount: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    balance_value: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    promo_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    reason: Mapped[str] = mapped_column(Text)
+    created_by_role: Mapped[str] = mapped_column(String(16), default="subadmin")
+    created_by_login: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by_login: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    reviewed_by_telegram_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    apply_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    target_user: Mapped["User"] = relationship()
+    comments: Mapped[list["AdminChangeComment"]] = relationship(back_populates="request")
+
+
+class AdminChangeComment(Base):
+    __tablename__ = "admin_change_comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("admin_change_requests.id"), index=True)
+    author_role: Mapped[str] = mapped_column(String(16))
+    author_login: Mapped[str] = mapped_column(String(255))
+    author_telegram_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    message: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    request: Mapped["AdminChangeRequest"] = relationship(back_populates="comments")
