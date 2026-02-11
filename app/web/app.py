@@ -313,6 +313,7 @@ async def _notify_admins_about_change_request_update(
     comment: str | None = None,
     actor: str | None = None,
     context: str | None = None,
+    include_review_actions: bool = False,
 ) -> None:
     settings = get_settings()
     if not settings.support_bot_token:
@@ -330,7 +331,11 @@ async def _notify_admins_about_change_request_update(
         actor=actor,
         context=context,
     )
-    keyboard = _change_request_open_keyboard()
+    request_id = int(item.get("id") or 0)
+    if include_review_actions and request_id > 0:
+        keyboard = _change_request_review_keyboard(request_id)
+    else:
+        keyboard = _change_request_open_keyboard()
     bot = Bot(
         token=settings.support_bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
@@ -1412,6 +1417,7 @@ def create_app() -> FastAPI:
                 comment=text,
                 actor=login,
                 context=notify_admins_context,
+                include_review_actions=True,
             )
         if notify_subadmins_item:
             await _notify_subadmins_about_change_request_update(
