@@ -18,6 +18,8 @@ class AdminFlow(StatesGroup):
     grant_credits = State()
     ban_user = State()
     support_reply = State()
+    change_request_needs_info = State()
+    change_request_reject = State()
     broadcast_message = State()
 
 

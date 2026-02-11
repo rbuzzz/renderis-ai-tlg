@@ -5,6 +5,7 @@ import base64
 import mimetypes
 import time
 import uuid
+from html import escape
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -17,7 +18,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import FSInputFile
+from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.config import get_settings
 from app.db.models import (
@@ -147,6 +148,108 @@ def _change_action_preview(
     if change_type == CHANGE_REVOKE_PROMO:
         return (promo_code or "").strip().upper() or "—"
     return "—"
+
+
+def _admin_change_requests_url() -> str | None:
+    settings = get_settings()
+    if not settings.admin_web_public_url:
+        return None
+
+    base = settings.admin_web_public_url.rstrip("/")
+    if base.endswith("/admin/change-requests"):
+        return base
+    if base.endswith("/admin"):
+        return f"{base}/change-requests"
+    return f"{base}/admin/change-requests"
+
+
+def _change_request_action_line(item: dict[str, object]) -> str:
+    change_type = str(item.get("change_type") or "")
+    if change_type == CHANGE_ADD_CREDITS:
+        return f"Начислить <b>+{int(item.get('credits_amount') or 0)}</b> кредитов"
+    if change_type == CHANGE_SUBTRACT_CREDITS:
+        return f"Списать <b>-{int(item.get('credits_amount') or 0)}</b> кредитов"
+    if change_type == CHANGE_SET_BALANCE:
+        return f"Установить баланс: <b>{int(item.get('balance_value') or 0)}</b>"
+    if change_type == CHANGE_REVOKE_PROMO:
+        code = (str(item.get("promo_code") or "")).strip().upper() or "—"
+        return f"Отозвать промо-код: <code>{escape(code)}</code>"
+    return escape(change_type)
+
+
+def _build_change_request_notify_item(req: AdminChangeRequest, user: User) -> dict[str, object]:
+    return {
+        "id": req.id,
+        "change_type": req.change_type,
+        "credits_amount": req.credits_amount,
+        "balance_value": req.balance_value,
+        "promo_code": req.promo_code,
+        "reason": req.reason,
+        "created_by_login": req.created_by_login,
+        "target_user_id": user.id,
+        "target_telegram_id": user.telegram_id,
+        "target_username": user.username or "",
+    }
+
+
+def _change_request_notify_text(item: dict[str, object]) -> str:
+    request_id = int(item.get("id") or 0)
+    tg_id = int(item.get("target_telegram_id") or 0)
+    username = (str(item.get("target_username") or "")).strip()
+    display_name = f"@{username}" if username else "—"
+    reason = escape((str(item.get("reason") or "")).strip() or "—")
+    created_by = escape((str(item.get("created_by_login") or "")).strip() or "subadmin")
+    action_title = _change_type_title(str(item.get("change_type") or ""))
+
+    lines = [
+        "📝 Новое предложение на согласование",
+        f"ID: <b>#{request_id}</b>",
+        f"Тип: <b>{escape(action_title)}</b>",
+        f"Пользователь: <code>{tg_id}</code> ({escape(display_name)})",
+        f"Действие: {_change_request_action_line(item)}",
+        f"Причина: {reason}",
+        f"Автор: <b>{created_by}</b>",
+    ]
+    return "\n".join(lines)
+
+
+def _change_request_review_keyboard(request_id: int) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="✅ Утвердить", callback_data=f"cr:approve:{request_id}")],
+        [
+            InlineKeyboardButton(text="❓ Уточнить", callback_data=f"cr:info:{request_id}"),
+            InlineKeyboardButton(text="⛔ Отклонить", callback_data=f"cr:reject:{request_id}"),
+        ],
+    ]
+    admin_url = _admin_change_requests_url()
+    if admin_url:
+        rows.append([InlineKeyboardButton(text="Открыть в админке", url=admin_url)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _notify_admins_about_change_request(item: dict[str, object]) -> None:
+    settings = get_settings()
+    if not settings.support_bot_token:
+        return
+
+    admin_ids = settings.admin_ids()
+    if not admin_ids:
+        return
+
+    message_text = _change_request_notify_text(item)
+    keyboard = _change_request_review_keyboard(int(item.get("id") or 0))
+    bot = Bot(
+        token=settings.support_bot_token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        for admin_id in admin_ids:
+            try:
+                await bot.send_message(admin_id, message_text, reply_markup=keyboard)
+            except Exception:
+                continue
+    finally:
+        await bot.session.close()
 
 
 def _model_name_map() -> dict[str, str]:
@@ -959,6 +1062,7 @@ def create_app() -> FastAPI:
             return _forbidden_redirect()
 
         login = _session_login(request) or "subadmin"
+        notify_item: dict[str, object] | None = None
         async with app.state.sessionmaker() as session:
             req = await session.get(AdminChangeRequest, request_id)
             if not req or req.created_by_login != login:
@@ -974,7 +1078,12 @@ def create_app() -> FastAPI:
                 author_telegram_id=None,
                 message="Отправлено на согласование.",
             )
+            target_user = await session.get(User, req.target_user_id)
+            if target_user:
+                notify_item = _build_change_request_notify_item(req, target_user)
             await session.commit()
+        if notify_item:
+            await _notify_admins_about_change_request(notify_item)
         return RedirectResponse(url="/admin/change-requests?saved=submitted", status_code=302)
 
     @app.post("/admin/change-requests/submit-all")
@@ -985,6 +1094,7 @@ def create_app() -> FastAPI:
             return _forbidden_redirect()
 
         login = _session_login(request) or "subadmin"
+        notify_items: list[dict[str, object]] = []
         async with app.state.sessionmaker() as session:
             rows = await session.execute(
                 select(AdminChangeRequest).where(
@@ -1005,7 +1115,12 @@ def create_app() -> FastAPI:
                         author_telegram_id=None,
                         message="Отправлено на согласование.",
                     )
+                    target_user = await session.get(User, req.target_user_id)
+                    if target_user:
+                        notify_items.append(_build_change_request_notify_item(req, target_user))
             await session.commit()
+        for item in notify_items:
+            await _notify_admins_about_change_request(item)
         return RedirectResponse(url=f"/admin/change-requests?saved=submitted_all_{changed}", status_code=302)
 
     @app.post("/admin/change-requests/{request_id}/cancel")
@@ -1054,6 +1169,7 @@ def create_app() -> FastAPI:
 
         is_admin = _can_manage(request)
         login = _session_login(request) or ("admin" if is_admin else "subadmin")
+        notify_item: dict[str, object] | None = None
         async with app.state.sessionmaker() as session:
             req = await session.get(AdminChangeRequest, request_id)
             if not req:
@@ -1069,8 +1185,14 @@ def create_app() -> FastAPI:
                 message=text,
             )
             if (not is_admin) and req.status == STATUS_NEEDS_INFO:
-                await service.submit(req)
+                ok, _ = await service.submit(req)
+                if ok:
+                    target_user = await session.get(User, req.target_user_id)
+                    if target_user:
+                        notify_item = _build_change_request_notify_item(req, target_user)
             await session.commit()
+        if notify_item:
+            await _notify_admins_about_change_request(notify_item)
         return RedirectResponse(url="/admin/change-requests?saved=comment_added", status_code=302)
 
     @app.post("/admin/change-requests/{request_id}/needs-info")
