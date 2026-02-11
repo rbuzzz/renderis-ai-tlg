@@ -25,6 +25,7 @@ logger = get_logger('poller')
 
 SUCCESS_STATUSES = {'success', 'succeeded', 'completed', 'done'}
 FAIL_STATUSES = {'fail', 'failed', 'error'}
+PROTECTED_REFERENCE_DIRS = {'_site', '_support_media'}
 
 
 class PollManager:
@@ -259,6 +260,8 @@ class PollManager:
             return
         for entry in os.scandir(base):
             if not entry.is_dir():
+                continue
+            if entry.name in PROTECTED_REFERENCE_DIRS:
                 continue
             try:
                 newest = 0.0
