@@ -2,6 +2,7 @@
 
 import secrets
 import base64
+import logging
 import mimetypes
 import time
 import uuid
@@ -63,6 +64,7 @@ MAX_LOGO_SIZE_BYTES = 15 * 1024 * 1024
 SUPPORT_MEDIA_DIR = "_support_media"
 SUPPORT_MEDIA_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
 MAX_SUPPORT_MEDIA_SIZE_BYTES = 20 * 1024 * 1024
+logger = logging.getLogger(__name__)
 try:
     from zoneinfo import ZoneInfo
 except ImportError:  # pragma: no cover
@@ -293,6 +295,11 @@ async def _notify_admins_about_change_request(item: dict[str, object]) -> None:
             try:
                 await bot.send_message(admin_id, message_text, reply_markup=keyboard)
             except Exception:
+                logger.exception(
+                    "Failed to notify admin about change request id=%s admin_id=%s",
+                    item.get("id"),
+                    admin_id,
+                )
                 continue
     finally:
         await bot.session.close()
@@ -333,6 +340,11 @@ async def _notify_admins_about_change_request_update(
             try:
                 await bot.send_message(admin_id, message_text, reply_markup=keyboard)
             except Exception:
+                logger.exception(
+                    "Failed to notify admin about change request update id=%s admin_id=%s",
+                    item.get("id"),
+                    admin_id,
+                )
                 continue
     finally:
         await bot.session.close()
@@ -373,6 +385,11 @@ async def _notify_subadmins_about_change_request_update(
             try:
                 await bot.send_message(subadmin_id, message_text, reply_markup=keyboard)
             except Exception:
+                logger.exception(
+                    "Failed to notify subadmin about change request update id=%s subadmin_id=%s",
+                    item.get("id"),
+                    subadmin_id,
+                )
                 continue
     finally:
         await bot.session.close()
@@ -1067,8 +1084,13 @@ def create_app() -> FastAPI:
             if user_id:
                 query = query.where(AdminChangeRequest.target_user_id == user_id)
             if status == "active":
+                active_statuses = (
+                    [STATUS_PENDING, STATUS_NEEDS_INFO]
+                    if is_admin
+                    else [STATUS_DRAFT, STATUS_PENDING, STATUS_NEEDS_INFO]
+                )
                 query = query.where(
-                    AdminChangeRequest.status.in_([STATUS_DRAFT, STATUS_PENDING, STATUS_NEEDS_INFO])
+                    AdminChangeRequest.status.in_(active_statuses)
                 )
             query = query.order_by(AdminChangeRequest.updated_at.desc(), AdminChangeRequest.id.desc())
             rows = await session.execute(query.limit(400))
@@ -1338,6 +1360,7 @@ def create_app() -> FastAPI:
         is_admin = _can_manage(request)
         login = _session_login(request) or ("admin" if is_admin else "subadmin")
         notify_admins_item: dict[str, object] | None = None
+        notify_admins_headline: str | None = None
         notify_admins_status: str | None = None
         notify_admins_context: str | None = None
         notify_subadmins_item: dict[str, object] | None = None
@@ -1349,6 +1372,8 @@ def create_app() -> FastAPI:
                 return RedirectResponse(url="/admin/change-requests?error=not_found", status_code=302)
             if (not is_admin) and req.created_by_login != login:
                 return RedirectResponse(url="/admin/change-requests?error=not_found", status_code=302)
+            if req.status not in {STATUS_PENDING, STATUS_NEEDS_INFO}:
+                return RedirectResponse(url="/admin/change-requests?error=wrong_status", status_code=302)
             service = ChangeRequestService(session)
             await service.add_comment(
                 req=req,
@@ -1357,14 +1382,21 @@ def create_app() -> FastAPI:
                 author_telegram_id=None,
                 message=text,
             )
-            if (not is_admin) and req.status == STATUS_NEEDS_INFO:
-                ok, _ = await service.submit(req)
-                if ok:
-                    target_user = await session.get(User, req.target_user_id)
-                    if target_user:
-                        notify_admins_item = _build_change_request_notify_item(req, target_user)
-                        notify_admins_status = req.status
-                        notify_admins_context = await _build_change_request_context(session, req.id)
+            if not is_admin:
+                if req.status == STATUS_NEEDS_INFO:
+                    ok, _ = await service.submit(req)
+                    if ok:
+                        notify_admins_headline = "💬 Субадмин ответил и повторно отправил предложение"
+                    else:
+                        notify_admins_headline = "💬 Субадмин оставил комментарий к предложению"
+                else:
+                    notify_admins_headline = "💬 Субадмин оставил комментарий к предложению"
+
+                target_user = await session.get(User, req.target_user_id)
+                if target_user:
+                    notify_admins_item = _build_change_request_notify_item(req, target_user)
+                    notify_admins_status = req.status
+                    notify_admins_context = await _build_change_request_context(session, req.id)
             if is_admin:
                 target_user = await session.get(User, req.target_user_id)
                 if target_user:
@@ -1372,10 +1404,10 @@ def create_app() -> FastAPI:
                     notify_subadmins_status = req.status
                     notify_subadmins_context = await _build_change_request_context(session, req.id)
             await session.commit()
-        if notify_admins_item:
+        if notify_admins_item and notify_admins_headline:
             await _notify_admins_about_change_request_update(
                 notify_admins_item,
-                headline="💬 Субадмин ответил и повторно отправил предложение",
+                headline=notify_admins_headline,
                 status_title=_change_status_title(notify_admins_status or STATUS_PENDING),
                 comment=text,
                 actor=login,
