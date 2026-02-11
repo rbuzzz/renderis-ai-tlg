@@ -62,6 +62,23 @@ def language_menu(current_lang: str, lang: str = "ru", include_back: bool = True
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def terms_menu(lang: str = "ru") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t(lang, "terms_accept_btn"), callback_data="terms:accept")],
+            [InlineKeyboardButton(text=t(lang, "terms_decline_btn"), callback_data="terms:decline")],
+        ]
+    )
+
+
+def terms_blocked_menu(lang: str = "ru") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t(lang, "terms_read_btn"), callback_data="terms:read")],
+        ]
+    )
+
+
 def generate_category_menu(lang: str = "ru") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[

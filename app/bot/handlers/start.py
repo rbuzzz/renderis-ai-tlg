@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 from aiogram import F, Router
-from aiogram.filters import Command, CommandObject
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.handlers.payments import send_buy_options, send_topup_options
 from app.bot.i18n import get_lang, t, tf
-from app.bot.keyboards.main import language_menu, main_menu, settings_menu
+from app.bot.keyboards.main import language_menu, main_menu, settings_menu, terms_blocked_menu, terms_menu
 from app.bot.utils import safe_cleanup_callback
 from app.config import get_settings
 from app.db.models import Price
@@ -19,6 +18,7 @@ from app.utils.text import escape_html
 
 
 router = Router()
+TERMS_DOC_URL = "https://rebrand.ly/8da8cc"
 
 
 def _language_label(code: str) -> str:
@@ -29,26 +29,33 @@ def _language_label(code: str) -> str:
     }.get(code, "English")
 
 
-@router.message(Command("start"))
-async def cmd_start(message: Message, session: AsyncSession, command: CommandObject, state: FSMContext) -> None:
-    await state.clear()
+def _terms_accepted(settings_payload: dict) -> bool:
+    return bool(settings_payload.get("terms_accepted"))
+
+
+def _terms_prompt_text(lang: str) -> str:
+    return (
+        f"{t(lang, 'terms_intro')}\n"
+        f"{tf(lang, 'terms_link', link=TERMS_DOC_URL)}\n\n"
+        f"{t(lang, 'terms_question')}"
+    )
+
+
+async def _send_post_accept_intro(
+    message: Message,
+    session: AsyncSession,
+    user,
+    lang: str,
+    full_name: str,
+    settings_payload: dict,
+) -> None:
     settings = get_settings()
     credits = CreditsService(session)
-    user = await credits.ensure_user(
-        message.from_user.id,
-        message.from_user.username,
-        message.from_user.id in settings.admin_ids(),
-    )
-    settings_payload = dict(user.settings or {})
-    lang = normalize_lang(settings_payload.get("lang"))
-    settings_payload["lang"] = lang
-    user.settings = settings_payload
-
     bonus_applied = await credits.apply_signup_bonus(user, settings.signup_bonus_credits)
     await session.commit()
 
     text = (
-        f"{tf(lang, 'start_hello', name=escape_html(message.from_user.full_name))}\n"
+        f"{tf(lang, 'start_hello', name=escape_html(full_name))}\n"
         f"{tf(lang, 'start_balance', credits=user.balance_credits)}\n"
         f"{t(lang, 'start_terms')}"
     )
@@ -62,11 +69,113 @@ async def cmd_start(message: Message, session: AsyncSession, command: CommandObj
             reply_markup=language_menu(current_lang=lang, lang=lang, include_back=False),
         )
 
-    start_arg = (command.args or "").strip().lower()
-    if start_arg in {"buy", "topup"}:
-        await send_topup_options(message)
-    elif start_arg in {"stars"}:
-        await send_buy_options(message, session)
+
+@router.message(Command("start"))
+async def cmd_start(message: Message, session: AsyncSession, state: FSMContext) -> None:
+    await state.clear()
+    settings = get_settings()
+    credits = CreditsService(session)
+    user = await credits.ensure_user(
+        message.from_user.id,
+        message.from_user.username,
+        message.from_user.id in settings.admin_ids(),
+    )
+    settings_payload = dict(user.settings or {})
+    lang = normalize_lang(settings_payload.get("lang"))
+    settings_payload["lang"] = lang
+    user.settings = settings_payload
+
+    if not _terms_accepted(settings_payload):
+        await session.commit()
+        await message.answer(
+            _terms_prompt_text(lang),
+            reply_markup=terms_menu(lang),
+            disable_web_page_preview=True,
+        )
+        return
+
+    await session.commit()
+    await message.answer(t(lang, "settings_back_to_main"), reply_markup=main_menu(lang))
+
+
+@router.callback_query(F.data == "terms:read")
+async def terms_read(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
+    await state.clear()
+    settings = get_settings()
+    credits = CreditsService(session)
+    user = await credits.ensure_user(
+        callback.from_user.id,
+        callback.from_user.username,
+        callback.from_user.id in settings.admin_ids(),
+    )
+    settings_payload = dict(user.settings or {})
+    lang = normalize_lang(settings_payload.get("lang"))
+    settings_payload["lang"] = lang
+    user.settings = settings_payload
+    await session.commit()
+
+    await callback.message.answer(
+        _terms_prompt_text(lang),
+        reply_markup=terms_menu(lang),
+        disable_web_page_preview=True,
+    )
+    await callback.answer()
+    await safe_cleanup_callback(callback)
+
+
+@router.callback_query(F.data == "terms:decline")
+async def terms_decline(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
+    await state.clear()
+    settings = get_settings()
+    credits = CreditsService(session)
+    user = await credits.ensure_user(
+        callback.from_user.id,
+        callback.from_user.username,
+        callback.from_user.id in settings.admin_ids(),
+    )
+    settings_payload = dict(user.settings or {})
+    lang = normalize_lang(settings_payload.get("lang"))
+    settings_payload["lang"] = lang
+    settings_payload["terms_accepted"] = False
+    settings_payload["terms_declined"] = True
+    user.settings = settings_payload
+    await session.commit()
+
+    await callback.message.answer(
+        t(lang, "terms_declined_blocked"),
+        reply_markup=terms_blocked_menu(lang),
+    )
+    await callback.answer()
+    await safe_cleanup_callback(callback)
+
+
+@router.callback_query(F.data == "terms:accept")
+async def terms_accept(callback: CallbackQuery, session: AsyncSession, state: FSMContext) -> None:
+    await state.clear()
+    settings = get_settings()
+    credits = CreditsService(session)
+    user = await credits.ensure_user(
+        callback.from_user.id,
+        callback.from_user.username,
+        callback.from_user.id in settings.admin_ids(),
+    )
+    settings_payload = dict(user.settings or {})
+    lang = normalize_lang(settings_payload.get("lang"))
+    settings_payload["lang"] = lang
+    settings_payload["terms_accepted"] = True
+    settings_payload["terms_declined"] = False
+    user.settings = settings_payload
+
+    await _send_post_accept_intro(
+        callback.message,
+        session,
+        user,
+        lang,
+        callback.from_user.full_name,
+        settings_payload,
+    )
+    await callback.answer()
+    await safe_cleanup_callback(callback)
 
 
 @router.callback_query(F.data == "help")
