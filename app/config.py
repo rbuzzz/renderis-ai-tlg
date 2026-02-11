@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     bot_token: str = Field(..., alias='BOT_TOKEN')
     bot_username: str = Field('', alias='BOT_USERNAME')
     telegram_admin_ids: str = Field('', alias='TELEGRAM_ADMIN_IDS')
+    telegram_subadmin_ids: str = Field('', alias='TELEGRAM_SUBADMIN_IDS')
 
     # Database
     database_url: str = Field(..., alias='DATABASE_URL')
@@ -58,6 +59,8 @@ class Settings(BaseSettings):
     admin_web_port: int = Field(9001, alias='ADMIN_WEB_PORT')
     admin_web_username: str = Field('admin', alias='ADMIN_WEB_USERNAME')
     admin_web_password: str = Field('', alias='ADMIN_WEB_PASSWORD')
+    admin_web_subadmin_username: str = Field('', alias='ADMIN_WEB_SUBADMIN_USERNAME')
+    admin_web_subadmin_password: str = Field('', alias='ADMIN_WEB_SUBADMIN_PASSWORD')
     admin_web_secret: str = Field('change-me', alias='ADMIN_WEB_SECRET')
     admin_web_public_url: str = Field('', alias='ADMIN_WEB_PUBLIC_URL')
 
@@ -87,6 +90,24 @@ class Settings(BaseSettings):
         if not self.telegram_admin_ids:
             return []
         return [int(x.strip()) for x in self.telegram_admin_ids.split(',') if x.strip()]
+
+    def subadmin_ids(self) -> List[int]:
+        if not self.telegram_subadmin_ids:
+            return []
+        return [int(x.strip()) for x in self.telegram_subadmin_ids.split(',') if x.strip()]
+
+    def staff_ids(self) -> List[int]:
+        # Preserve order while removing duplicates.
+        return list(dict.fromkeys([*self.admin_ids(), *self.subadmin_ids()]))
+
+    def is_admin_telegram_id(self, telegram_id: int) -> bool:
+        return telegram_id in self.admin_ids()
+
+    def is_subadmin_telegram_id(self, telegram_id: int) -> bool:
+        return telegram_id in self.subadmin_ids()
+
+    def is_staff_telegram_id(self, telegram_id: int) -> bool:
+        return telegram_id in self.staff_ids()
 
     def poll_backoff_list(self) -> List[int]:
         return [int(x.strip()) for x in self.poll_backoff_sequence.split(',') if x.strip()]

@@ -29,7 +29,7 @@ async def fallback_private_message(message: Message, session: AsyncSession, stat
     user = await credits.ensure_user(
         message.from_user.id,
         message.from_user.username,
-        message.from_user.id in settings.admin_ids(),
+        settings.is_admin_telegram_id(message.from_user.id),
     )
 
     payload = dict(user.settings) if isinstance(user.settings, dict) else {}

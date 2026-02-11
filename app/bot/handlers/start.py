@@ -43,7 +43,7 @@ async def cmd_start(message: Message, session: AsyncSession, command: CommandObj
     user = await credits.ensure_user(
         message.from_user.id,
         message.from_user.username,
-        message.from_user.id in settings.admin_ids(),
+        settings.is_admin_telegram_id(message.from_user.id),
     )
     settings_payload = _normalize_settings_payload(user.settings)
     lang = normalize_lang(settings_payload.get("lang"))

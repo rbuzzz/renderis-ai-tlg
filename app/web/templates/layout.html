@@ -122,6 +122,10 @@
         font-weight: 700;
         cursor: pointer;
       }
+      button[disabled] {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
       .notice { color: var(--accent); font-size: 13px; margin-top: 8px; }
       .badge {
         display: inline-flex;
@@ -208,7 +212,14 @@
   </head>
   <body>
     <div class="topbar">
-      <div class="brand">Renderis Admin</div>
+      <div class="brand">
+        Renderis Admin
+        {% if is_subadmin %}
+          <span class="badge warn">Субадмин</span>
+        {% elif can_manage %}
+          <span class="badge ok">Админ</span>
+        {% endif %}
+      </div>
       <nav>
         <a href="/admin" class="{{ 'active' if active_tab == 'dashboard' else '' }}">Дашборд</a>
         <a href="/admin/users" class="{{ 'active' if active_tab == 'users' else '' }}">Пользователи</a>

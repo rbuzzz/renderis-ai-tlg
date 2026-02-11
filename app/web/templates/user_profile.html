@@ -29,6 +29,9 @@
     {% elif error == "promo_already_revoked" %}
       <div class="notice" style="color: var(--danger);">Этот промокод уже отменен.</div>
     {% endif %}
+    {% if not can_manage %}
+      <div class="notice" style="color: var(--muted);">Режим только просмотра: изменение статуса, баланса и промо-кодов недоступно для субадмина.</div>
+    {% endif %}
     <div class="grid">
       <div class="card">
         <h3>Telegram ID</h3>
@@ -227,4 +230,23 @@
       </table>
     </div>
   </div>
+  {% if not can_manage %}
+  <script>
+    (function () {
+      const managementSelector = [
+        "form[action$='/ban']",
+        "form[action$='/unban']",
+        "form[action*='/credits/']",
+      ].join(", ");
+      const actionsSection = document.querySelector(managementSelector)?.closest(".section");
+      document.querySelectorAll(managementSelector).forEach((form) => form.remove());
+      document
+        .querySelectorAll("form[action*='/promos/'][action$='/revoke']")
+        .forEach((form) => form.remove());
+      if (actionsSection) {
+        actionsSection.style.display = "none";
+      }
+    })();
+  </script>
+  {% endif %}
 {% endblock %}

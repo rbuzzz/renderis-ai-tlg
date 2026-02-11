@@ -46,7 +46,7 @@
             <td class="muted">{{ row.redeemed_at_msk or '—' }}</td>
             <td class="muted">{{ row.user_balance or '—' }}</td>
             <td>
-              {% if row.can_deactivate %}
+              {% if row.can_deactivate and can_manage %}
                 <form method="post" action="/admin/promos/code/{{ row.code }}/deactivate">
                   <input type="hidden" name="next" value="/admin/promos/batch/{{ batch.batch_id }}" />
                   <button type="submit">Деактивировать</button>

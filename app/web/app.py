@@ -47,6 +47,25 @@ def _is_logged_in(request: Request) -> bool:
     return bool(request.session.get("admin_logged_in"))
 
 
+def _session_role(request: Request) -> str:
+    role = request.session.get("admin_role")
+    if role == "subadmin":
+        return "subadmin"
+    return "admin"
+
+
+def _is_subadmin(request: Request) -> bool:
+    return _is_logged_in(request) and _session_role(request) == "subadmin"
+
+
+def _can_manage(request: Request) -> bool:
+    return _is_logged_in(request) and _session_role(request) == "admin"
+
+
+def _forbidden_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/admin?error=forbidden", status_code=302)
+
+
 def _model_name_map() -> dict[str, str]:
     return {m.key: m.display_name for m in list_models()}
 
@@ -356,15 +375,26 @@ def create_app() -> FastAPI:
                 "login.html",
                 {"request": request, "error": "Пароль не задан в ADMIN_WEB_PASSWORD."},
             )
-        ok = secrets.compare_digest(username, settings.admin_web_username) and secrets.compare_digest(
+        role: str | None = None
+        admin_ok = secrets.compare_digest(username, settings.admin_web_username) and secrets.compare_digest(
             password, settings.admin_web_password
         )
-        if not ok:
+        if admin_ok:
+            role = "admin"
+        elif settings.admin_web_subadmin_password:
+            subadmin_ok = secrets.compare_digest(username, settings.admin_web_subadmin_username) and secrets.compare_digest(
+                password, settings.admin_web_subadmin_password
+            )
+            if subadmin_ok:
+                role = "subadmin"
+
+        if role is None:
             return app.state.templates.TemplateResponse(
                 "login.html",
                 {"request": request, "error": "Неверный логин или пароль."},
             )
         request.session["admin_logged_in"] = True
+        request.session["admin_role"] = role
         return RedirectResponse(url="/admin", status_code=302)
 
     @app.get("/logout")
@@ -398,7 +428,7 @@ def create_app() -> FastAPI:
         return await admin_favicon_svg()
 
     @app.get("/admin", response_class=HTMLResponse)
-    async def admin_dashboard(request: Request):
+    async def admin_dashboard(request: Request, error: str | None = None):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
 
@@ -476,6 +506,9 @@ def create_app() -> FastAPI:
                 "credits_spent": credits_spent,
                 "recent_orders": recent_orders,
                 "recent_gens": recent_gens,
+                "error": (error or "").strip().lower(),
+                "can_manage": _can_manage(request),
+                "is_subadmin": _is_subadmin(request),
             },
         )
 
@@ -551,6 +584,8 @@ def create_app() -> FastAPI:
                 "has_next": page < total_pages,
                 "prev_page": page - 1,
                 "next_page": page + 1,
+                "can_manage": _can_manage(request),
+                "is_subadmin": _is_subadmin(request),
             },
         )
 
@@ -650,6 +685,8 @@ def create_app() -> FastAPI:
                 "promo_codes": promo_codes,
                 "saved": (saved or "").strip().lower(),
                 "error": (error or "").strip().lower(),
+                "can_manage": _can_manage(request),
+                "is_subadmin": _is_subadmin(request),
             },
         )
 
@@ -657,6 +694,8 @@ def create_app() -> FastAPI:
     async def admin_user_ban(request: Request, user_id: int):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
+        if not _can_manage(request):
+            return _forbidden_redirect()
         async with app.state.sessionmaker() as session:
             user = await session.get(User, user_id)
             if not user:
@@ -669,6 +708,8 @@ def create_app() -> FastAPI:
     async def admin_user_unban(request: Request, user_id: int):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
+        if not _can_manage(request):
+            return _forbidden_redirect()
         async with app.state.sessionmaker() as session:
             user = await session.get(User, user_id)
             if not user:
@@ -685,6 +726,8 @@ def create_app() -> FastAPI:
     ):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
+        if not _can_manage(request):
+            return _forbidden_redirect()
         parsed_amount = _parse_int(amount.strip())
         if parsed_amount is None or parsed_amount <= 0:
             return RedirectResponse(url=f"/admin/users/{user_id}?error=invalid_amount", status_code=302)
@@ -710,6 +753,8 @@ def create_app() -> FastAPI:
     ):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
+        if not _can_manage(request):
+            return _forbidden_redirect()
         parsed_amount = _parse_int(amount.strip())
         if parsed_amount is None or parsed_amount <= 0:
             return RedirectResponse(url=f"/admin/users/{user_id}?error=invalid_amount", status_code=302)
@@ -737,6 +782,8 @@ def create_app() -> FastAPI:
     ):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
+        if not _can_manage(request):
+            return _forbidden_redirect()
         parsed_balance = _parse_int(balance.strip())
         if parsed_balance is None or parsed_balance < 0:
             return RedirectResponse(url=f"/admin/users/{user_id}?error=invalid_balance", status_code=302)
@@ -767,6 +814,8 @@ def create_app() -> FastAPI:
     async def admin_user_promo_revoke(request: Request, user_id: int, code: str):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
+        if not _can_manage(request):
+            return _forbidden_redirect()
         promo_code = (code or "").strip().upper()
         if not promo_code:
             return RedirectResponse(url=f"/admin/users/{user_id}?error=promo_not_found", status_code=302)
@@ -980,6 +1029,8 @@ def create_app() -> FastAPI:
                 "products": products,
                 "topup_products": topup_products,
                 "saved": bool(saved),
+                "can_manage": _can_manage(request),
+                "is_subadmin": _is_subadmin(request),
             },
         )
 
@@ -992,6 +1043,8 @@ def create_app() -> FastAPI:
     ):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
+        if not _can_manage(request):
+            return _forbidden_redirect()
 
         async with app.state.sessionmaker() as session:
             prices = (
@@ -1063,6 +1116,8 @@ def create_app() -> FastAPI:
     ):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
+        if not _can_manage(request):
+            return _forbidden_redirect()
 
         async with app.state.sessionmaker() as session:
             product = await session.get(StarProduct, product_id)
@@ -1118,6 +1173,8 @@ def create_app() -> FastAPI:
     ):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
+        if not _can_manage(request):
+            return _forbidden_redirect()
 
         title_clean = title.strip() or "Новый пакет"
         parsed_base = _parse_int(credits_base.strip())
@@ -1202,6 +1259,8 @@ def create_app() -> FastAPI:
                 "logo_max_size_mb": int(MAX_LOGO_SIZE_BYTES / 1024 / 1024),
                 "saved": bool(saved),
                 "error": (error or "").strip(),
+                "can_manage": _can_manage(request),
+                "is_subadmin": _is_subadmin(request),
             },
         )
 
@@ -1223,6 +1282,8 @@ def create_app() -> FastAPI:
     ):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
+        if not _can_manage(request):
+            return _forbidden_redirect()
 
         async with app.state.sessionmaker() as session:
             settings_service = AppSettingsService(session)
@@ -1295,6 +1356,8 @@ def create_app() -> FastAPI:
                 "request": request,
                 "title": "Renderis Admin — Чаты",
                 "active_tab": "chats",
+                "can_manage": _can_manage(request),
+                "is_subadmin": _is_subadmin(request),
             },
         )
 
@@ -1532,6 +1595,8 @@ def create_app() -> FastAPI:
                 "promo": promo,
                 "search_code": search_code,
                 "saved": bool(saved),
+                "can_manage": _can_manage(request),
+                "is_subadmin": _is_subadmin(request),
             },
         )
 
@@ -1543,6 +1608,8 @@ def create_app() -> FastAPI:
     ):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
+        if not _can_manage(request):
+            return _forbidden_redirect()
 
         parsed_amount = _parse_int(amount.strip()) if amount.strip() else None
         parsed_credits = _parse_int(credits.strip()) if credits.strip() else None
@@ -1619,6 +1686,8 @@ def create_app() -> FastAPI:
                 "batch": batch,
                 "rows": rows,
                 "codes": codes,
+                "can_manage": _can_manage(request),
+                "is_subadmin": _is_subadmin(request),
             },
         )
 
@@ -1626,6 +1695,8 @@ def create_app() -> FastAPI:
     async def admin_promos_deactivate(request: Request, code: str):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
+        if not _can_manage(request):
+            return _forbidden_redirect()
 
         form = await request.form()
         next_url = str(form.get("next") or "/admin/promos")

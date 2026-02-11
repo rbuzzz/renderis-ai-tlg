@@ -5,6 +5,9 @@
     {% if saved %}
     <div class="notice">Изменения сохранены.</div>
     {% endif %}
+    {% if not can_manage %}
+    <div class="notice" style="color: var(--muted);">Режим только просмотра: изменение цен и пакетов недоступно для субадмина.</div>
+    {% endif %}
     <div class="table-scroll">
       <table>
         <thead>
@@ -23,11 +26,11 @@
           <tr>
             <td>{{ p.label }}</td>
             <td>
-              <input form="price-{{ p.row_id }}" name="provider_credits" value="{{ p.kie_credits }}" />
+              <input form="price-{{ p.row_id }}" name="provider_credits" value="{{ p.kie_credits }}" {% if not can_manage %}readonly{% endif %}/>
             </td>
             <td>{{ p.kie_usd }}</td>
             <td>
-              <input form="price-{{ p.row_id }}" name="renderis_credits" value="{{ p.renderis_credits }}" />
+              <input form="price-{{ p.row_id }}" name="renderis_credits" value="{{ p.renderis_credits }}" {% if not can_manage %}readonly{% endif %}/>
             </td>
             <td>{{ p.renderis_usd }}</td>
             <td>
@@ -38,7 +41,9 @@
               {% endif %}
             </td>
             <td>
+              {% if can_manage %}
               <button form="price-{{ p.row_id }}" type="submit">Сохранить</button>
+              {% endif %}
               <form id="price-{{ p.row_id }}" method="post" action="/admin/products/{{ p.row_id }}"></form>
             </td>
           </tr>
@@ -77,34 +82,40 @@
           {% for p in topup_products %}
           <tr>
             <td>
-              <input form="topup-{{ p.id }}" name="title" value="{{ p.title }}" />
+              <input form="topup-{{ p.id }}" name="title" value="{{ p.title }}" {% if not can_manage %}readonly{% endif %}/>
             </td>
             <td>
-              <input form="topup-{{ p.id }}" name="credits_base" value="{{ p.credits_base }}" />
+              <input form="topup-{{ p.id }}" name="credits_base" value="{{ p.credits_base }}" {% if not can_manage %}readonly{% endif %}/>
             </td>
             <td>
-              <input form="topup-{{ p.id }}" name="credits_bonus" value="{{ p.credits_bonus }}" />
+              <input form="topup-{{ p.id }}" name="credits_bonus" value="{{ p.credits_bonus }}" {% if not can_manage %}readonly{% endif %}/>
             </td>
             <td>{{ p.credits_total }}</td>
             <td>
-              <input form="topup-{{ p.id }}" name="price_stars" value="{{ p.price_stars }}" />
+              <input form="topup-{{ p.id }}" name="price_stars" value="{{ p.price_stars }}" {% if not can_manage %}readonly{% endif %}/>
             </td>
             <td>
-              <input form="topup-{{ p.id }}" name="price_usd" value="{{ p.price_usd }}" placeholder="auto" />
+              <input form="topup-{{ p.id }}" name="price_usd" value="{{ p.price_usd }}" placeholder="auto" {% if not can_manage %}readonly{% endif %}/>
             </td>
             <td>{{ p.stars_effective }}</td>
             <td>{{ p.usd_effective }}</td>
             <td>{{ p.stars_per_credit }}</td>
             <td>{{ p.usd_per_credit }}</td>
             <td>
-              <input form="topup-{{ p.id }}" name="sort_order" value="{{ p.sort_order }}" />
+              <input form="topup-{{ p.id }}" name="sort_order" value="{{ p.sort_order }}" {% if not can_manage %}readonly{% endif %}/>
             </td>
             <td>
+              {% if can_manage %}
               <input form="topup-{{ p.id }}" type="hidden" name="active" value="0" />
               <input form="topup-{{ p.id }}" type="checkbox" name="active" value="1" {% if p.active %}checked{% endif %}/>
+              {% else %}
+              <input type="checkbox" value="1" {% if p.active %}checked{% endif %} disabled />
+              {% endif %}
             </td>
             <td>
+              {% if can_manage %}
               <button form="topup-{{ p.id }}" type="submit">Сохранить</button>
+              {% endif %}
               <form id="topup-{{ p.id }}" method="post" action="/admin/topup-products/{{ p.id }}"></form>
             </td>
           </tr>
@@ -114,6 +125,7 @@
         </tbody>
       </table>
     </div>
+    {% if can_manage %}
     <h3 style="margin-top:18px;">Добавить пакет</h3>
     <form class="form-row" method="post" action="/admin/topup-products/create">
       <div>
@@ -149,6 +161,7 @@
         <button type="submit">Добавить пакет</button>
       </div>
     </form>
+    {% endif %}
   </div>
 {% endblock %}
 

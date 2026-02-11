@@ -1,5 +1,10 @@
 ﻿{% extends "layout.html" %}
 {% block content %}
+  {% if error == "forbidden" %}
+    <div class="section">
+      <div class="notice" style="color: var(--danger);">Недостаточно прав для этого действия. Доступен только просмотр.</div>
+    </div>
+  {% endif %}
   <div class="grid">
     <div class="card">
       <h3>Пользователи</h3>

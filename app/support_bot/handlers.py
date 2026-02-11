@@ -25,13 +25,15 @@ SUPPORT_MEDIA_DIR = "_support_media"
 SUPPORT_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
 
 
-async def _is_admin(session: AsyncSession, telegram_id: int) -> bool:
+async def _is_staff(session: AsyncSession, telegram_id: int) -> bool:
     settings = get_settings()
-    if telegram_id in settings.admin_ids():
+    if settings.is_staff_telegram_id(telegram_id):
         return True
     result = await session.execute(select(User).where(User.telegram_id == telegram_id))
     user = result.scalar_one_or_none()
-    return bool(user and user.is_admin)
+    if not user:
+        return False
+    return bool(user.is_admin or bool(getattr(user, "is_subadmin", False)))
 
 
 def _is_image_document(message: Message) -> bool:
@@ -123,8 +125,8 @@ async def _notify_admins(
     media_file_id: str | None = None,
 ) -> None:
     settings = get_settings()
-    admin_ids = settings.admin_ids()
-    if not admin_ids:
+    staff_ids = settings.staff_ids()
+    if not staff_ids:
         return
 
     preview = (text or "").strip()
@@ -141,13 +143,13 @@ async def _notify_admins(
     second_row.append(InlineKeyboardButton(text="Шаблоны", callback_data=f"support:templates:{thread_id}"))
     keyboard = InlineKeyboardMarkup(inline_keyboard=[first_row, second_row])
 
-    for admin_id in admin_ids:
+    for staff_id in staff_ids:
         if media_kind == "photo" and media_file_id:
-            await message.bot.send_photo(admin_id, media_file_id, caption=body, reply_markup=keyboard)
+            await message.bot.send_photo(staff_id, media_file_id, caption=body, reply_markup=keyboard)
         elif media_kind == "document" and media_file_id:
-            await message.bot.send_document(admin_id, media_file_id, caption=body, reply_markup=keyboard)
+            await message.bot.send_document(staff_id, media_file_id, caption=body, reply_markup=keyboard)
         else:
-            await message.bot.send_message(admin_id, body, reply_markup=keyboard)
+            await message.bot.send_message(staff_id, body, reply_markup=keyboard)
 
 
 @router.message(F.text == "/start")
@@ -157,7 +159,7 @@ async def support_start(message: Message) -> None:
 
 @router.callback_query(F.data.startswith("support:templates:"))
 async def support_templates(callback: CallbackQuery, session: AsyncSession) -> None:
-    if not await _is_admin(session, callback.from_user.id):
+    if not await _is_staff(session, callback.from_user.id):
         await callback.answer("Недостаточно прав", show_alert=True)
         return
     await callback.message.answer("Шаблоны пока не настроены.")
@@ -180,7 +182,7 @@ async def support_reply_cancel(callback: CallbackQuery, state: FSMContext) -> No
 
 @router.callback_query(F.data.startswith("support:reply:"))
 async def support_reply(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
-    if not await _is_admin(session, callback.from_user.id):
+    if not await _is_staff(session, callback.from_user.id):
         await callback.answer("Недостаточно прав", show_alert=True)
         return
 
@@ -203,7 +205,7 @@ async def support_reply(callback: CallbackQuery, state: FSMContext, session: Asy
 
 @router.message(AdminFlow.support_reply)
 async def support_reply_send(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    if not message.from_user or not await _is_admin(session, message.from_user.id):
+    if not message.from_user or not await _is_staff(session, message.from_user.id):
         await message.answer("Недостаточно прав.")
         await state.clear()
         return
@@ -301,7 +303,7 @@ async def support_message(message: Message, session: AsyncSession) -> None:
         await message.answer("Служба поддержки временно недоступна.")
         return
 
-    if await _is_admin(session, message.from_user.id):
+    if await _is_staff(session, message.from_user.id):
         return
 
     if not message.text and not message.photo and not _is_image_document(message):

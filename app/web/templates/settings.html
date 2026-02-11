@@ -11,6 +11,9 @@
       Допустимы изображения PNG/JPG/JPEG/WEBP/SVG/ICO/GIF/BMP/AVIF/HEIC/HEIF/JFIF, размер до {{ logo_max_size_mb }} MB.
     </div>
     {% endif %}
+    {% if not can_manage %}
+    <div class="notice" style="color: var(--muted);">Режим только просмотра: изменение настроек недоступно для субадмина.</div>
+    {% endif %}
     <form method="post" action="/admin/settings" enctype="multipart/form-data">
       <p class="muted" style="margin-top: 6px;">
         Формула: стоимость 1 кредита Renderis (USD) = стоимость 1 звезды (USD) × звезд за 1 кредит.
@@ -137,9 +140,23 @@
         {% endif %}
       </div>
       <div style="margin-top: 12px;">
+        {% if can_manage %}
         <button type="submit">Сохранить</button>
+        {% endif %}
       </div>
     </form>
   </div>
+  {% if not can_manage %}
+  <script>
+    (function () {
+      const form = document.querySelector('form[action="/admin/settings"]');
+      if (!form) return;
+      form.querySelectorAll("input, select, textarea, button").forEach((el) => {
+        if (el.type === "submit") return;
+        el.disabled = true;
+      });
+    })();
+  </script>
+  {% endif %}
 {% endblock %}
 

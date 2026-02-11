@@ -6,6 +6,7 @@
     <div class="notice">Изменения сохранены.</div>
     {% endif %}
 
+    {% if can_manage %}
     <form method="post" action="/admin/promos/create" class="form-row" style="margin-bottom: 16px;">
       <div>
         <label>Количество кодов</label>
@@ -20,6 +21,11 @@
         <button type="submit">Создать батч</button>
       </div>
     </form>
+    {% else %}
+    <div class="notice" style="color: var(--muted); margin-bottom: 16px;">
+      Режим только просмотра: создание и деактивация промо-кодов недоступны для субадмина.
+    </div>
+    {% endif %}
 
     <form method="get" action="/admin/promos" class="form-row" style="margin-bottom: 16px;">
       <div>
@@ -44,7 +50,7 @@
             <div class="subtle">Время активации (МСК): {{ promo.redeemed_at_msk or '—' }}</div>
             <div class="subtle">Баланс пользователя: {{ promo.user_balance or '—' }}</div>
           </div>
-          {% if promo.can_deactivate %}
+          {% if promo.can_deactivate and can_manage %}
             <form method="post" action="/admin/promos/code/{{ promo.code }}/deactivate">
               <input type="hidden" name="next" value="/admin/promos?code={{ promo.code }}" />
               <button type="submit">Деактивировать</button>

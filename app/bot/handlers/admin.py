@@ -34,7 +34,7 @@ logger = get_logger("bot-admin")
 
 async def _is_admin(session: AsyncSession, telegram_id: int) -> bool:
     settings = get_settings()
-    if telegram_id in settings.admin_ids():
+    if settings.is_admin_telegram_id(telegram_id):
         return True
     result = await session.execute(select(User).where(User.telegram_id == telegram_id))
     user = result.scalar_one_or_none()
