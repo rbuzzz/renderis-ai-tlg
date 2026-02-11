@@ -60,7 +60,11 @@ async def cmd_start(message: Message, session: AsyncSession, command: CommandObj
     )
     if bonus_applied:
         text += f"\n{tf(lang, 'start_bonus', credits=settings.signup_bonus_credits)}"
-    await message.answer(text, reply_markup=main_menu(lang))
+    await message.answer(
+        text,
+        reply_markup=main_menu(lang),
+        disable_web_page_preview=True,
+    )
 
     if not settings_payload.get("lang_selected"):
         await message.answer(
