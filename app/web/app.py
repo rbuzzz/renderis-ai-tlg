@@ -580,6 +580,8 @@ def create_app() -> FastAPI:
                 payment_kind = "Stars"
                 if (order.payload or "").startswith("crypto:"):
                     payment_kind = "Crypto"
+                if (order.payload or "").startswith("wallet:"):
+                    payment_kind = "Wallet Pay"
                 orders.append(
                     {
                         "id": order.id,
