@@ -12,6 +12,7 @@ def admin_menu() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text='📊 Статистика', callback_data='admin:stats')],
             [InlineKeyboardButton(text='➕ Выдать кредиты', callback_data='admin:grant')],
             [InlineKeyboardButton(text='🚫 Бан/разбан', callback_data='admin:ban')],
+            [InlineKeyboardButton(text='📣 Рассылка', callback_data='admin:broadcast')],
             [InlineKeyboardButton(text='🛡️ Admin free-mode', callback_data='admin:free_mode')],
         ]
     )

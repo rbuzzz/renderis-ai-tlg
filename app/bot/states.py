@@ -18,6 +18,7 @@ class AdminFlow(StatesGroup):
     grant_credits = State()
     ban_user = State()
     support_reply = State()
+    broadcast_message = State()
 
 
 class TopUpFlow(StatesGroup):

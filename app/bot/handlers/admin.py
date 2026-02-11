@@ -2,6 +2,7 @@
 
 import tempfile
 import uuid
+import asyncio
 
 from aiogram import Bot, F, Router
 from aiogram.client.default import DefaultBotProperties
@@ -38,12 +39,92 @@ async def _is_admin(session: AsyncSession, telegram_id: int) -> bool:
     return bool(user and user.is_admin)
 
 
+async def _active_user_telegram_ids(session: AsyncSession) -> list[int]:
+    rows = await session.execute(
+        select(User.telegram_id).where(
+            User.is_admin.is_(False),
+            User.is_banned.is_(False),
+            User.last_seen_at.is_not(None),
+        )
+    )
+    return [int(row[0]) for row in rows.all() if row[0]]
+
+
 @router.message(Command('admin'))
 async def admin_menu_cmd(message: Message, session: AsyncSession) -> None:
     if not await _is_admin(session, message.from_user.id):
         await message.answer('Недостаточно прав.')
         return
     await message.answer('🛠️ Админ-панель:', reply_markup=admin_menu())
+
+
+@router.message(Command('broadcast'))
+async def admin_broadcast_cmd(message: Message, session: AsyncSession, state: FSMContext) -> None:
+    if not await _is_admin(session, message.from_user.id):
+        await message.answer('Недостаточно прав.')
+        return
+    await state.set_state(AdminFlow.broadcast_message)
+    await message.answer(
+        '📣 Режим рассылки включен.\n'
+        'Отправьте одним сообщением текст или медиа для рассылки всем активным пользователям.\n'
+        'Для отмены: /cancel'
+    )
+
+
+@router.callback_query(F.data == 'admin:broadcast')
+async def admin_broadcast_start(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    if not await _is_admin(session, callback.from_user.id):
+        await callback.answer('Недостаточно прав', show_alert=True)
+        return
+    await state.set_state(AdminFlow.broadcast_message)
+    await callback.message.answer(
+        '📣 Режим рассылки включен.\n'
+        'Отправьте одним сообщением текст или медиа для рассылки всем активным пользователям.\n'
+        'Для отмены: /cancel'
+    )
+    await callback.answer()
+    await safe_cleanup_callback(callback)
+
+
+@router.message(AdminFlow.broadcast_message, Command('cancel'))
+async def admin_broadcast_cancel(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await message.answer('Рассылка отменена.')
+
+
+@router.message(AdminFlow.broadcast_message)
+async def admin_broadcast_send(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    if not await _is_admin(session, message.from_user.id):
+        await state.clear()
+        await message.answer('Недостаточно прав.')
+        return
+
+    recipients = await _active_user_telegram_ids(session)
+    if not recipients:
+        await state.clear()
+        await message.answer('Нет активных пользователей для рассылки.')
+        return
+
+    sent_ok = 0
+    sent_fail = 0
+    for telegram_id in recipients:
+        try:
+            await message.bot.copy_message(
+                chat_id=telegram_id,
+                from_chat_id=message.chat.id,
+                message_id=message.message_id,
+            )
+            sent_ok += 1
+        except Exception:
+            sent_fail += 1
+        await asyncio.sleep(0.05)
+
+    await state.clear()
+    await message.answer(
+        f'Рассылка завершена.\n'
+        f'Успешно: {sent_ok}\n'
+        f'Ошибок: {sent_fail}'
+    )
 
 
 @router.callback_query(F.data == 'admin:set_price')
