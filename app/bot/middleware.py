@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.bot.i18n import reset_current_lang, set_current_lang, t
 from app.bot.keyboards.main import terms_blocked_menu
+from app.config import get_settings
 from app.db.models import User
 from app.i18n import normalize_lang
 
@@ -70,23 +71,26 @@ class DbSessionMiddleware(BaseMiddleware):
             data["session"] = session
             lang = "en"
             user = self._extract_telegram_user(event, data)
-            settings: dict | None = None
+            user_settings: dict | None = None
             is_admin = False
+            app_settings = get_settings()
             if user and getattr(user, "id", None):
+                lang = normalize_lang(getattr(user, "language_code", None))
                 result = await session.execute(
                     select(User.settings, User.is_admin).where(User.telegram_id == int(user.id))
                 )
                 row = result.one_or_none()
                 if row:
-                    settings = row[0] if isinstance(row[0], dict) else None
+                    user_settings = row[0] if isinstance(row[0], dict) else None
                     is_admin = bool(row[1])
-                if isinstance(settings, dict):
-                    lang = normalize_lang(settings.get("lang"))
+                if isinstance(user_settings, dict):
+                    lang = normalize_lang(user_settings.get("lang"))
+                is_admin = is_admin or int(user.id) in app_settings.admin_ids()
 
             token = set_current_lang(lang)
             try:
-                if user and getattr(user, "id", None) and settings is not None and not is_admin:
-                    if not self._terms_accepted(settings) and not self._is_allowed_without_terms(event):
+                if user and getattr(user, "id", None) and not is_admin:
+                    if not self._terms_accepted(user_settings) and not self._is_allowed_without_terms(event):
                         await self._notify_terms_blocked(event, lang)
                         return None
                 return await handler(event, data)
