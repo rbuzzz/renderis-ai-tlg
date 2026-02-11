@@ -25,9 +25,11 @@ from app.services.pricing import PricingService
 from app.services.promos import PromoService
 from app.services.referrals import ReferralService
 from app.services.support import SupportService
+from app.utils.logging import get_logger
 
 
 router = Router()
+logger = get_logger("bot-admin")
 
 
 async def _is_admin(session: AsyncSession, telegram_id: int) -> bool:
@@ -107,6 +109,7 @@ async def admin_broadcast_send(message: Message, state: FSMContext, session: Asy
 
     sent_ok = 0
     sent_fail = 0
+    fail_details: list[str] = []
     for telegram_id in recipients:
         try:
             await message.bot.copy_message(
@@ -115,15 +118,22 @@ async def admin_broadcast_send(message: Message, state: FSMContext, session: Asy
                 message_id=message.message_id,
             )
             sent_ok += 1
-        except Exception:
+        except Exception as e:
             sent_fail += 1
+            err = f"{type(e).__name__}: {e}"
+            fail_details.append(f"{telegram_id} -> {err}")
+            logger.warning("broadcast_failed", telegram_id=telegram_id, error=err)
         await asyncio.sleep(0.05)
 
     await state.clear()
+    details_text = ""
+    if fail_details:
+        details_text = "\n\nПервые ошибки:\n" + "\n".join(fail_details[:5])
     await message.answer(
         f'Рассылка завершена.\n'
         f'Успешно: {sent_ok}\n'
         f'Ошибок: {sent_fail}'
+        f'{details_text}'
     )
 
 
