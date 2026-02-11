@@ -213,6 +213,38 @@ def _change_request_notify_text(item: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
+def _change_request_update_text(
+    item: dict[str, object],
+    *,
+    headline: str,
+    status_title: str | None = None,
+    comment: str | None = None,
+    actor: str | None = None,
+) -> str:
+    request_id = int(item.get("id") or 0)
+    tg_id = int(item.get("target_telegram_id") or 0)
+    username = (str(item.get("target_username") or "")).strip()
+    display_name = f"@{username}" if username else "—"
+    reason = escape((str(item.get("reason") or "")).strip() or "—")
+    action_title = _change_type_title(str(item.get("change_type") or ""))
+
+    lines = [
+        escape(headline),
+        f"ID: <b>#{request_id}</b>",
+        f"Тип: <b>{escape(action_title)}</b>",
+        f"Пользователь: <code>{tg_id}</code> ({escape(display_name)})",
+        f"Действие: {_change_request_action_line(item)}",
+        f"Причина: {reason}",
+    ]
+    if status_title:
+        lines.append(f"Статус: <b>{escape(status_title)}</b>")
+    if actor:
+        lines.append(f"Кто изменил: <b>{escape(actor)}</b>")
+    if comment:
+        lines.append(f"Комментарий: {escape(comment.strip())}")
+    return "\n".join(lines)
+
+
 def _change_request_review_keyboard(request_id: int) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
         [InlineKeyboardButton(text="✅ Утвердить", callback_data=f"cr:approve:{request_id}")],
@@ -225,6 +257,15 @@ def _change_request_review_keyboard(request_id: int) -> InlineKeyboardMarkup:
     if admin_url:
         rows.append([InlineKeyboardButton(text="Открыть в админке", url=admin_url)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _change_request_open_keyboard() -> InlineKeyboardMarkup | None:
+    admin_url = _admin_change_requests_url()
+    if not admin_url:
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="Открыть предложения", url=admin_url)]]
+    )
 
 
 async def _notify_admins_about_change_request(item: dict[str, object]) -> None:
@@ -246,6 +287,82 @@ async def _notify_admins_about_change_request(item: dict[str, object]) -> None:
         for admin_id in admin_ids:
             try:
                 await bot.send_message(admin_id, message_text, reply_markup=keyboard)
+            except Exception:
+                continue
+    finally:
+        await bot.session.close()
+
+
+async def _notify_admins_about_change_request_update(
+    item: dict[str, object],
+    *,
+    headline: str,
+    status_title: str | None = None,
+    comment: str | None = None,
+    actor: str | None = None,
+) -> None:
+    settings = get_settings()
+    if not settings.support_bot_token:
+        return
+
+    admin_ids = settings.admin_ids()
+    if not admin_ids:
+        return
+
+    message_text = _change_request_update_text(
+        item,
+        headline=headline,
+        status_title=status_title,
+        comment=comment,
+        actor=actor,
+    )
+    keyboard = _change_request_open_keyboard()
+    bot = Bot(
+        token=settings.support_bot_token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        for admin_id in admin_ids:
+            try:
+                await bot.send_message(admin_id, message_text, reply_markup=keyboard)
+            except Exception:
+                continue
+    finally:
+        await bot.session.close()
+
+
+async def _notify_subadmins_about_change_request_update(
+    item: dict[str, object],
+    *,
+    headline: str,
+    status_title: str | None = None,
+    comment: str | None = None,
+    actor: str | None = None,
+) -> None:
+    settings = get_settings()
+    if not settings.support_bot_token:
+        return
+
+    subadmin_ids = settings.subadmin_ids()
+    if not subadmin_ids:
+        return
+
+    message_text = _change_request_update_text(
+        item,
+        headline=headline,
+        status_title=status_title,
+        comment=comment,
+        actor=actor,
+    )
+    keyboard = _change_request_open_keyboard()
+    bot = Bot(
+        token=settings.support_bot_token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        for subadmin_id in subadmin_ids:
+            try:
+                await bot.send_message(subadmin_id, message_text, reply_markup=keyboard)
             except Exception:
                 continue
     finally:
@@ -1135,6 +1252,8 @@ def create_app() -> FastAPI:
             return _forbidden_redirect()
 
         login = _session_login(request) or "subadmin"
+        notify_item: dict[str, object] | None = None
+        notify_comment: str | None = None
         async with app.state.sessionmaker() as session:
             req = await session.get(AdminChangeRequest, request_id)
             if not req or req.created_by_login != login:
@@ -1151,7 +1270,20 @@ def create_app() -> FastAPI:
                 author_telegram_id=None,
                 message=comment_message,
             )
+            if req.status == STATUS_CANCELLED:
+                target_user = await session.get(User, req.target_user_id)
+                if target_user:
+                    notify_item = _build_change_request_notify_item(req, target_user)
+                    notify_comment = comment_message
             await session.commit()
+        if notify_item:
+            await _notify_admins_about_change_request_update(
+                notify_item,
+                headline="🛑 Предложение отменено субадмином",
+                status_title=_change_status_title(STATUS_CANCELLED),
+                comment=notify_comment,
+                actor=login,
+            )
         return RedirectResponse(url="/admin/change-requests?saved=cancelled", status_code=302)
 
     @app.post("/admin/change-requests/{request_id}/comment")
@@ -1170,6 +1302,8 @@ def create_app() -> FastAPI:
         is_admin = _can_manage(request)
         login = _session_login(request) or ("admin" if is_admin else "subadmin")
         notify_item: dict[str, object] | None = None
+        notify_subadmins_item: dict[str, object] | None = None
+        notify_subadmins_status: str | None = None
         async with app.state.sessionmaker() as session:
             req = await session.get(AdminChangeRequest, request_id)
             if not req:
@@ -1190,9 +1324,22 @@ def create_app() -> FastAPI:
                     target_user = await session.get(User, req.target_user_id)
                     if target_user:
                         notify_item = _build_change_request_notify_item(req, target_user)
+            if is_admin:
+                target_user = await session.get(User, req.target_user_id)
+                if target_user:
+                    notify_subadmins_item = _build_change_request_notify_item(req, target_user)
+                    notify_subadmins_status = req.status
             await session.commit()
         if notify_item:
             await _notify_admins_about_change_request(notify_item)
+        if notify_subadmins_item:
+            await _notify_subadmins_about_change_request_update(
+                notify_subadmins_item,
+                headline="💬 Администратор оставил комментарий к предложению",
+                status_title=_change_status_title(notify_subadmins_status or ""),
+                comment=text,
+                actor=login,
+            )
         return RedirectResponse(url="/admin/change-requests?saved=comment_added", status_code=302)
 
     @app.post("/admin/change-requests/{request_id}/needs-info")
@@ -1211,6 +1358,7 @@ def create_app() -> FastAPI:
             return RedirectResponse(url="/admin/change-requests?error=comment_required", status_code=302)
 
         login = _session_login(request) or "admin"
+        notify_item: dict[str, object] | None = None
         async with app.state.sessionmaker() as session:
             req = await session.get(AdminChangeRequest, request_id)
             if not req:
@@ -1226,7 +1374,18 @@ def create_app() -> FastAPI:
                 author_telegram_id=None,
                 message=text,
             )
+            target_user = await session.get(User, req.target_user_id)
+            if target_user:
+                notify_item = _build_change_request_notify_item(req, target_user)
             await session.commit()
+        if notify_item:
+            await _notify_subadmins_about_change_request_update(
+                notify_item,
+                headline="❓ Требуется уточнение по предложению",
+                status_title=_change_status_title(STATUS_NEEDS_INFO),
+                comment=text,
+                actor=login,
+            )
         return RedirectResponse(url="/admin/change-requests?saved=needs_info", status_code=302)
 
     @app.post("/admin/change-requests/{request_id}/reject")
@@ -1245,6 +1404,7 @@ def create_app() -> FastAPI:
             return RedirectResponse(url="/admin/change-requests?error=comment_required", status_code=302)
 
         login = _session_login(request) or "admin"
+        notify_item: dict[str, object] | None = None
         async with app.state.sessionmaker() as session:
             req = await session.get(AdminChangeRequest, request_id)
             if not req:
@@ -1260,7 +1420,18 @@ def create_app() -> FastAPI:
                 author_telegram_id=None,
                 message=text,
             )
+            target_user = await session.get(User, req.target_user_id)
+            if target_user:
+                notify_item = _build_change_request_notify_item(req, target_user)
             await session.commit()
+        if notify_item:
+            await _notify_subadmins_about_change_request_update(
+                notify_item,
+                headline="⛔ Предложение отклонено администратором",
+                status_title=_change_status_title(STATUS_REJECTED),
+                comment=text,
+                actor=login,
+            )
         return RedirectResponse(url="/admin/change-requests?saved=rejected", status_code=302)
 
     @app.post("/admin/change-requests/{request_id}/approve")
@@ -1271,6 +1442,7 @@ def create_app() -> FastAPI:
             return _forbidden_redirect()
 
         login = _session_login(request) or "admin"
+        notify_item: dict[str, object] | None = None
         async with app.state.sessionmaker() as session:
             req = await session.get(AdminChangeRequest, request_id)
             if not req:
@@ -1289,7 +1461,17 @@ def create_app() -> FastAPI:
                 author_telegram_id=None,
                 message="Предложение утверждено и применено.",
             )
+            target_user = await session.get(User, req.target_user_id)
+            if target_user:
+                notify_item = _build_change_request_notify_item(req, target_user)
             await session.commit()
+        if notify_item:
+            await _notify_subadmins_about_change_request_update(
+                notify_item,
+                headline="✅ Предложение утверждено и применено",
+                status_title=_change_status_title(STATUS_APPLIED),
+                actor=login,
+            )
         return RedirectResponse(url="/admin/change-requests?saved=approved", status_code=302)
 
     @app.post("/admin/users/{user_id}/ban")
