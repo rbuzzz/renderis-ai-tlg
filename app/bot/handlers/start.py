@@ -33,6 +33,12 @@ def _terms_accepted(settings_payload: dict) -> bool:
     return bool(settings_payload.get("terms_accepted"))
 
 
+def _normalize_settings_payload(raw_settings: object) -> dict:
+    if isinstance(raw_settings, dict):
+        return dict(raw_settings)
+    return {}
+
+
 def _terms_prompt_text(lang: str) -> str:
     return (
         f"{t(lang, 'terms_intro')}\n"
@@ -80,7 +86,7 @@ async def cmd_start(message: Message, session: AsyncSession, state: FSMContext) 
         message.from_user.username,
         message.from_user.id in settings.admin_ids(),
     )
-    settings_payload = dict(user.settings or {})
+    settings_payload = _normalize_settings_payload(user.settings)
     lang = normalize_lang(settings_payload.get("lang"))
     settings_payload["lang"] = lang
     user.settings = settings_payload
@@ -108,7 +114,7 @@ async def terms_read(callback: CallbackQuery, session: AsyncSession, state: FSMC
         callback.from_user.username,
         callback.from_user.id in settings.admin_ids(),
     )
-    settings_payload = dict(user.settings or {})
+    settings_payload = _normalize_settings_payload(user.settings)
     lang = normalize_lang(settings_payload.get("lang"))
     settings_payload["lang"] = lang
     user.settings = settings_payload
@@ -133,7 +139,7 @@ async def terms_decline(callback: CallbackQuery, session: AsyncSession, state: F
         callback.from_user.username,
         callback.from_user.id in settings.admin_ids(),
     )
-    settings_payload = dict(user.settings or {})
+    settings_payload = _normalize_settings_payload(user.settings)
     lang = normalize_lang(settings_payload.get("lang"))
     settings_payload["lang"] = lang
     settings_payload["terms_accepted"] = False
@@ -159,7 +165,7 @@ async def terms_accept(callback: CallbackQuery, session: AsyncSession, state: FS
         callback.from_user.username,
         callback.from_user.id in settings.admin_ids(),
     )
-    settings_payload = dict(user.settings or {})
+    settings_payload = _normalize_settings_payload(user.settings)
     lang = normalize_lang(settings_payload.get("lang"))
     settings_payload["lang"] = lang
     settings_payload["terms_accepted"] = True
@@ -232,7 +238,7 @@ async def set_user_language(callback: CallbackQuery, session: AsyncSession) -> N
     credits = CreditsService(session)
     user = await credits.get_user(callback.from_user.id)
     if user:
-        payload = dict(user.settings or {})
+        payload = _normalize_settings_payload(user.settings)
         payload["lang"] = selected
         payload["lang_selected"] = True
         user.settings = payload
