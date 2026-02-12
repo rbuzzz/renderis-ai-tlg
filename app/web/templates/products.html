@@ -5,8 +5,24 @@
     {% if saved %}
     <div class="notice">Изменения сохранены.</div>
     {% endif %}
+    {% if avg_reset %}
+    <div class="notice">Счётчик среднего времени обнулён.</div>
+    {% endif %}
     {% if not can_manage %}
     <div class="notice" style="color: var(--muted);">Режим только просмотра: изменение цен и пакетов недоступно для субадмина.</div>
+    {% endif %}
+    <div class="subtle" style="margin-bottom:8px;">
+      Среднее время считается:
+      {% if avg_since_msk %}
+        с {{ avg_since_msk }}
+      {% else %}
+        за всё время
+      {% endif %}
+    </div>
+    {% if can_manage %}
+    <form method="post" action="/admin/products/avg-reset" style="margin-bottom:10px;">
+      <button type="submit">Обнулить счётчик среднего времени</button>
+    </form>
     {% endif %}
     <div class="table-scroll">
       <table>

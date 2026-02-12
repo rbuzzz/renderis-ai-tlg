@@ -1742,7 +1742,7 @@ def create_app() -> FastAPI:
         return RedirectResponse(url=f"/admin/users/{user_id}?saved=promo_revoked", status_code=302)
 
     @app.get("/admin/products", response_class=HTMLResponse)
-    async def admin_products(request: Request, saved: int | None = None):
+    async def admin_products(request: Request, saved: int | None = None, avg_reset: int | None = None):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
 
@@ -1752,6 +1752,15 @@ def create_app() -> FastAPI:
             usd_per_star = await settings_service.get_float("usd_per_star", 0.013)
             usd_per_credit = stars_per_credit * usd_per_star
             kie_usd_per_credit = await settings_service.get_float("kie_usd_per_credit", 0.02)
+            avg_since: datetime | None = None
+            avg_reset_raw = (await settings_service.get("products_avg_started_at", "")) or ""
+            if avg_reset_raw.strip():
+                try:
+                    avg_reset_epoch = int(avg_reset_raw.strip())
+                    if avg_reset_epoch > 0:
+                        avg_since = datetime.fromtimestamp(avg_reset_epoch, tz=timezone.utc)
+                except ValueError:
+                    avg_since = None
 
             prices = (
                 await session.execute(
@@ -1921,7 +1930,7 @@ def create_app() -> FastAPI:
                 else_=None,
             ).label("row_id")
             duration_seconds_expr = func.extract("epoch", task_finished_subq.c.finished_at - Generation.created_at)
-            averages_rows = await session.execute(
+            avg_query = (
                 select(
                     row_id_expr,
                     func.avg(duration_seconds_expr).label("avg_seconds"),
@@ -1930,8 +1939,11 @@ def create_app() -> FastAPI:
                 .join(task_finished_subq, task_finished_subq.c.generation_id == Generation.id)
                 .where(Generation.status == "success")
                 .where(row_id_expr.is_not(None))
-                .group_by(row_id_expr)
             )
+            if avg_since is not None:
+                avg_query = avg_query.where(Generation.created_at >= avg_since)
+            avg_query = avg_query.group_by(row_id_expr)
+            averages_rows = await session.execute(avg_query)
             row_avg_map: dict[str, dict[str, float | int | None]] = {}
             for avg_row in averages_rows:
                 row_id = avg_row.row_id
@@ -2008,10 +2020,26 @@ def create_app() -> FastAPI:
                 "products": products,
                 "topup_products": topup_products,
                 "saved": bool(saved),
+                "avg_reset": bool(avg_reset),
+                "avg_since_msk": _format_msk(avg_since),
                 "can_manage": _can_manage(request),
                 "is_subadmin": _is_subadmin(request),
             },
         )
+
+    @app.post("/admin/products/avg-reset")
+    async def admin_products_avg_reset(request: Request):
+        if not _is_logged_in(request):
+            return RedirectResponse(url="/login", status_code=302)
+        if not _can_manage(request):
+            return _forbidden_redirect()
+
+        async with app.state.sessionmaker() as session:
+            settings_service = AppSettingsService(session)
+            await settings_service.set("products_avg_started_at", str(int(time.time())))
+            await session.commit()
+
+        return RedirectResponse(url="/admin/products?saved=1&avg_reset=1", status_code=302)
 
     @app.post("/admin/products/{row_id}")
     async def admin_products_update(
