@@ -196,6 +196,7 @@ def confirm_menu(lang: str = "ru") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=t(lang, "confirm_yes"), callback_data='gen:confirm')],
+            [InlineKeyboardButton(text=t(lang, "confirm_improve_prompt"), callback_data='gen:improve')],
             [InlineKeyboardButton(text=t(lang, "confirm_edit_prompt"), callback_data='gen:edit:prompt')],
             [InlineKeyboardButton(text=t(lang, "confirm_edit_options"), callback_data='gen:edit:options')],
             [InlineKeyboardButton(text=t(lang, "confirm_cancel"), callback_data='gen:cancel')],
@@ -209,6 +210,14 @@ def generation_result_menu(generation_id: int, lang: str = "ru") -> InlineKeyboa
             [
                 InlineKeyboardButton(text=t(lang, "result_restart"), callback_data='gen:result:restart'),
                 InlineKeyboardButton(text=t(lang, "result_repeat"), callback_data=f'gen:result:repeat:{generation_id}'),
+            ],
+            [
+                InlineKeyboardButton(text=t(lang, "result_slightly_change"), callback_data=f'gen:result:variation:{generation_id}'),
+                InlineKeyboardButton(text=t(lang, "result_remix"), callback_data=f'gen:result:remix:{generation_id}'),
+            ],
+            [
+                InlineKeyboardButton(text=t(lang, "result_upscale"), callback_data=f'gen:result:upscale:{generation_id}'),
+                InlineKeyboardButton(text=t(lang, "result_edit_ai"), callback_data=f'gen:result:editai:{generation_id}'),
             ],
             [InlineKeyboardButton(text=t(lang, "result_finish"), callback_data='gen:result:finish')],
         ]

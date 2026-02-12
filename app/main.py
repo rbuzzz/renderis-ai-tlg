@@ -6,7 +6,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
-from app.bot.handlers import admin, generate, history, misc, payments, referral_promo, start
+from app.bot.handlers import admin, brain_bot, generate, history, misc, payments, referral_promo, result_actions, start
 from app.bot.middleware import DbSessionMiddleware
 from app.config import get_settings
 from app.db.session import create_sessionmaker
@@ -34,6 +34,8 @@ async def main() -> None:
 
     dp.include_router(start.router)
     dp.include_router(generate.router)
+    dp.include_router(brain_bot.router)
+    dp.include_router(result_actions.router)
     dp.include_router(history.router)
     dp.include_router(payments.router)
     dp.include_router(referral_promo.router)

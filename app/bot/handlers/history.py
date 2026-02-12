@@ -19,6 +19,34 @@ from app.utils.text import escape_html
 router = Router()
 
 
+def _history_actions_menu(generation_id: int, lang: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t(lang, "history_open_results"), callback_data=f"history:open:{generation_id}")],
+            [
+                InlineKeyboardButton(text=t(lang, "result_repeat"), callback_data=f"gen:result:repeat:{generation_id}"),
+                InlineKeyboardButton(text=t(lang, "result_edit_ai"), callback_data=f"gen:result:editai:{generation_id}"),
+            ],
+            [InlineKeyboardButton(text=t(lang, "result_upscale"), callback_data=f"gen:result:upscale:{generation_id}")],
+        ]
+    )
+
+
+async def _first_success_url(session: AsyncSession, generation_id: int) -> str | None:
+    result = await session.execute(
+        select(GenerationTask).where(
+            GenerationTask.generation_id == generation_id,
+            GenerationTask.state == "success",
+        )
+    )
+    tasks = list(result.scalars().all())
+    for task in tasks:
+        for url in task.result_urls or []:
+            if isinstance(url, str) and url.strip():
+                return url.strip()
+    return None
+
+
 @router.callback_query(F.data == 'history:list')
 async def history_list(callback: CallbackQuery, session: AsyncSession) -> None:
     credits = CreditsService(session)
@@ -43,19 +71,24 @@ async def history_list(callback: CallbackQuery, session: AsyncSession) -> None:
         return
 
     for gen in items:
+        model = get_model(gen.model)
+        model_label = model.display_name if model else gen.model
+        preview_url = await _first_success_url(session, gen.id)
         text = (
-            f'<b>{gen.model}</b> | {gen.status}\n'
+            f'<b>{t(lang, "history_timeline_title")}</b>\n'
+            f'{tf(lang, "history_model", model=escape_html(model_label))}\n'
+            f'{tf(lang, "history_status", status=gen.status)}\n'
+            f'{tf(lang, "history_cost", cost=int(gen.final_cost_credits or 0))}\n'
             f'{t(lang, "prompt_label")}: {escape_html(gen.prompt[:200])}\n'
             f'{t(lang, "history_created")}: {gen.created_at:%Y-%m-%d %H:%M}'
         )
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(text=t(lang, "history_open_results"), callback_data=f'history:open:{gen.id}'),
-                    InlineKeyboardButton(text=t(lang, "history_regen"), callback_data=f'history:regen:{gen.id}'),
-                ]
-            ]
-        )
+        keyboard = _history_actions_menu(gen.id, lang)
+        if preview_url:
+            try:
+                await callback.message.answer_photo(preview_url, caption=text, reply_markup=keyboard)
+                continue
+            except Exception:
+                pass
         await callback.message.answer(text, reply_markup=keyboard)
     await callback.answer()
     await safe_cleanup_callback(callback)
