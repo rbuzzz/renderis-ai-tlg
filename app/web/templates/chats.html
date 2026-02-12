@@ -187,19 +187,42 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .chat-clear-attach {
+  .chat-attach-preview {
     display: none;
-    padding: 4px 8px;
-    border-radius: 999px;
+    position: relative;
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
     border: 1px solid #2b3f59;
-    background: #1a2d44;
-    color: var(--muted);
-    font-size: 12px;
-    line-height: 1.1;
+    overflow: hidden;
+    background: #0f1b2b;
+    flex: 0 0 auto;
   }
-  .chat-clear-attach:hover {
-    background: #243c59;
-    color: var(--text);
+  .chat-attach-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .chat-attach-preview-clear {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    border: 1px solid #76404c;
+    background: rgba(41, 10, 19, 0.9);
+    color: #ffd7de;
+    font-size: 13px;
+    line-height: 1;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .chat-attach-preview-clear:hover {
+    background: rgba(58, 15, 27, 0.95);
   }
   @media (max-width: 980px) {
     .chat-grid { grid-template-columns: 1fr; }
@@ -267,8 +290,11 @@
         <input id="chatFile" type="file" accept="image/*" style="display:none;" />
         <div class="chat-input-tools">
           <button id="chatAttach" type="button">📎 Фото</button>
+          <div id="chatAttachPreview" class="chat-attach-preview">
+            <img id="chatAttachPreviewImg" src="" alt="attachment preview" />
+            <button id="chatAttachPreviewClear" type="button" class="chat-attach-preview-clear" aria-label="Remove attachment">×</button>
+          </div>
           <span id="chatFileName" class="chat-file-label"></span>
-          <button id="chatClearAttach" type="button" class="chat-clear-attach">Убрать</button>
         </div>
         <input id="chatInput" placeholder="Введите сообщение..." />
         <button id="chatSend">Отправить</button>
@@ -292,8 +318,10 @@
   const chatInput = document.getElementById('chatInput');
   const chatFile = document.getElementById('chatFile');
   const chatAttach = document.getElementById('chatAttach');
+  const chatAttachPreview = document.getElementById('chatAttachPreview');
+  const chatAttachPreviewImg = document.getElementById('chatAttachPreviewImg');
+  const chatAttachPreviewClear = document.getElementById('chatAttachPreviewClear');
   const chatFileName = document.getElementById('chatFileName');
-  const chatClearAttach = document.getElementById('chatClearAttach');
   const chatSend = document.getElementById('chatSend');
   const chatStatus = document.getElementById('chatStatus');
   const imagePreviewModal = document.getElementById('imagePreviewModal');
@@ -303,6 +331,7 @@
   let currentThreadUserId = null;
   let currentThreadLabel = '';
   let pendingImageFile = null;
+  let pendingImageUrl = '';
   let dragCounter = 0;
 
   function openImagePreview(src, alt) {
@@ -332,13 +361,36 @@
     return d.toLocaleString();
   }
 
+  function revokePendingImageUrl() {
+    if (!pendingImageUrl) return;
+    try {
+      URL.revokeObjectURL(pendingImageUrl);
+    } catch (err) {
+      // ignore cleanup errors
+    }
+    pendingImageUrl = '';
+  }
+
   function setFileLabel() {
-    if (!chatFileName) return;
-    chatFileName.textContent = pendingImageFile ? pendingImageFile.name : '';
-    if (chatClearAttach) {
-      const hasFile = !!pendingImageFile;
-      chatClearAttach.style.display = hasFile ? 'inline-flex' : 'none';
-      chatClearAttach.disabled = !hasFile;
+    const hasFile = !!pendingImageFile;
+    if (chatFileName) {
+      chatFileName.textContent = hasFile ? pendingImageFile.name : '';
+    }
+    if (chatAttachPreview) {
+      chatAttachPreview.style.display = hasFile ? 'inline-flex' : 'none';
+    }
+    if (chatAttachPreviewClear) {
+      chatAttachPreviewClear.disabled = !hasFile;
+    }
+    if (chatAttachPreviewImg) {
+      if (!hasFile) {
+        revokePendingImageUrl();
+        chatAttachPreviewImg.removeAttribute('src');
+      } else {
+        revokePendingImageUrl();
+        pendingImageUrl = URL.createObjectURL(pendingImageFile);
+        chatAttachPreviewImg.src = pendingImageUrl;
+      }
     }
   }
 
@@ -682,8 +734,8 @@
       setPendingImage(file);
     });
   }
-  if (chatClearAttach) {
-    chatClearAttach.addEventListener('click', () => {
+  if (chatAttachPreviewClear) {
+    chatAttachPreviewClear.addEventListener('click', () => {
       clearPendingImage();
       setStatus('Вложение удалено.');
     });
@@ -712,6 +764,9 @@
     if (e.key === 'Escape') {
       closeImagePreview();
     }
+  });
+  window.addEventListener('beforeunload', () => {
+    revokePendingImageUrl();
   });
   chatInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
