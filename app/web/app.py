@@ -499,6 +499,113 @@ def _format_msk(dt: datetime | None) -> str | None:
     return msk.strftime("%d.%m.%Y %H:%M:%S")
 
 
+def _path_tree_size(path: Path) -> tuple[int, int]:
+    if not path.exists():
+        return 0, 0
+    total_bytes = 0
+    total_files = 0
+    stack: list[Path] = [path]
+    while stack:
+        current = stack.pop()
+        try:
+            if current.is_symlink():
+                continue
+            if current.is_file():
+                total_bytes += int(current.stat().st_size)
+                total_files += 1
+                continue
+            if current.is_dir():
+                for child in current.iterdir():
+                    stack.append(child)
+        except OSError:
+            continue
+    return total_bytes, total_files
+
+
+def _format_size_bytes(value: int) -> str:
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(max(0, int(value)))
+    for unit in units:
+        if size < 1024 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(size)} {unit}"
+            return f"{size:.2f} {unit}"
+        size /= 1024
+    return "0 B"
+
+
+def _storage_usage_summary(storage_root: str) -> dict[str, object]:
+    root = Path(storage_root)
+    summary: dict[str, object] = {
+        "available": False,
+        "root_path": str(root),
+        "categories": [],
+        "total_bytes": 0,
+        "total_files": 0,
+        "total_human": "0 B",
+    }
+    if not root.exists() or not root.is_dir():
+        summary["error"] = "storage_not_found"
+        return summary
+
+    buckets: dict[str, dict[str, object]] = {
+        "references": {"title": "Референсы генераций", "bytes": 0, "files": 0},
+        "support_media": {"title": "Медиа чатов", "bytes": 0, "files": 0},
+        "site_assets": {"title": "Логотипы и ассеты сайта", "bytes": 0, "files": 0},
+        "other": {"title": "Прочее", "bytes": 0, "files": 0},
+    }
+
+    try:
+        entries = list(root.iterdir())
+    except OSError:
+        summary["error"] = "storage_read_failed"
+        return summary
+
+    for entry in entries:
+        bucket_key = "other"
+        try:
+            if entry.name == "_site":
+                bucket_key = "site_assets"
+            elif entry.name == SUPPORT_MEDIA_DIR:
+                bucket_key = "support_media"
+            elif entry.is_dir() and not entry.name.startswith("_"):
+                bucket_key = "references"
+        except OSError:
+            bucket_key = "other"
+
+        size_bytes, files_count = _path_tree_size(entry)
+        bucket = buckets[bucket_key]
+        bucket["bytes"] = int(bucket["bytes"]) + size_bytes
+        bucket["files"] = int(bucket["files"]) + files_count
+
+    order = ["references", "support_media", "site_assets", "other"]
+    categories: list[dict[str, object]] = []
+    total_bytes = 0
+    total_files = 0
+    for key in order:
+        item = buckets[key]
+        size_bytes = int(item["bytes"])
+        files_count = int(item["files"])
+        total_bytes += size_bytes
+        total_files += files_count
+        categories.append(
+            {
+                "key": key,
+                "title": str(item["title"]),
+                "size_bytes": size_bytes,
+                "size_human": _format_size_bytes(size_bytes),
+                "files_count": files_count,
+            }
+        )
+
+    summary["available"] = True
+    summary["categories"] = categories
+    summary["total_bytes"] = total_bytes
+    summary["total_files"] = total_files
+    summary["total_human"] = _format_size_bytes(total_bytes)
+    return summary
+
+
 def _site_assets_dir(storage_root: str) -> Path:
     return Path(storage_root) / "_site"
 
@@ -2228,6 +2335,8 @@ def create_app() -> FastAPI:
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
 
+        storage_usage = _storage_usage_summary(settings.reference_storage_path)
+
         async with app.state.sessionmaker() as session:
             settings_service = AppSettingsService(session)
             stars_per_credit = await settings_service.get_float("stars_per_credit", 2.0)
@@ -2271,6 +2380,7 @@ def create_app() -> FastAPI:
                 "site_logo_url": site_logo_url,
                 "favicon_logo_url": favicon_logo_url,
                 "logo_max_size_mb": int(MAX_LOGO_SIZE_BYTES / 1024 / 1024),
+                "storage_usage": storage_usage,
                 "saved": bool(saved),
                 "error": (error or "").strip(),
                 "can_manage": _can_manage(request),

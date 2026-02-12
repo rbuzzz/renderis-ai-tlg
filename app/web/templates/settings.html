@@ -139,6 +139,43 @@
         </div>
         {% endif %}
       </div>
+
+      <div style="height: 16px;"></div>
+      <h3 style="margin: 0 0 8px;">Занятое место в хранилище</h3>
+      <p class="muted" style="margin-top: 6px;">
+        Путь: <code>{{ storage_usage.root_path }}</code>
+      </p>
+      {% if storage_usage.available %}
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Категория</th>
+              <th>Объем</th>
+              <th>Файлов</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in storage_usage.categories %}
+            <tr>
+              <td>{{ row.title }}</td>
+              <td><b>{{ row.size_human }}</b></td>
+              <td>{{ row.files_count }}</td>
+            </tr>
+            {% endfor %}
+            <tr>
+              <td><b>Итого</b></td>
+              <td><b>{{ storage_usage.total_human }}</b></td>
+              <td><b>{{ storage_usage.total_files }}</b></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="notice" style="color: var(--danger);">
+        Не удалось прочитать хранилище ({{ storage_usage.error or "unknown" }}).
+      </div>
+      {% endif %}
       <div style="margin-top: 12px;">
         {% if can_manage %}
         <button type="submit">Сохранить</button>
