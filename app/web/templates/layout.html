@@ -224,12 +224,12 @@
         <a href="/admin" class="{{ 'active' if active_tab == 'dashboard' else '' }}">Дашборд</a>
         <a href="/admin/users" class="{{ 'active' if active_tab == 'users' else '' }}">Пользователи</a>
         <a href="/admin/change-requests" class="{{ 'active' if active_tab == 'change_requests' else '' }}">Предложения</a>
-        {% if not is_subadmin %}
+        {% if can_manage %}
         <a href="/admin/products" class="{{ 'active' if active_tab == 'products' else '' }}">Товары</a>
         {% endif %}
         <a href="/admin/promos" class="{{ 'active' if active_tab == 'promos' else '' }}">Промо-коды</a>
         <a href="/admin/chats" class="{{ 'active' if active_tab == 'chats' else '' }}">Чаты</a>
-        {% if not is_subadmin %}
+        {% if can_manage %}
         <a href="/admin/settings" class="{{ 'active' if active_tab == 'settings' else '' }}">Настройки</a>
         {% endif %}
       </nav>
