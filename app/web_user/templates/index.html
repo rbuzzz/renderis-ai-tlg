@@ -2344,7 +2344,7 @@
       }
 
       function supportedReferenceModels() {
-        return models.filter((model) => !!(model && model.supportsReference));
+        return models.filter((model) => !!(model && (model.supportsReference || model.requiresReference)));
       }
 
       function closeEditWithAiModal() {
@@ -2403,7 +2403,7 @@
         closeEditWithAiModal();
         if (!item || !item.url) return;
         const targetModel = models.find((model) => model.key === modelKey);
-        if (!targetModel || !targetModel.supportsReference) {
+        if (!targetModel || !(targetModel.supportsReference || targetModel.requiresReference)) {
           showToast(labels.result_edit_with_no_models, 'warning');
           return;
         }
@@ -3579,6 +3579,22 @@
         await runGenerationFlow();
       }
 
+      async function deleteResultItem(item) {
+        if (!item || !item.generation_id) return;
+        const generationId = Number(item.generation_id || 0);
+        if (!generationId) return;
+        const res = await fetch(`/api/generations/${generationId}/delete`, {
+          method: 'POST',
+          credentials: 'include',
+        });
+        if (!res.ok) {
+          alert(`${labels.error_prefix}: ${labels.delete_failed || 'delete_failed'}`);
+          return;
+        }
+        galleryItems = galleryItems.filter((x) => Number(x.generation_id || 0) !== generationId);
+        renderGallery();
+      }
+
       function renderGalleryCardActions(item, compact = false) {
         const fragment = document.createDocumentFragment();
         const addAction = (element) => {
@@ -3626,6 +3642,15 @@
         favoriteBtn.textContent = `⭐ ${favored ? labels.result_favorite_remove : labels.result_favorite_add}`;
         favoriteBtn.onclick = () => toggleFavorite(item);
         addAction(favoriteBtn);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'action-btn';
+        deleteBtn.type = 'button';
+        deleteBtn.textContent = `🗑 ${labels.delete}`;
+        deleteBtn.onclick = () => {
+          void deleteResultItem(item);
+        };
+        addAction(deleteBtn);
 
         return fragment;
       }
