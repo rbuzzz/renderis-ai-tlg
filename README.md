@@ -60,6 +60,23 @@ python -m app.main
 - Валюта: `XTR`
 - Для Stars `STARS_PROVIDER_TOKEN` можно оставить пустым.
 
+## Настройка Crypto Pay
+1. В `@CryptoBot` создайте app и получите `API Token`.
+2. Заполните в `.env`:
+
+```env
+CRYPTOPAY_API_TOKEN=xxx
+CRYPTOPAY_BASE_URL=https://pay.crypt.bot
+CRYPTOPAY_FIAT=USD
+CRYPTOPAY_ACCEPTED_ASSETS=USDT,TON,BTC,ETH,LTC,BNB,TRX,USDC
+CRYPTOPAY_EXPIRES_IN=10800
+```
+
+3. (Опционально) Включите webhook в `@CryptoBot -> Crypto Pay -> My Apps -> Webhooks`:
+- `https://<your-domain>/api/payments/cryptopay/postback`
+или
+- `https://<your-domain>/cryptopay/callback`
+
 ## Админ‑команды
 - `/admin` — админ‑панель
 - `/ref CODE` — применить рефкод

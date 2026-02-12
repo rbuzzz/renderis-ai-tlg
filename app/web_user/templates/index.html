@@ -1966,7 +1966,7 @@
 
         let response;
         try {
-          response = await fetch('/api/payments/cryptocloud/create', {
+          response = await fetch('/api/payments/cryptopay/create', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -1981,7 +1981,7 @@
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          if (errorData.error === 'cryptocloud_not_configured') {
+          if (errorData.error === 'cryptopay_not_configured') {
             setCryptoStatus(labels.crypto_unavailable, 'error');
             return;
           }
@@ -1990,7 +1990,7 @@
         }
 
         const data = await response.json();
-        cryptoInvoiceUuid = data.invoice_uuid || '';
+        cryptoInvoiceUuid = data.invoice_id || '';
         cryptoInvoiceCredits = Number(data.credits_amount || 0);
         payLink.href = data.pay_url || '#';
         payLink.style.display = data.pay_url ? 'inline-flex' : 'none';
@@ -2020,7 +2020,7 @@
         cryptoPollBusy = true;
 
         try {
-          const res = await fetch(`/api/payments/cryptocloud/status/${encodeURIComponent(cryptoInvoiceUuid)}`, {
+          const res = await fetch(`/api/payments/cryptopay/status/${encodeURIComponent(cryptoInvoiceUuid)}`, {
             credentials: 'include',
           });
           if (!res.ok) {
@@ -2040,7 +2040,7 @@
           }
           if (status === 'partial') {
             setCryptoStatus(labels.crypto_partial_payment);
-          } else if (status === 'canceled' || status === 'cancelled') {
+          } else if (status === 'canceled' || status === 'cancelled' || status === 'expired') {
             setCryptoStatus(labels.crypto_canceled, 'error');
             stopCryptoPolling();
           } else if (showWaiting || status === 'created') {

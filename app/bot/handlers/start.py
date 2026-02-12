@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.handlers.payments import send_buy_options, send_topup_options
+from app.bot.handlers.payments import send_buy_options, send_crypto_options, send_topup_options
 from app.bot.i18n import get_lang, t, tf
 from app.bot.keyboards.main import language_menu, main_menu, settings_menu
 from app.bot.utils import safe_cleanup_callback
@@ -77,6 +77,8 @@ async def cmd_start(message: Message, session: AsyncSession, command: CommandObj
         await send_topup_options(message)
     elif start_arg in {"stars"}:
         await send_buy_options(message, session)
+    elif start_arg in {"crypto", "cryptopay"}:
+        await send_crypto_options(message, session)
 
 
 @router.callback_query(F.data == "help")

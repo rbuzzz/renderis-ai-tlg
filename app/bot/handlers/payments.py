@@ -13,11 +13,14 @@ from app.bot.keyboards.main import promo_input_menu, topup_menu
 from app.bot.states import TopUpFlow
 from app.bot.utils import safe_cleanup_callback
 from app.config import get_settings
-from app.db.models import PromoCode
+from app.db.models import Order, PromoCode
+from app.services.app_settings import AppSettingsService
 from app.services.credits import CreditsService
+from app.services.cryptopay import CryptoPayClient, CryptoPayError
 from app.services.payments import PaymentsService
-from app.services.product_pricing import get_product_credits, get_product_stars_price
+from app.services.product_pricing import get_product_credits, get_product_stars_price, get_product_usd_price
 from app.services.promos import PromoService
+from app.utils.time import utcnow
 
 
 router = Router()
@@ -107,6 +110,57 @@ async def send_buy_options(message: Message, session: AsyncSession) -> bool:
     return True
 
 
+def _is_cryptopay_enabled(settings) -> bool:
+    return bool(settings.cryptopay_api_token.strip())
+
+
+def _normalize_cp_status(value: str | None) -> str:
+    return str(value or "").strip().lower()
+
+
+async def send_crypto_options(message: Message, session: AsyncSession) -> bool:
+    settings = get_settings()
+    lang = get_lang(message.from_user)
+    if not _is_cryptopay_enabled(settings):
+        await message.answer(t(lang, "cryptopay_unavailable"))
+        return False
+
+    service = PaymentsService(session)
+    products = await service.list_products()
+    if not products:
+        await message.answer(t(lang, "payment_packages_missing"))
+        return False
+
+    settings_service = AppSettingsService(session)
+    stars_per_credit = await settings_service.get_float("stars_per_credit", 2.0)
+    usd_per_star = await settings_service.get_float("usd_per_star", 0.013)
+    currency = settings.cryptopay_fiat.upper()
+
+    best_id = _best_value_product_id(products)
+    buttons = []
+    for product in products:
+        credits_total = get_product_credits(product)
+        amount = get_product_usd_price(product, stars_per_credit, usd_per_star)
+        label = f"{product.title} - {amount} {currency} / {tf(lang, 'payment_desc', credits=credits_total)}"
+
+        bonus = int(product.credits_bonus or 0)
+        if bonus > 0:
+            label = f"{label} | {tf(lang, 'crypto_bonus_badge', bonus=bonus)}"
+        if best_id is not None and int(product.id) == int(best_id):
+            label = f"{label} | {t(lang, 'crypto_best_value')}"
+
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=_trim_button_text(label),
+                    callback_data=f"pay:crypto:product:{product.id}",
+                )
+            ]
+        )
+    await message.answer(t(lang, "cryptopay_choose"), reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+    return True
+
+
 @router.callback_query(F.data == "pay:buy")
 async def buy_credits(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
@@ -119,6 +173,14 @@ async def buy_credits(callback: CallbackQuery, state: FSMContext) -> None:
 async def buy_stars(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
     await state.clear()
     await send_buy_options(callback.message, session)
+    await callback.answer()
+    await safe_cleanup_callback(callback)
+
+
+@router.callback_query(F.data == "pay:topup:crypto")
+async def buy_crypto(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    await state.clear()
+    await send_crypto_options(callback.message, session)
     await callback.answer()
     await safe_cleanup_callback(callback)
 
@@ -224,6 +286,168 @@ async def pay_product(callback: CallbackQuery, session: AsyncSession) -> None:
     )
     await callback.answer()
     await safe_cleanup_callback(callback)
+
+
+@router.callback_query(F.data.startswith("pay:crypto:product:"))
+async def pay_cryptopay_product(callback: CallbackQuery, session: AsyncSession) -> None:
+    try:
+        product_id = int((callback.data or "").split(":", 3)[3])
+    except (IndexError, ValueError):
+        await callback.answer(t(get_lang(callback.from_user), "payment_invalid"), show_alert=True)
+        return
+
+    lang = get_lang(callback.from_user)
+    settings = get_settings()
+    if not _is_cryptopay_enabled(settings):
+        await callback.answer(t(lang, "cryptopay_unavailable"), show_alert=True)
+        return
+
+    service = PaymentsService(session)
+    product = await service.get_product(product_id)
+    if not product:
+        await callback.answer(t(lang, "payment_package_not_found"), show_alert=True)
+        return
+
+    credits_service = CreditsService(session)
+    user = await credits_service.get_user(callback.from_user.id)
+    if not user:
+        await callback.answer(t(lang, "payment_user_not_found"), show_alert=True)
+        return
+
+    settings_service = AppSettingsService(session)
+    stars_per_credit = await settings_service.get_float("stars_per_credit", 2.0)
+    usd_per_star = await settings_service.get_float("usd_per_star", 0.013)
+    credits_total = get_product_credits(product)
+    amount = get_product_usd_price(product, stars_per_credit, usd_per_star)
+
+    local_order_id = f"cp_bot_{uuid.uuid4().hex[:20]}"
+    invoice_payload = f"user={user.id};product={product.id};order={local_order_id}"
+    description = f"{product.title} - {credits_total} credits"
+    client = CryptoPayClient(
+        api_token=settings.cryptopay_api_token,
+        base_url=settings.cryptopay_base_url,
+    )
+    try:
+        invoice = await client.create_invoice(
+            amount=amount,
+            currency_type="fiat",
+            fiat=settings.cryptopay_fiat,
+            accepted_assets=settings.cryptopay_accepted_assets or None,
+            description=description,
+            payload=invoice_payload,
+            expires_in=settings.cryptopay_expires_in,
+            allow_comments=False,
+            allow_anonymous=True,
+        )
+    except CryptoPayError:
+        await callback.answer(t(lang, "cryptopay_create_failed"), show_alert=True)
+        return
+
+    invoice_id = str(invoice.get("invoice_id") or "").strip()
+    pay_url = str(invoice.get("bot_invoice_url") or invoice.get("pay_url") or "").strip()
+    status = _normalize_cp_status(invoice.get("status")) or "active"
+    if not invoice_id or not pay_url:
+        await callback.answer(t(lang, "cryptopay_create_failed"), show_alert=True)
+        return
+
+    order = Order(
+        user_id=user.id,
+        telegram_payment_charge_id=local_order_id,
+        provider_payment_charge_id=invoice_id,
+        payload=f"cp:{product.id}",
+        stars_amount=0,
+        credits_amount=credits_total,
+        status=f"cp_{status}"[:32],
+        created_at=utcnow(),
+    )
+    session.add(order)
+    await session.commit()
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t(lang, "cryptopay_pay_button"), url=pay_url)],
+            [InlineKeyboardButton(text=t(lang, "cryptopay_check_button"), callback_data=f"pay:crypto:check:{order.id}")],
+        ]
+    )
+    await callback.message.answer(
+        tf(
+            lang,
+            "cryptopay_invoice_created",
+            amount=str(amount),
+            currency=settings.cryptopay_fiat.upper(),
+        ),
+        reply_markup=keyboard,
+    )
+    await callback.answer()
+    await safe_cleanup_callback(callback)
+
+
+@router.callback_query(F.data.startswith("pay:crypto:check:"))
+async def pay_cryptopay_check(callback: CallbackQuery, session: AsyncSession) -> None:
+    try:
+        local_order_id = int((callback.data or "").split(":", 3)[3])
+    except (IndexError, ValueError):
+        await callback.answer(t(get_lang(callback.from_user), "payment_invalid"), show_alert=True)
+        return
+
+    lang = get_lang(callback.from_user)
+    settings = get_settings()
+    if not _is_cryptopay_enabled(settings):
+        await callback.answer(t(lang, "cryptopay_unavailable"), show_alert=True)
+        return
+
+    credits_service = CreditsService(session)
+    user = await credits_service.get_user(callback.from_user.id)
+    if not user:
+        await callback.answer(t(lang, "payment_user_not_found"), show_alert=True)
+        return
+
+    order = await session.get(Order, local_order_id)
+    if order and order.user_id != user.id:
+        order = None
+    if order and not (order.payload or "").startswith("cp:"):
+        order = None
+    if not order:
+        await callback.answer(t(lang, "payment_invalid"), show_alert=True)
+        return
+
+    client = CryptoPayClient(
+        api_token=settings.cryptopay_api_token,
+        base_url=settings.cryptopay_base_url,
+    )
+    try:
+        invoice = await client.get_invoice(order.provider_payment_charge_id)
+    except CryptoPayError:
+        await callback.answer(t(lang, "cryptopay_status_failed"), show_alert=True)
+        return
+    if not invoice:
+        await callback.answer(t(lang, "cryptopay_status_failed"), show_alert=True)
+        return
+
+    invoice_status = _normalize_cp_status(invoice.get("status"))
+    if invoice_status == "paid":
+        payments = PaymentsService(session)
+        paid_now, credited = await payments.settle_cryptopay_order(order)
+        await session.commit()
+        if paid_now:
+            await callback.message.answer(tf(lang, "payment_success", credits=credited))
+        else:
+            await callback.message.answer(t(lang, "payment_processed"))
+        await callback.answer()
+        return
+
+    order.status = f"cp_{invoice_status}"[:32] if invoice_status else order.status
+    await session.commit()
+    if invoice_status in {"expired"}:
+        await callback.answer(
+            tf(lang, "cryptopay_canceled", status=invoice_status.upper()),
+            show_alert=True,
+        )
+    else:
+        await callback.answer(
+            tf(lang, "cryptopay_waiting", status=(invoice_status or "active").upper()),
+            show_alert=True,
+        )
 
 
 @router.pre_checkout_query()

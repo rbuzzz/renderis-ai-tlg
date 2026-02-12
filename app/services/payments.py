@@ -57,3 +57,30 @@ class PaymentsService:
             idempotency_key=f'order:{telegram_payment_charge_id}',
         )
         return True
+
+    async def settle_cryptopay_order(self, order: Order) -> tuple[bool, int]:
+        if order.status == "paid":
+            return False, 0
+
+        user = await self.session.get(User, order.user_id)
+        if not user:
+            return False, 0
+
+        credits_total = int(order.credits_amount or 0)
+        if credits_total <= 0:
+            return False, 0
+
+        credits = CreditsService(self.session)
+        await credits.add_ledger(
+            user,
+            credits_total,
+            "purchase",
+            meta={
+                "provider": "cryptopay",
+                "invoice_id": order.provider_payment_charge_id,
+                "payload": order.payload,
+            },
+            idempotency_key=f"cp_invoice:{order.provider_payment_charge_id}",
+        )
+        order.status = "paid"
+        return True, credits_total
