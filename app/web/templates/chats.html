@@ -81,6 +81,46 @@
     border-color: var(--accent);
     box-shadow: 0 0 0 2px rgba(92, 225, 155, 0.25) inset;
   }
+  .chat-summary {
+    display: none;
+    border-bottom: 1px solid var(--line);
+    padding: 10px 14px;
+    background: #11243a;
+  }
+  .chat-summary-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .chat-summary-title {
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 700;
+  }
+  .chat-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(140px, 1fr));
+    gap: 8px;
+  }
+  .chat-summary-item {
+    border: 1px solid #203651;
+    border-radius: 10px;
+    padding: 8px;
+    background: #0e1d31;
+  }
+  .chat-summary-label {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .chat-summary-value {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    word-break: break-word;
+  }
   .chat-messages {
     flex: 1;
     overflow-y: auto;
@@ -234,6 +274,9 @@
       height: clamp(320px, 56vh, 620px);
       min-height: 320px;
     }
+    .chat-summary-grid {
+      grid-template-columns: repeat(2, minmax(120px, 1fr));
+    }
     .msg {
       max-width: 84%;
     }
@@ -252,6 +295,13 @@
     }
     .chat-item {
       padding: 9px 12px;
+    }
+    .chat-summary {
+      padding: 8px 10px;
+    }
+    .chat-summary-grid {
+      grid-template-columns: 1fr;
+      gap: 6px;
     }
     .chat-messages {
       padding: 10px;
@@ -285,6 +335,7 @@
     </div>
     <div class="chat-pane" id="chatPane">
       <header id="chatHeader">Выберите чат</header>
+      <div class="chat-summary" id="chatSummary"></div>
       <div class="chat-messages" id="chatMessages"></div>
       <div class="chat-input">
         <input id="chatFile" type="file" accept="image/*" style="display:none;" />
@@ -313,6 +364,7 @@
   const canManage = {{ "true" if can_manage else "false" }};
   const chatItems = document.getElementById('chatItems');
   const chatPane = document.getElementById('chatPane');
+  const chatSummary = document.getElementById('chatSummary');
   const chatMessages = document.getElementById('chatMessages');
   const chatHeader = document.getElementById('chatHeader');
   const chatInput = document.getElementById('chatInput');
@@ -353,6 +405,97 @@
     if (!chatStatus) return;
     chatStatus.textContent = text || '';
     chatStatus.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+  }
+
+  function clearChatSummary() {
+    if (!chatSummary) return;
+    chatSummary.style.display = 'none';
+    chatSummary.innerHTML = '';
+  }
+
+  function _summaryText(value) {
+    if (value === null || value === undefined || value === '') return '-';
+    return String(value);
+  }
+
+  function _appendSummaryItem(grid, label, value) {
+    const item = document.createElement('div');
+    item.className = 'chat-summary-item';
+    const l = document.createElement('div');
+    l.className = 'chat-summary-label';
+    l.textContent = label;
+    const v = document.createElement('div');
+    v.className = 'chat-summary-value';
+    v.textContent = _summaryText(value);
+    item.appendChild(l);
+    item.appendChild(v);
+    grid.appendChild(item);
+  }
+
+  function renderChatSummary(data) {
+    if (!chatSummary) return;
+    chatSummary.innerHTML = '';
+
+    const head = document.createElement('div');
+    head.className = 'chat-summary-head';
+    const title = document.createElement('div');
+    title.className = 'chat-summary-title';
+    title.textContent = 'Сводка пользователя';
+    head.appendChild(title);
+    if (data && data.user_id) {
+      const link = document.createElement('a');
+      link.className = 'chat-user-link';
+      link.href = `/admin/users/${data.user_id}`;
+      link.textContent = 'Профиль';
+      head.appendChild(link);
+    }
+    chatSummary.appendChild(head);
+
+    const grid = document.createElement('div');
+    grid.className = 'chat-summary-grid';
+    const username = data && data.username ? `@${data.username}` : '-';
+    const status = data && data.is_banned ? 'Заблокирован' : 'Активен';
+    const generations = `${_summaryText(data?.generations_total)} (усп: ${_summaryText(data?.generations_success)}, fail: ${_summaryText(data?.generations_fail)})`;
+    const paid = `${_summaryText(data?.paid_orders_count)} платежей / ${_summaryText(data?.paid_credits_total)} кредитов`;
+
+    _appendSummaryItem(grid, 'Telegram ID', data?.telegram_id);
+    _appendSummaryItem(grid, 'Username', username);
+    _appendSummaryItem(grid, 'Статус', status);
+    _appendSummaryItem(grid, 'Баланс', data?.balance_credits);
+    _appendSummaryItem(grid, 'Скидка %', data?.referral_discount_pct);
+    _appendSummaryItem(grid, 'Активных промо', data?.active_promos_count);
+    _appendSummaryItem(grid, 'Генерации', generations);
+    _appendSummaryItem(grid, 'Последняя генерация', data?.last_generation_at_msk);
+    _appendSummaryItem(grid, 'Оплаты', paid);
+    _appendSummaryItem(grid, 'Последняя оплата', data?.last_paid_order_at_msk);
+    _appendSummaryItem(grid, 'Сообщений в чате', data?.thread_messages_count);
+    _appendSummaryItem(grid, 'Последнее сообщение', data?.thread_last_message_at_msk);
+    _appendSummaryItem(grid, 'Первый вход', data?.first_seen_at_msk);
+    _appendSummaryItem(grid, 'Последняя активность', data?.last_seen_at_msk);
+
+    chatSummary.appendChild(grid);
+    chatSummary.style.display = 'block';
+  }
+
+  async function loadSummary() {
+    if (!chatSummary) return;
+    if (!currentThread) {
+      clearChatSummary();
+      return;
+    }
+    let res;
+    try {
+      res = await fetch(`/admin/api/chats/${currentThread}/summary`);
+    } catch (err) {
+      clearChatSummary();
+      return;
+    }
+    if (!res.ok) {
+      clearChatSummary();
+      return;
+    }
+    const data = await res.json();
+    renderChatSummary(data);
   }
 
   function fmtTime(value) {
@@ -513,6 +656,7 @@
     currentThreadUserId = null;
     currentThreadLabel = '';
     chatMessages.innerHTML = '';
+    clearChatSummary();
     renderChatHeader();
     await loadThreads();
     setStatus('Чат удалён.');
@@ -620,6 +764,14 @@
       empty.textContent = 'Нет активных диалогов';
       chatItems.appendChild(empty);
     }
+    if (currentThread && !threads.some((t) => Number(t.id) === Number(currentThread))) {
+      currentThread = null;
+      currentThreadUserId = null;
+      currentThreadLabel = '';
+      chatMessages.innerHTML = '';
+      clearChatSummary();
+      renderChatHeader();
+    }
     const urlParams = new URLSearchParams(window.location.search);
     const requested = urlParams.get('thread');
     if (!currentThread && threads.length) {
@@ -674,6 +826,7 @@
     resetDragState();
     renderChatHeader();
     await loadMessages(true);
+    await loadSummary();
     await loadThreads();
   }
 
@@ -716,6 +869,7 @@
       clearPendingImage();
       setStatus('');
       await loadMessages(true);
+      await loadSummary();
     } finally {
       chatSend.disabled = false;
       if (chatAttach) chatAttach.disabled = false;
@@ -778,5 +932,6 @@
   loadThreads();
   setInterval(loadThreads, 5000);
   setInterval(loadMessages, 2000);
+  setInterval(loadSummary, 10000);
 </script>
 {% endblock %}

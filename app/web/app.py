@@ -2402,6 +2402,66 @@ def create_app() -> FastAPI:
                 )
         return {"threads": threads, "support_enabled": bool(settings.support_bot_token)}
 
+    @app.get("/admin/api/chats/{thread_id}/summary")
+    async def admin_chats_summary(request: Request, thread_id: int):
+        if not _is_logged_in(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+        async with app.state.sessionmaker() as session:
+            thread = await session.get(SupportThread, thread_id)
+            if not thread:
+                return JSONResponse({"error": "not_found"}, status_code=404)
+            user = await session.get(User, thread.user_id)
+            if not user:
+                return JSONResponse({"error": "user_not_found"}, status_code=404)
+
+            generations_total_q = await session.execute(select(func.count(Generation.id)).where(Generation.user_id == user.id))
+            generations_success_q = await session.execute(
+                select(func.count(Generation.id)).where(Generation.user_id == user.id, Generation.status == "success")
+            )
+            generations_fail_q = await session.execute(
+                select(func.count(Generation.id)).where(Generation.user_id == user.id, Generation.status == "fail")
+            )
+            last_generation_at_q = await session.execute(
+                select(func.max(Generation.created_at)).where(Generation.user_id == user.id)
+            )
+            paid_orders_count_q = await session.execute(
+                select(func.count(Order.id)).where(Order.user_id == user.id, Order.status == "paid")
+            )
+            paid_credits_sum_q = await session.execute(
+                select(func.coalesce(func.sum(Order.credits_amount), 0)).where(Order.user_id == user.id, Order.status == "paid")
+            )
+            last_paid_order_at_q = await session.execute(
+                select(func.max(Order.created_at)).where(Order.user_id == user.id, Order.status == "paid")
+            )
+            active_promos_q = await session.execute(
+                select(func.count(PromoCode.code)).where(PromoCode.redeemed_by_user_id == user.id, PromoCode.active.is_(True))
+            )
+            thread_messages_q = await session.execute(
+                select(func.count(SupportMessage.id)).where(SupportMessage.thread_id == thread.id)
+            )
+
+            return {
+                "user_id": user.id,
+                "telegram_id": user.telegram_id,
+                "username": user.username or "",
+                "balance_credits": int(user.balance_credits or 0),
+                "is_banned": bool(user.is_banned),
+                "referral_discount_pct": int(user.referral_discount_pct or 0),
+                "first_seen_at_msk": _format_msk(user.first_seen_at) or "—",
+                "last_seen_at_msk": _format_msk(user.last_seen_at) or "—",
+                "generations_total": int(generations_total_q.scalar_one() or 0),
+                "generations_success": int(generations_success_q.scalar_one() or 0),
+                "generations_fail": int(generations_fail_q.scalar_one() or 0),
+                "last_generation_at_msk": _format_msk(last_generation_at_q.scalar_one()),
+                "paid_orders_count": int(paid_orders_count_q.scalar_one() or 0),
+                "paid_credits_total": int(paid_credits_sum_q.scalar_one() or 0),
+                "last_paid_order_at_msk": _format_msk(last_paid_order_at_q.scalar_one()),
+                "active_promos_count": int(active_promos_q.scalar_one() or 0),
+                "thread_messages_count": int(thread_messages_q.scalar_one() or 0),
+                "thread_last_message_at_msk": _format_msk(thread.last_message_at) or "—",
+            }
+
     @app.get("/admin/api/chats/{thread_id}/messages")
     async def admin_chats_messages(request: Request, thread_id: int):
         if not _is_logged_in(request):
