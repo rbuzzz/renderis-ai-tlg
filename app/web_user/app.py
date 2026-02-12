@@ -1604,6 +1604,7 @@ def create_app() -> FastAPI:
         "confirm_message",
         "confirm_cancel",
         "confirm_continue",
+        "confirm_dont_show_again",
         "confirm_skip_toggle",
         "quote_login_required",
         "quote_unavailable",

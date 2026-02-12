@@ -531,6 +531,23 @@
         font-size: 14px;
         line-height: 1.5;
       }
+      .confirm-check {
+        margin-top: 12px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: #bed0e4;
+        font-size: 13px;
+        user-select: none;
+        cursor: pointer;
+      }
+      .confirm-check input {
+        margin: 0;
+      }
+      .confirm-check.disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
       .confirm-actions {
         margin-top: 16px;
         display: flex;
@@ -1420,6 +1437,10 @@
         <div class="confirm-modal-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
           <div class="confirm-title" id="confirmTitle">{{ labels['confirm_title'] }}</div>
           <div class="confirm-text" id="confirmText"></div>
+          <label class="confirm-check" id="confirmDontShowWrap" for="confirmDontShowCheckbox">
+            <input id="confirmDontShowCheckbox" type="checkbox" />
+            <span>{{ labels['confirm_dont_show_again'] }}</span>
+          </label>
           <div class="confirm-actions">
             <button class="confirm-btn ghost" id="confirmCancelBtn" type="button">{{ labels['confirm_cancel'] }}</button>
             <button class="confirm-btn primary" id="confirmOkBtn" type="button">{{ labels['confirm_continue'] }}</button>
@@ -1675,8 +1696,18 @@
         const modal = document.getElementById('confirmModal');
         const textEl = document.getElementById('confirmText');
         const okBtn = document.getElementById('confirmOkBtn');
+        const dontShowCheckbox = document.getElementById('confirmDontShowCheckbox');
+        const dontShowWrap = document.getElementById('confirmDontShowWrap');
         if (!modal || !textEl) return;
+        const mandatory = isNewUserMandatoryConfirm();
         textEl.textContent = fmt(labels.confirm_message, { total: costValue });
+        if (dontShowCheckbox) {
+          dontShowCheckbox.checked = getSkipConfirmSetting();
+          dontShowCheckbox.disabled = mandatory;
+        }
+        if (dontShowWrap) {
+          dontShowWrap.classList.toggle('disabled', mandatory);
+        }
         modal.classList.add('open');
         modal.setAttribute('aria-hidden', 'false');
         confirmModalOpen = true;
@@ -2670,6 +2701,11 @@
       const confirmOkBtn = document.getElementById('confirmOkBtn');
       if (confirmOkBtn) {
         confirmOkBtn.addEventListener('click', async () => {
+          const dontShowCheckbox = document.getElementById('confirmDontShowCheckbox');
+          if (dontShowCheckbox && !dontShowCheckbox.disabled) {
+            setSkipConfirmSetting(!!dontShowCheckbox.checked);
+            updateSkipConfirmToggleUi();
+          }
           closeConfirmModal();
           await executeGeneration();
         });
