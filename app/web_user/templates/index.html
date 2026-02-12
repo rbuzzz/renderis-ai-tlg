@@ -758,6 +758,12 @@
         gap: 12px;
         margin-bottom: 8px;
       }
+      .field.ref-drop-active .ref-grid {
+        border: 1px dashed rgba(64, 212, 154, 0.85);
+        border-radius: 16px;
+        padding: 8px;
+        background: rgba(64, 212, 154, 0.08);
+      }
       .ref-tile {
         aspect-ratio: 1 / 1;
         border-radius: 16px;
@@ -785,6 +791,9 @@
       }
       .ref-tile strong {
         color: var(--text);
+      }
+      .field.ref-drop-active .ref-tile {
+        border-color: rgba(64, 212, 154, 0.9);
       }
       .ref-thumb {
         position: relative;
@@ -2268,7 +2277,78 @@
       const refInput = document.getElementById('refFiles');
       const refReplaceInput = document.getElementById('refReplaceFile');
       const refGrid = document.getElementById('refGrid');
+      const uploadBlockEl = document.getElementById('uploadBlock');
       let replaceRefIndex = -1;
+      let refDragDepth = 0;
+
+      function modelSupportsRefImages() {
+        return !!(
+          currentModel &&
+          (currentModel.supports_reference_images || currentModel.requires_reference_images)
+        );
+      }
+
+      function setRefDropActive(active) {
+        if (!uploadBlockEl) return;
+        uploadBlockEl.classList.toggle('ref-drop-active', !!active);
+      }
+
+      function clearRefDropActive() {
+        refDragDepth = 0;
+        setRefDropActive(false);
+      }
+
+      function collectImageFilesFromDataTransfer(dataTransfer) {
+        const files = [];
+        if (!dataTransfer) return files;
+
+        const items = Array.from(dataTransfer.items || []);
+        for (const item of items) {
+          if (!item || item.kind !== 'file') continue;
+          const mime = String(item.type || '').toLowerCase();
+          if (!mime.startsWith('image/')) continue;
+          const file = item.getAsFile ? item.getAsFile() : null;
+          if (file) files.push(file);
+        }
+
+        if (!files.length) {
+          const fallback = Array.from(dataTransfer.files || []);
+          for (const file of fallback) {
+            const mime = String(file.type || '').toLowerCase();
+            if (mime.startsWith('image/')) files.push(file);
+          }
+        }
+        return files;
+      }
+
+      function collectImageFilesFromClipboard(clipboardData) {
+        if (!clipboardData) return [];
+        return collectImageFilesFromDataTransfer(clipboardData);
+      }
+
+      function addReferenceFiles(files) {
+        if (!modelSupportsRefImages()) return 0;
+        const incoming = Array.from(files || []);
+        if (!incoming.length) return 0;
+        const max = currentModel.max_reference_images || 0;
+        let added = 0;
+
+        for (const file of incoming) {
+          if (!(file instanceof File)) continue;
+          const mime = String(file.type || '').toLowerCase();
+          if (!mime.startsWith('image/')) continue;
+          if (selectedFiles.length >= max) break;
+          selectedFiles.push(file);
+          refPreviews.push(URL.createObjectURL(file));
+          added += 1;
+        }
+
+        if (added > 0) {
+          syncRefInput();
+          renderRefGrid();
+        }
+        return added;
+      }
 
       function syncRefInput() {
         const dt = new DataTransfer();
@@ -2336,16 +2416,8 @@
       }
 
       refInput.addEventListener('change', () => {
-        if (!currentModel) return;
-        const incoming = Array.from(refInput.files || []);
-        const max = currentModel.max_reference_images || 0;
-        for (const file of incoming) {
-          if (selectedFiles.length >= max) break;
-          selectedFiles.push(file);
-          refPreviews.push(URL.createObjectURL(file));
-        }
-        syncRefInput();
-        renderRefGrid();
+        addReferenceFiles(Array.from(refInput.files || []));
+        refInput.value = '';
       });
 
       refReplaceInput.addEventListener('change', () => {
@@ -2361,6 +2433,53 @@
         refPreviews[idx] = URL.createObjectURL(file);
         syncRefInput();
         renderRefGrid();
+      });
+
+      if (uploadBlockEl) {
+        uploadBlockEl.addEventListener('dragenter', (event) => {
+          if (!modelSupportsRefImages()) return;
+          const hasFiles = Array.from(event.dataTransfer?.types || []).includes('Files');
+          if (!hasFiles) return;
+          event.preventDefault();
+          refDragDepth += 1;
+          setRefDropActive(true);
+        });
+
+        uploadBlockEl.addEventListener('dragover', (event) => {
+          if (!modelSupportsRefImages()) return;
+          const hasFiles = Array.from(event.dataTransfer?.types || []).includes('Files');
+          if (!hasFiles) return;
+          event.preventDefault();
+          if (event.dataTransfer) {
+            event.dataTransfer.dropEffect = 'copy';
+          }
+          setRefDropActive(true);
+        });
+
+        uploadBlockEl.addEventListener('dragleave', (event) => {
+          if (!modelSupportsRefImages()) return;
+          event.preventDefault();
+          refDragDepth = Math.max(0, refDragDepth - 1);
+          if (refDragDepth === 0) {
+            setRefDropActive(false);
+          }
+        });
+
+        uploadBlockEl.addEventListener('drop', (event) => {
+          if (!modelSupportsRefImages()) return;
+          event.preventDefault();
+          const files = collectImageFilesFromDataTransfer(event.dataTransfer);
+          addReferenceFiles(files);
+          clearRefDropActive();
+        });
+      }
+
+      document.addEventListener('paste', (event) => {
+        if (!modelSupportsRefImages()) return;
+        const files = collectImageFilesFromClipboard(event.clipboardData);
+        if (!files.length) return;
+        event.preventDefault();
+        addReferenceFiles(files);
       });
 
       let quoteTimer = null;
