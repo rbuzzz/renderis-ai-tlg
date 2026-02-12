@@ -2388,11 +2388,8 @@
         }
 
         function callBackendCancel() {
-          if (!generationId) return;
-          void fetch(`/api/generations/${generationId}/cancel`, {
-            method: 'POST',
-            credentials: 'include',
-          }).catch(() => {});
+          // Backend cancel endpoint is not implemented yet.
+          // Local cancel stops UI waiting state and polling only.
         }
 
         function cancelLocally() {
