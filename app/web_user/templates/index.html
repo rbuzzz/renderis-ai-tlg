@@ -381,6 +381,147 @@
         resize: vertical;
       }
       textarea { min-height: 120px; }
+      .prompt-field {
+        position: relative;
+      }
+      .prompt-label-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 6px;
+      }
+      .prompt-label-row label {
+        margin-bottom: 0;
+      }
+      .prompt-helper-btn,
+      .prompt-history-btn {
+        border-radius: 10px;
+        border: 1px solid #2b3f59;
+        background: #0f1b2b;
+        color: var(--text);
+        padding: 7px 10px;
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+        line-height: 1.2;
+      }
+      .prompt-helper-btn:hover,
+      .prompt-helper-btn:focus-visible,
+      .prompt-history-btn:hover,
+      .prompt-history-btn:focus-visible {
+        border-color: var(--accent);
+        outline: none;
+      }
+      .prompt-helper-btn[aria-expanded="true"],
+      .prompt-history-btn[aria-expanded="true"] {
+        border-color: var(--accent-2);
+        background: #112238;
+      }
+      .prompt-footer {
+        margin-top: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .prompt-limit {
+        font-size: 12px;
+        color: var(--muted);
+        text-align: right;
+      }
+      .prompt-limit.warn {
+        color: #f5cc89;
+      }
+      .prompt-panel {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: calc(100% + 8px);
+        border-radius: 12px;
+        border: 1px solid #2c4260;
+        background: rgba(8, 15, 27, 0.98);
+        box-shadow: 0 16px 34px rgba(0, 0, 0, 0.35);
+        padding: 10px;
+        opacity: 0;
+        transform: translateY(-6px) scale(0.98);
+        transform-origin: top center;
+        pointer-events: none;
+        transition: opacity 0.16s ease, transform 0.16s ease;
+        z-index: 45;
+      }
+      .prompt-panel.open {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        pointer-events: auto;
+      }
+      .prompt-panel-title {
+        font-size: 12px;
+        color: #c2d3e6;
+        margin-bottom: 8px;
+      }
+      .prompt-list {
+        max-height: 240px;
+        overflow-y: auto;
+        display: grid;
+        gap: 6px;
+      }
+      .prompt-list-item {
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid #2a3d57;
+        background: #0f1b2b;
+        color: var(--text);
+        text-align: left;
+        cursor: pointer;
+        padding: 9px 10px;
+        font: inherit;
+        font-size: 13px;
+      }
+      .prompt-list-item:hover,
+      .prompt-list-item:focus-visible {
+        border-color: var(--accent-2);
+        background: #132540;
+        outline: none;
+      }
+      .prompt-list-item strong {
+        display: block;
+        margin-bottom: 3px;
+      }
+      .prompt-list-item span {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .prompt-history-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 6px;
+      }
+      .prompt-history-remove {
+        width: 30px;
+        min-height: 30px;
+        border-radius: 8px;
+        border: 1px solid #35506f;
+        background: #101f34;
+        color: #9fb3cc;
+        cursor: pointer;
+        font-size: 14px;
+        line-height: 1;
+      }
+      .prompt-history-remove:hover,
+      .prompt-history-remove:focus-visible {
+        border-color: rgba(255, 118, 118, 0.65);
+        color: #ffc0c0;
+        outline: none;
+      }
+      .prompt-panel-empty {
+        border-radius: 10px;
+        border: 1px dashed #2a3d57;
+        color: var(--muted);
+        font-size: 12px;
+        padding: 10px;
+      }
       .options-group { margin-top: 12px; }
       .option-title { font-size: 13px; color: var(--muted); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
       .option-buttons {
@@ -1194,6 +1335,23 @@
           align-items: stretch;
           gap: 8px;
         }
+        .prompt-label-row {
+          flex-wrap: wrap;
+        }
+        .prompt-helper-btn {
+          width: 100%;
+        }
+        .prompt-footer {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 8px;
+        }
+        .prompt-history-btn {
+          width: 100%;
+        }
+        .prompt-limit {
+          text-align: left;
+        }
         .quote-line {
           display: flex;
           flex-wrap: wrap;
@@ -1247,6 +1405,9 @@
         }
         .action-btn {
           flex: 1 1 100%;
+        }
+        .prompt-panel {
+          top: calc(100% + 6px);
         }
       }
     </style>
@@ -1332,9 +1493,40 @@
         <div class="model-buttons" id="modelButtons"></div>
         <div class="tagline" id="modelTagline"></div>
 
-        <div class="field">
-          <label>{{ labels['prompt_label'] }}</label>
+        <div class="field prompt-field" id="promptField">
+          <div class="prompt-label-row">
+            <label for="prompt">{{ labels['prompt_label'] }}</label>
+            <button
+              class="prompt-helper-btn"
+              id="promptHelperBtn"
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded="false"
+            >
+              ✨ {{ labels['prompt_helper_button'] }}
+            </button>
+          </div>
           <textarea id="prompt" placeholder="{{ labels['prompt_placeholder'] }}"></textarea>
+          <div class="prompt-footer">
+            <button
+              class="prompt-history-btn"
+              id="promptHistoryBtn"
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded="false"
+            >
+              ↓ {{ labels['prompt_history_button'] }}
+            </button>
+            <div class="prompt-limit" id="promptLimitHint" aria-live="polite"></div>
+          </div>
+          <div class="prompt-panel" id="promptHelperPanel" role="dialog" aria-hidden="true">
+            <div class="prompt-panel-title">{{ labels['prompt_helper_title'] }}</div>
+            <div class="prompt-list" id="promptHelperList"></div>
+          </div>
+          <div class="prompt-panel" id="promptHistoryPanel" role="dialog" aria-hidden="true">
+            <div class="prompt-panel-title">{{ labels['prompt_history_title'] }}</div>
+            <div class="prompt-list" id="promptHistoryList"></div>
+          </div>
         </div>
 
         <div class="field" id="uploadBlock">
@@ -1454,6 +1646,7 @@
       const labels = {{ labels | tojson }};
       const loggedIn = {{ 'true' if logged_in else 'false' }};
       const botUsername = {{ bot_username | tojson }};
+      const maxPromptLength = Number({{ max_prompt_length | tojson }}) || 0;
       let models = [];
       let currentModel = null;
       let optionsState = {};
@@ -1479,6 +1672,41 @@
       const THUMB_ROWS = 3;
       const NEW_USER_CONFIRM_REQUIRED_COUNT = 5;
       const SKIP_CONFIRM_STORAGE_KEY = 'renderis.skip_confirm_generation';
+      const PROMPT_HISTORY_STORAGE_KEY = 'renderis.prompt_history.v1';
+      const PROMPT_HISTORY_LIMIT = 10;
+      const PROMPT_TEMPLATES = [
+        {
+          id: 'logo_brand_mark',
+          title: labels.prompt_template_logo_title,
+          text: labels.prompt_template_logo_text,
+        },
+        {
+          id: 'social_media_post',
+          title: labels.prompt_template_social_title,
+          text: labels.prompt_template_social_text,
+        },
+        {
+          id: 'cinematic_scene',
+          title: labels.prompt_template_cinematic_title,
+          text: labels.prompt_template_cinematic_text,
+        },
+        {
+          id: 'product_mockup',
+          title: labels.prompt_template_product_title,
+          text: labels.prompt_template_product_text,
+        },
+        {
+          id: 'minimal_icon',
+          title: labels.prompt_template_icon_title,
+          text: labels.prompt_template_icon_text,
+        },
+        {
+          id: 'photorealistic_portrait',
+          title: labels.prompt_template_portrait_title,
+          text: labels.prompt_template_portrait_text,
+        },
+      ];
+      let promptHistory = [];
       const tgWebApp = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
       const isMiniApp = Boolean(tgWebApp && typeof tgWebApp.initData === 'string');
       const loginWidget = document.getElementById('loginWidget');
@@ -1518,6 +1746,198 @@
           out = out.replaceAll(`{${k}}`, params[k]);
         });
         return out;
+      }
+
+      function escapeHtml(value) {
+        return String(value || '')
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#39;');
+      }
+
+      function trackUiEvent(eventName, payload = {}) {
+        const detail = { event: eventName, ...payload };
+        try {
+          if (Array.isArray(window.dataLayer)) {
+            window.dataLayer.push(detail);
+          }
+          if (typeof window.gtag === 'function') {
+            window.gtag('event', eventName, payload);
+          }
+          window.dispatchEvent(new CustomEvent('renderis:analytics', { detail }));
+        } catch (e) {
+          // Keep analytics best-effort and non-blocking.
+        }
+      }
+
+      function getPromptInput() {
+        return document.getElementById('prompt');
+      }
+
+      function isPromptUiTarget(target) {
+        const field = document.getElementById('promptField');
+        return !!(field && target instanceof Node && field.contains(target));
+      }
+
+      function closePromptPanels() {
+        const helperPanel = document.getElementById('promptHelperPanel');
+        const historyPanel = document.getElementById('promptHistoryPanel');
+        const helperBtn = document.getElementById('promptHelperBtn');
+        const historyBtn = document.getElementById('promptHistoryBtn');
+        if (helperPanel) {
+          helperPanel.classList.remove('open');
+          helperPanel.setAttribute('aria-hidden', 'true');
+        }
+        if (historyPanel) {
+          historyPanel.classList.remove('open');
+          historyPanel.setAttribute('aria-hidden', 'true');
+        }
+        if (helperBtn) {
+          helperBtn.setAttribute('aria-expanded', 'false');
+        }
+        if (historyBtn) {
+          historyBtn.setAttribute('aria-expanded', 'false');
+        }
+      }
+
+      function openPromptPanel(panelId, buttonId) {
+        const panel = document.getElementById(panelId);
+        const btn = document.getElementById(buttonId);
+        if (!panel || !btn) return;
+        const isOpen = panel.classList.contains('open');
+        closePromptPanels();
+        if (isOpen) return;
+        panel.classList.add('open');
+        panel.setAttribute('aria-hidden', 'false');
+        btn.setAttribute('aria-expanded', 'true');
+        const firstAction = panel.querySelector('button.prompt-list-item');
+        if (firstAction) {
+          setTimeout(() => firstAction.focus(), 20);
+        }
+      }
+
+      function updatePromptLengthHint() {
+        const hintEl = document.getElementById('promptLimitHint');
+        const promptEl = getPromptInput();
+        if (!hintEl || !promptEl) return;
+        if (!maxPromptLength || maxPromptLength <= 0) {
+          hintEl.textContent = '';
+          hintEl.classList.remove('warn');
+          return;
+        }
+        const count = promptEl.value.length;
+        const exceeds = count > maxPromptLength;
+        hintEl.textContent = fmt(labels.prompt_length_hint, { count, max: maxPromptLength });
+        hintEl.classList.toggle('warn', exceeds);
+      }
+
+      function insertIntoPrompt(text) {
+        const promptEl = getPromptInput();
+        if (!promptEl) return;
+        const insertText = String(text || '');
+        const start = Number.isInteger(promptEl.selectionStart) ? promptEl.selectionStart : promptEl.value.length;
+        const before = promptEl.value.slice(0, start);
+        const after = promptEl.value.slice(start);
+        promptEl.value = `${before}${insertText}${after}`;
+        const nextPos = start + insertText.length;
+        promptEl.focus();
+        promptEl.setSelectionRange(nextPos, nextPos);
+        updatePromptLengthHint();
+      }
+
+      function loadPromptHistory() {
+        try {
+          const raw = localStorage.getItem(PROMPT_HISTORY_STORAGE_KEY);
+          if (!raw) return [];
+          const parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) return [];
+          const seen = new Set();
+          const out = [];
+          parsed.forEach((entry) => {
+            const value = String(entry || '').trim();
+            if (!value) return;
+            if (seen.has(value)) return;
+            seen.add(value);
+            out.push(value);
+          });
+          return out.slice(0, PROMPT_HISTORY_LIMIT);
+        } catch (e) {
+          return [];
+        }
+      }
+
+      function persistPromptHistory() {
+        localStorage.setItem(
+          PROMPT_HISTORY_STORAGE_KEY,
+          JSON.stringify(promptHistory.slice(0, PROMPT_HISTORY_LIMIT))
+        );
+      }
+
+      function addPromptToHistory(prompt) {
+        const value = String(prompt || '').trim();
+        if (!value) return;
+        promptHistory = [value, ...promptHistory.filter((item) => item !== value)].slice(0, PROMPT_HISTORY_LIMIT);
+        persistPromptHistory();
+        renderPromptHistory();
+      }
+
+      function removePromptFromHistory(index) {
+        if (!Number.isInteger(index) || index < 0 || index >= promptHistory.length) return;
+        promptHistory.splice(index, 1);
+        persistPromptHistory();
+        renderPromptHistory();
+      }
+
+      function renderPromptHelper() {
+        const list = document.getElementById('promptHelperList');
+        if (!list) return;
+        if (!PROMPT_TEMPLATES.length) {
+          list.innerHTML = `<div class="prompt-panel-empty">${escapeHtml(labels.prompt_helper_empty)}</div>`;
+          return;
+        }
+        list.innerHTML = PROMPT_TEMPLATES.map((template) => (
+          `<button class="prompt-list-item" type="button" data-template-id="${escapeHtml(template.id)}">` +
+            `<strong>${escapeHtml(template.title)}</strong>` +
+            `<span>${escapeHtml(template.text)}</span>` +
+          `</button>`
+        )).join('');
+      }
+
+      function renderPromptHistory() {
+        const list = document.getElementById('promptHistoryList');
+        if (!list) return;
+        if (!promptHistory.length) {
+          list.innerHTML = `<div class="prompt-panel-empty">${escapeHtml(labels.prompt_history_empty)}</div>`;
+          return;
+        }
+        list.innerHTML = promptHistory.map((entry, index) => (
+          `<div class="prompt-history-row">` +
+            `<button class="prompt-list-item" type="button" data-history-index="${index}">` +
+              `<span>${escapeHtml(entry)}</span>` +
+            `</button>` +
+            `<button class="prompt-history-remove" type="button" aria-label="${escapeHtml(labels.prompt_history_remove)}" data-history-remove="${index}">×</button>` +
+          `</div>`
+        )).join('');
+      }
+
+      function wirePromptListKeyboard(listEl) {
+        if (!listEl) return;
+        listEl.addEventListener('keydown', (event) => {
+          const navKeys = ['ArrowDown', 'ArrowUp', 'Home', 'End'];
+          if (!navKeys.includes(event.key)) return;
+          const items = Array.from(listEl.querySelectorAll('button.prompt-list-item'));
+          if (!items.length) return;
+          const currentIndex = items.indexOf(document.activeElement);
+          let nextIndex = currentIndex >= 0 ? currentIndex : 0;
+          if (event.key === 'ArrowDown') nextIndex = (currentIndex + 1 + items.length) % items.length;
+          if (event.key === 'ArrowUp') nextIndex = (currentIndex - 1 + items.length) % items.length;
+          if (event.key === 'Home') nextIndex = 0;
+          if (event.key === 'End') nextIndex = items.length - 1;
+          event.preventDefault();
+          items[nextIndex].focus();
+        });
       }
 
       function setBalance(balance) {
@@ -2342,9 +2762,15 @@
           document.getElementById('runStatus').textContent = labels.login_required;
           return null;
         }
-        const prompt = document.getElementById('prompt').value.trim();
+        const promptEl = getPromptInput();
+        const promptRaw = promptEl ? promptEl.value : '';
+        const prompt = String(promptRaw || '').trim();
         if (!prompt) {
           document.getElementById('runStatus').textContent = labels.prompt_required;
+          return null;
+        }
+        if (maxPromptLength > 0 && promptRaw.length > maxPromptLength) {
+          document.getElementById('runStatus').textContent = fmt(labels.prompt_too_long, { max: maxPromptLength });
           return null;
         }
         if (currentModel.requires_reference_images && selectedFiles.length === 0) {
@@ -2364,13 +2790,15 @@
         for (const file of selectedFiles) {
           form.append('files', file);
         }
-        return form;
+        return { form, prompt };
       }
 
-      async function executeGeneration() {
+      async function executeGeneration(prebuiltPayload = null) {
         if (runInProgress) return;
-        const form = buildGenerationForm();
-        if (!form) return;
+        const payload = prebuiltPayload || buildGenerationForm();
+        if (!payload || !payload.form) return;
+        const form = payload.form;
+        const prompt = payload.prompt || '';
         runInProgress = true;
         setRunButtonState();
         document.getElementById('runStatus').textContent = labels.run_pending;
@@ -2378,6 +2806,7 @@
           const res = await fetch('/api/generate', { method: 'POST', body: form });
           if (res.ok) {
             document.getElementById('runStatus').textContent = labels.request_sent;
+            addPromptToHistory(prompt);
             generationCount += 1;
             updateSkipConfirmToggleUi();
             updateQuote();
@@ -2395,8 +2824,8 @@
 
       async function runGenerationFlow() {
         if (runInProgress || confirmModalOpen) return;
-        const form = buildGenerationForm();
-        if (!form) return;
+        const payload = buildGenerationForm();
+        if (!payload) return;
         if (!quoteData || !Number.isFinite(Number(quoteData.total))) {
           const quoted = await fetchQuoteOnce();
           if (!quoted) {
@@ -2411,7 +2840,7 @@
 
         const total = Number(quoteData.total || 0);
         if (!isConfirmRequiredForCurrentUser()) {
-          await executeGeneration();
+          await executeGeneration(payload);
           return;
         }
         openConfirmModal(total);
@@ -2656,6 +3085,78 @@
         openTelegramDeepLink(deepLink);
       }
 
+      const promptInputEl = getPromptInput();
+      const promptHelperBtn = document.getElementById('promptHelperBtn');
+      const promptHistoryBtn = document.getElementById('promptHistoryBtn');
+      const promptHelperPanel = document.getElementById('promptHelperPanel');
+      const promptHistoryPanel = document.getElementById('promptHistoryPanel');
+      const promptHelperList = document.getElementById('promptHelperList');
+      const promptHistoryList = document.getElementById('promptHistoryList');
+
+      promptHistory = loadPromptHistory();
+      renderPromptHelper();
+      renderPromptHistory();
+      updatePromptLengthHint();
+      wirePromptListKeyboard(promptHelperList);
+      wirePromptListKeyboard(promptHistoryList);
+
+      if (promptInputEl) {
+        promptInputEl.addEventListener('input', updatePromptLengthHint);
+      }
+      if (promptHelperBtn) {
+        promptHelperBtn.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openPromptPanel('promptHelperPanel', 'promptHelperBtn');
+        });
+      }
+      if (promptHistoryBtn) {
+        promptHistoryBtn.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          renderPromptHistory();
+          openPromptPanel('promptHistoryPanel', 'promptHistoryBtn');
+        });
+      }
+      if (promptHelperPanel) {
+        promptHelperPanel.addEventListener('click', (event) => event.stopPropagation());
+      }
+      if (promptHistoryPanel) {
+        promptHistoryPanel.addEventListener('click', (event) => event.stopPropagation());
+      }
+      if (promptHelperList) {
+        promptHelperList.addEventListener('click', (event) => {
+          const target = event.target instanceof Element ? event.target.closest('[data-template-id]') : null;
+          if (!target) return;
+          const templateId = target.getAttribute('data-template-id') || '';
+          const template = PROMPT_TEMPLATES.find((item) => item.id === templateId);
+          if (!template) return;
+          insertIntoPrompt(template.text);
+          closePromptPanels();
+          trackUiEvent('prompt_template_selected', { template_id: template.id });
+        });
+      }
+      if (promptHistoryList) {
+        promptHistoryList.addEventListener('click', (event) => {
+          const node = event.target instanceof Element ? event.target : null;
+          if (!node) return;
+          const removeBtn = node.closest('[data-history-remove]');
+          if (removeBtn) {
+            const index = Number(removeBtn.getAttribute('data-history-remove'));
+            removePromptFromHistory(index);
+            return;
+          }
+          const promptBtn = node.closest('[data-history-index]');
+          if (!promptBtn) return;
+          const index = Number(promptBtn.getAttribute('data-history-index'));
+          const value = promptHistory[index] || '';
+          if (!value) return;
+          insertIntoPrompt(value);
+          closePromptPanels();
+          trackUiEvent('prompt_history_reused', { history_index: index });
+        });
+      }
+
       document.getElementById('runBtn').onclick = runGenerationFlow;
       const promoBtn = document.getElementById('promoBtn');
       if (promoBtn) {
@@ -2771,6 +3272,7 @@
           event.stopPropagation();
           const open = !topupDropdown.classList.contains('open');
           closeTopDropdowns();
+          closePromptPanels();
           if (open) {
             topupDropdown.classList.add('open');
             topupButton.setAttribute('aria-expanded', 'true');
@@ -2800,6 +3302,7 @@
         if (event.key === 'Escape') {
           closeConfirmModal();
           closeQuoteTooltip();
+          closePromptPanels();
           closeTopupModal();
           closeTopDropdowns();
         }
@@ -3178,6 +3681,7 @@
           event.stopPropagation();
           const open = !userDropdown.classList.contains('open');
           closeTopDropdowns();
+          closePromptPanels();
           if (open) {
             userDropdown.classList.add('open');
             userButton.setAttribute('aria-expanded', 'true');
@@ -3189,6 +3693,7 @@
           event.stopPropagation();
           const open = !langDropdown.classList.contains('open');
           closeTopDropdowns();
+          closePromptPanels();
           if (open) {
             langDropdown.classList.add('open');
             langButton.setAttribute('aria-expanded', 'true');
@@ -3197,6 +3702,9 @@
       }
       document.addEventListener('click', (event) => {
         closeTopDropdowns();
+        if (!isPromptUiTarget(event.target)) {
+          closePromptPanels();
+        }
         const quoteLineEl = document.getElementById('quoteLine');
         if (quoteTooltipOpen && quoteLineEl && !quoteLineEl.contains(event.target)) {
           closeQuoteTooltip();
