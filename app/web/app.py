@@ -971,11 +971,11 @@ def create_app() -> FastAPI:
             )
             orders = []
             for order in orders_rows.scalars().all():
-                payment_kind = "Stars"
+                payment_kind = "Unknown"
+                if (order.payload or "").startswith("stars:"):
+                    payment_kind = "Stars"
                 if (order.payload or "").startswith("crypto:"):
                     payment_kind = "Crypto"
-                if (order.payload or "").startswith("wallet:"):
-                    payment_kind = "Wallet Pay"
                 orders.append(
                     {
                         "id": order.id,

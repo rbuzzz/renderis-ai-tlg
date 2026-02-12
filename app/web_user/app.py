@@ -35,9 +35,7 @@ from app.services.kie_client import KieClient, KieError
 from app.services.poller import PollManager
 from app.services.promos import PromoService
 from app.services.app_settings import AppSettingsService
-from app.services.payments import PaymentsService
 from app.services.product_pricing import get_product_credits, get_product_stars_price, get_product_usd_price
-from app.services.walletpay import WalletPayClient
 from app.utils.text import clamp_text
 from app.utils.time import utcnow
 
@@ -54,10 +52,6 @@ CRYPTO_SUCCESS_STATUSES = {"paid", "overpaid"}
 
 def _is_cryptocloud_enabled(settings) -> bool:
     return bool(settings.cryptocloud_api_key.strip() and settings.cryptocloud_shop_id.strip())
-
-
-def _is_walletpay_enabled(settings) -> bool:
-    return bool(settings.walletpay_api_key.strip())
 
 
 def _crypto_locale(lang: str) -> str:
@@ -732,69 +726,6 @@ def create_app() -> FastAPI:
         if request.method in {"GET", "HEAD"}:
             return {"ok": True}
         return await api_cryptocloud_postback(request)
-
-    @app.post("/api/payments/walletpay/postback")
-    async def api_walletpay_postback(request: Request):
-        if not _is_walletpay_enabled(settings):
-            return {"ok": True}
-
-        raw_body = await request.body()
-        signature = (request.headers.get("WalletPay-Signature") or "").strip()
-        timestamp = (request.headers.get("WalletPay-Timestamp") or "").strip()
-        is_valid = WalletPayClient.verify_webhook_signature(
-            api_key=settings.walletpay_api_key,
-            http_method=request.method,
-            uri_path=request.url.path,
-            timestamp=timestamp,
-            body=raw_body,
-            signature=signature,
-        )
-        if not is_valid:
-            return JSONResponse({"ok": False, "error": "invalid_signature"}, status_code=401)
-
-        try:
-            payload = json.loads(raw_body.decode("utf-8"))
-        except Exception:
-            return JSONResponse({"ok": False, "error": "invalid_payload"}, status_code=400)
-
-        events = payload if isinstance(payload, list) else [payload] if isinstance(payload, dict) else []
-        processed = 0
-        async with app.state.sessionmaker() as session:
-            payments = PaymentsService(session)
-            for event in events:
-                if not isinstance(event, dict):
-                    continue
-                if str(event.get("type") or "").upper() != "ORDER_PAID":
-                    continue
-                event_payload = event.get("payload") or {}
-                if not isinstance(event_payload, dict):
-                    continue
-                order_id = str(event_payload.get("id") or "").strip()
-                external_id = str(event_payload.get("externalId") or "").strip()
-                order: Order | None = None
-                if order_id:
-                    row = await session.execute(
-                        select(Order).where(Order.provider_payment_charge_id == order_id)
-                    )
-                    order = row.scalar_one_or_none()
-                if not order and external_id:
-                    row = await session.execute(
-                        select(Order).where(Order.telegram_payment_charge_id == external_id)
-                    )
-                    order = row.scalar_one_or_none()
-                if not order or not (order.payload or "").startswith("wallet:"):
-                    continue
-                paid_now, _ = await payments.settle_walletpay_order(order)
-                if paid_now:
-                    processed += 1
-            await session.commit()
-        return {"ok": True, "processed": processed}
-
-    @app.api_route("/walletpay/callback", methods=["POST", "GET", "HEAD"])
-    async def walletpay_callback_alias(request: Request):
-        if request.method in {"GET", "HEAD"}:
-            return {"ok": True}
-        return await api_walletpay_postback(request)
 
     @app.api_route("/successful-payment", methods=["GET", "HEAD"])
     async def cryptocloud_successful_payment(request: Request):

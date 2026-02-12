@@ -25,7 +25,6 @@ def topup_menu(lang: str = "ru") -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text=t(lang, "payment_topup_promo"), callback_data='pay:topup:promo')],
             [InlineKeyboardButton(text=t(lang, "payment_topup_stars"), callback_data='pay:topup:stars')],
-            [InlineKeyboardButton(text=t(lang, "payment_topup_wallet"), callback_data='pay:topup:wallet')],
         ]
     )
 
