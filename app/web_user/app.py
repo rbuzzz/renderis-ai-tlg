@@ -5,10 +5,11 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import time
 import uuid
-from urllib.parse import parse_qsl, urlparse
+from urllib.parse import parse_qsl, unquote, unquote_plus, urlparse
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -50,6 +51,7 @@ LANGUAGE_LABELS: Dict[str, str] = {
     "ru": "Russian",
 }
 CRYPTO_SUCCESS_STATUSES = {"paid", "overpaid"}
+logger = logging.getLogger(__name__)
 
 
 def _is_cryptocloud_enabled(settings) -> bool:
@@ -133,17 +135,20 @@ def _verify_telegram_auth(data: Dict[str, Any], token: str) -> bool:
     return hmac.compare_digest(calculated, received_hash)
 
 
-def _verify_telegram_webapp_init_data(init_data: str, token: str) -> tuple[bool, Dict[str, Any]]:
+def _verify_telegram_webapp_init_data(init_data: str, token: str) -> tuple[bool, Dict[str, Any], str]:
     raw = (init_data or "").strip()
     if not raw:
-        return False, {}
+        return False, {}, "empty_init_data"
+    token_clean = (token or "").strip()
+    if not token_clean:
+        return False, {}, "empty_token"
 
     try:
         pairs = parse_qsl(raw, keep_blank_values=True)
     except Exception:
-        return False, {}
+        return False, {}, "parse_failed"
     if not pairs:
-        return False, {}
+        return False, {}, "parse_empty"
 
     data_check: Dict[str, str] = {}
     received_hash = ""
@@ -154,21 +159,53 @@ def _verify_telegram_webapp_init_data(init_data: str, token: str) -> tuple[bool,
         data_check[key] = value
 
     if not received_hash:
-        return False, {}
+        return False, {}, "hash_missing"
+    received_hash = received_hash.strip().lower()
 
     auth_date_raw = data_check.get("auth_date", "")
     try:
         auth_date = int(auth_date_raw) if auth_date_raw else 0
     except (TypeError, ValueError):
-        return False, {}
+        return False, {}, "auth_date_invalid"
     if auth_date and int(time.time()) - auth_date > 86400:
-        return False, {}
+        return False, {}, "auth_date_expired"
 
-    check_string = "\n".join(f"{k}={v}" for k, v in sorted(data_check.items()))
-    secret_key = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
-    calculated = hmac.new(secret_key, check_string.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(calculated, received_hash):
-        return False, {}
+    # Primary candidate: URL-decoded values (recommended by Telegram docs).
+    check_maps: list[Dict[str, str]] = [dict(data_check)]
+    # Fallback candidates for client/server encoding edge-cases.
+    raw_map_plus: Dict[str, str] = {}
+    raw_map_plain: Dict[str, str] = {}
+    for chunk in raw.split("&"):
+        if not chunk:
+            continue
+        key_raw, _, val_raw = chunk.partition("=")
+        key_dec = unquote_plus(key_raw)
+        if key_dec == "hash":
+            continue
+        raw_map_plus[key_dec] = unquote_plus(val_raw)
+        raw_map_plain[key_dec] = unquote(val_raw)
+    if raw_map_plus:
+        check_maps.append(raw_map_plus)
+    if raw_map_plain:
+        check_maps.append(raw_map_plain)
+
+    secrets = [
+        hmac.new(b"WebAppData", token_clean.encode(), hashlib.sha256).digest(),
+        hashlib.sha256(token_clean.encode()).digest(),
+    ]
+
+    valid = False
+    for secret in secrets:
+        for data_candidate in check_maps:
+            check_string = "\n".join(f"{k}={v}" for k, v in sorted(data_candidate.items()))
+            calculated = hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest().lower()
+            if hmac.compare_digest(calculated, received_hash):
+                valid = True
+                break
+        if valid:
+            break
+    if not valid:
+        return False, {}, "hash_mismatch"
 
     payload: Dict[str, Any] = dict(data_check)
     user_raw = payload.get("user", "")
@@ -176,9 +213,9 @@ def _verify_telegram_webapp_init_data(init_data: str, token: str) -> tuple[bool,
         try:
             payload["user"] = json.loads(user_raw)
         except json.JSONDecodeError:
-            return False, {}
+            return False, {}, "user_json_invalid"
 
-    return True, payload
+    return True, payload, ""
 
 
 def _option_label(lang: str, key: str) -> str:
@@ -565,9 +602,10 @@ def create_app() -> FastAPI:
         if not init_data:
             return JSONResponse({"error": "init_data_required"}, status_code=400)
 
-        valid, parsed = _verify_telegram_webapp_init_data(init_data, settings.bot_token)
+        valid, parsed, reason = _verify_telegram_webapp_init_data(init_data, settings.bot_token)
         if not valid:
-            return JSONResponse({"error": "invalid"}, status_code=400)
+            logger.warning("miniapp_auth_invalid", extra={"reason": reason})
+            return JSONResponse({"error": "invalid", "reason": reason}, status_code=400)
 
         user_data = parsed.get("user")
         if not isinstance(user_data, dict):

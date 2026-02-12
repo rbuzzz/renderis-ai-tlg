@@ -2330,6 +2330,8 @@
             window.location.reload();
             return true;
           }
+          const err = await res.json().catch(() => ({}));
+          console.warn('miniapp auth rejected', err);
         } catch (err) {
           console.warn('miniapp auth failed', err);
         }
