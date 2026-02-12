@@ -96,6 +96,22 @@ def _apply_upscale_options(model: ModelSpec, options: Dict[str, Any]) -> Dict[st
     return updated
 
 
+def _resolve_action_model(mode: str, generation: Generation) -> ModelSpec | None:
+    if mode == "upscale":
+        return get_model("nano_banana_pro")
+    return get_model(generation.model)
+
+
+def _source_aspect_ratio(generation: Generation) -> str | None:
+    if not isinstance(generation.options, dict):
+        return None
+    ratio = generation.options.get("aspect_ratio") or generation.options.get("image_size")
+    if not isinstance(ratio, str):
+        return None
+    value = ratio.strip()
+    return value or None
+
+
 def _prepare_action_payload(
     mode: str,
     model: ModelSpec,
@@ -126,6 +142,14 @@ def _prepare_action_payload(
     elif mode == "remix":
         prompt = f"{generation.prompt}\n\nRemix this concept with a fresh creative direction while keeping the core subject."
     elif mode == "upscale":
+        ratio = _source_aspect_ratio(generation)
+        aspect_ratio_option = model.option_by_key("aspect_ratio")
+        if ratio and aspect_ratio_option:
+            allowed = {v.value for v in aspect_ratio_option.values}
+            if ratio in allowed:
+                options["aspect_ratio"] = ratio
+        if model.option_by_key("reference_images"):
+            options["reference_images"] = "has"
         options = _apply_upscale_options(model, options)
 
     return prompt, options, outputs, ref_urls
@@ -143,12 +167,15 @@ async def _ask_confirm_action(callback: CallbackQuery, session: AsyncSession, mo
         await callback.answer(t(lang, "history_no_access"), show_alert=True)
         return
 
-    model = get_model(generation.model)
+    model = _resolve_action_model(mode, generation)
     if not model:
         await callback.answer(t(lang, "model_not_found"), show_alert=True)
         return
 
     preview_url = await _first_result_url(session, generation.id)
+    if mode == "upscale" and not preview_url:
+        await callback.answer(t(lang, "history_not_ready"), show_alert=True)
+        return
     prompt, options, outputs, _ref_urls = _prepare_action_payload(mode, model, generation, preview_url)
     pricing = PricingService(session)
     breakdown = await pricing.resolve_cost(model, options, outputs, int(user.referral_discount_pct or 0))
@@ -210,12 +237,15 @@ async def result_action_confirm(callback: CallbackQuery, session: AsyncSession) 
         await callback.answer(t(lang, "history_no_access"), show_alert=True)
         return
 
-    model = get_model(generation.model)
+    model = _resolve_action_model(mode, generation)
     if not model:
         await callback.answer(t(lang, "model_not_found"), show_alert=True)
         return
 
     preview_url = await _first_result_url(session, generation.id)
+    if mode == "upscale" and not preview_url:
+        await callback.answer(t(lang, "history_not_ready"), show_alert=True)
+        return
     prompt, options, outputs, ref_urls = _prepare_action_payload(mode, model, generation, preview_url)
 
     kie = KieClient()
