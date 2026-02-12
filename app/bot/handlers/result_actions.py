@@ -26,6 +26,11 @@ from app.config import get_settings
 router = Router()
 _settings = get_settings()
 _action_rate_limiter = RateLimiter(_settings.per_user_generate_cooldown_seconds)
+_UPSCALE_STRICT_PROMPT_SUFFIX = (
+    "\n\nUpscale this image to 4K resolution only. "
+    "Do not change anything in the image: keep the exact same composition, objects, colors, text, "
+    "lighting, camera angle, proportions, and style."
+)
 
 
 def _action_confirm_menu(mode: str, generation_id: int, lang: str) -> InlineKeyboardMarkup:
@@ -142,6 +147,7 @@ def _prepare_action_payload(
     elif mode == "remix":
         prompt = f"{generation.prompt}\n\nRemix this concept with a fresh creative direction while keeping the core subject."
     elif mode == "upscale":
+        prompt = f"{generation.prompt}{_UPSCALE_STRICT_PROMPT_SUFFIX}"
         ratio = _source_aspect_ratio(generation)
         aspect_ratio_option = model.option_by_key("aspect_ratio")
         if ratio and aspect_ratio_option:
