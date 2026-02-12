@@ -175,6 +175,10 @@
         from { opacity: 0; transform: scale(0.96); }
         to { opacity: 1; transform: scale(1); }
       }
+      @keyframes overlay-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
       .user-menu {
         position: relative;
       }
@@ -224,7 +228,7 @@
         position: absolute;
         right: 0;
         top: calc(100% + 8px);
-        min-width: 160px;
+        min-width: 250px;
         background: #0f1b2b;
         border: 1px solid #2a3d57;
         border-radius: 12px;
@@ -244,6 +248,28 @@
       }
       .user-dropdown a:hover {
         background: #162640;
+      }
+      .user-setting {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 8px 10px;
+        margin-bottom: 4px;
+        border-radius: 8px;
+        color: var(--text);
+        font-size: 13px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .user-setting:hover {
+        background: #162640;
+      }
+      .user-setting input {
+        margin-top: 2px;
+      }
+      .user-setting.disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
       }
       .login-widget {
         border: 1px dashed #2a3d57;
@@ -384,6 +410,77 @@
         margin-top: 8px;
         color: var(--muted);
         font-size: 13px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        position: relative;
+      }
+      .quote-cost {
+        color: var(--muted);
+      }
+      .quote-info-btn {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        border: 1px solid #335171;
+        background: #13243a;
+        color: #b7cbe2;
+        cursor: pointer;
+        font-size: 12px;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+      }
+      .quote-info-btn:hover,
+      .quote-info-btn:focus-visible {
+        border-color: var(--accent);
+        color: var(--accent);
+        outline: none;
+      }
+      .quote-tooltip {
+        position: absolute;
+        top: calc(100% + 8px);
+        left: 0;
+        min-width: 220px;
+        max-width: 300px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid #2c4260;
+        background: rgba(9, 17, 30, 0.96);
+        box-shadow: 0 14px 32px rgba(0, 0, 0, 0.35);
+        opacity: 0;
+        transform: scale(0.97);
+        transform-origin: top left;
+        pointer-events: none;
+        transition: opacity 0.16s ease, transform 0.16s ease;
+        z-index: 40;
+      }
+      .quote-tooltip.open {
+        opacity: 1;
+        transform: scale(1);
+        pointer-events: auto;
+      }
+      .quote-tooltip-title {
+        font-size: 12px;
+        color: #c7d8ea;
+        margin-bottom: 8px;
+      }
+      .quote-tooltip-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 12px;
+        color: #a8bfd9;
+        margin-top: 5px;
+      }
+      .quote-tooltip-row.total {
+        border-top: 1px solid #29415e;
+        margin-top: 8px;
+        padding-top: 8px;
+        color: #edf4fc;
+        font-weight: 700;
       }
       .run-btn {
         background: var(--accent);
@@ -394,9 +491,70 @@
         font-weight: 700;
         cursor: pointer;
       }
+      .run-btn:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
       .status { font-size: 12px; color: var(--muted); margin-top: 8px; }
       .status.error { color: var(--danger); }
       .status.success { color: var(--accent-2); }
+      .confirm-modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(6, 11, 18, 0.72);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        z-index: 80;
+      }
+      .confirm-modal.open {
+        display: flex;
+        animation: overlay-in 0.14s ease;
+      }
+      .confirm-modal-card {
+        width: min(420px, 100%);
+        border-radius: 16px;
+        border: 1px solid #2a3f5a;
+        background: #111d2f;
+        box-shadow: 0 22px 54px rgba(0, 0, 0, 0.45);
+        padding: 18px;
+        animation: modal-in 0.16s ease;
+      }
+      .confirm-title {
+        font-size: 18px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .confirm-text {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      .confirm-actions {
+        margin-top: 16px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+      .confirm-btn {
+        border-radius: 10px;
+        border: 1px solid #2b3f59;
+        background: #13243a;
+        color: var(--text);
+        font: inherit;
+        padding: 9px 14px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .confirm-btn.ghost:hover {
+        border-color: #415f86;
+      }
+      .confirm-btn.primary {
+        border-color: #7d5e18;
+        background: linear-gradient(135deg, #f5b94f 0%, #e2a336 100%);
+        color: #241900;
+      }
       .output-preview {
         border-radius: 14px;
         border: 1px solid #2b3f59;
@@ -1019,6 +1177,10 @@
           align-items: stretch;
           gap: 8px;
         }
+        .quote-line {
+          display: flex;
+          flex-wrap: wrap;
+        }
         .run-btn {
           width: 100%;
         }
@@ -1123,6 +1285,10 @@
               <div class="user-caret">▾</div>
             </button>
             <div class="user-dropdown" id="userDropdown">
+              <label class="user-setting" for="skipConfirmToggle">
+                <input id="skipConfirmToggle" type="checkbox" />
+                <span>{{ labels['confirm_skip_toggle'] }}</span>
+              </label>
               <a href="/logout">{{ labels['logout'] }}</a>
             </div>
           </div>
@@ -1173,7 +1339,21 @@
           <button class="run-btn" id="runBtn">{{ labels['run'] }}</button>
           <div class="status" id="runStatus"></div>
         </div>
-        <div class="quote-line" id="quoteLine"></div>
+        <div class="quote-line" id="quoteLine">
+          <span class="quote-cost" id="quoteCostText"></span>
+          <button
+            class="quote-info-btn"
+            id="quoteInfoBtn"
+            type="button"
+            aria-label="{{ labels['quote_info_title'] }}"
+            aria-expanded="false"
+            aria-haspopup="dialog"
+            style="display:none;"
+          >
+            {{ labels['quote_info'] }}
+          </button>
+          <div class="quote-tooltip" id="quoteTooltip" role="dialog" aria-hidden="true"></div>
+        </div>
       </div>
 
       <div class="panel">
@@ -1235,6 +1415,17 @@
           </div>
         </div>
       </div>
+
+      <div class="confirm-modal" id="confirmModal" aria-hidden="true">
+        <div class="confirm-modal-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+          <div class="confirm-title" id="confirmTitle">{{ labels['confirm_title'] }}</div>
+          <div class="confirm-text" id="confirmText"></div>
+          <div class="confirm-actions">
+            <button class="confirm-btn ghost" id="confirmCancelBtn" type="button">{{ labels['confirm_cancel'] }}</button>
+            <button class="confirm-btn primary" id="confirmOkBtn" type="button">{{ labels['confirm_continue'] }}</button>
+          </div>
+        </div>
+      </div>
     {% endif %}
 
     <script src="https://telegram.org/js/telegram-web-app.js?59"></script>
@@ -1258,7 +1449,15 @@
       let cryptoPollTimer = null;
       let cryptoPollBusy = false;
       let cryptoPollAttempts = 0;
+      let currentBalance = 0;
+      let generationCount = 0;
+      let quoteData = null;
+      let runInProgress = false;
+      let confirmModalOpen = false;
+      let quoteTooltipOpen = false;
       const THUMB_ROWS = 3;
+      const NEW_USER_CONFIRM_REQUIRED_COUNT = 5;
+      const SKIP_CONFIRM_STORAGE_KEY = 'renderis.skip_confirm_generation';
       const tgWebApp = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
       const isMiniApp = Boolean(tgWebApp && typeof tgWebApp.initData === 'string');
       const loginWidget = document.getElementById('loginWidget');
@@ -1301,8 +1500,211 @@
       }
 
       function setBalance(balance) {
+        currentBalance = Number.isFinite(Number(balance)) ? Number(balance) : 0;
         const label = `${labels.balance}: ${balance} ${labels.credits}`;
         document.getElementById('balanceLabel').textContent = label;
+      }
+
+      function hasEnoughCredits() {
+        if (!quoteData || !Number.isFinite(Number(quoteData.total))) return true;
+        return currentBalance >= Number(quoteData.total);
+      }
+
+      function getSkipConfirmSetting() {
+        const raw = localStorage.getItem(SKIP_CONFIRM_STORAGE_KEY);
+        return raw === '1';
+      }
+
+      function setSkipConfirmSetting(enabled) {
+        localStorage.setItem(SKIP_CONFIRM_STORAGE_KEY, enabled ? '1' : '0');
+      }
+
+      function isNewUserMandatoryConfirm() {
+        return generationCount < NEW_USER_CONFIRM_REQUIRED_COUNT;
+      }
+
+      function isConfirmRequiredForCurrentUser() {
+        if (isNewUserMandatoryConfirm()) return true;
+        return !getSkipConfirmSetting();
+      }
+
+      function setRunButtonState() {
+        const runBtn = document.getElementById('runBtn');
+        if (!runBtn) return;
+        runBtn.disabled = runInProgress || confirmModalOpen;
+      }
+
+      function labelForBreakdownKey(key) {
+        const value = String(key || '').toLowerCase();
+        if (!value) return '';
+        if (value.startsWith('aspect_')) {
+          const ratioKey = `ratio_${value.slice('aspect_'.length)}`;
+          const ratioLabel = labels[ratioKey] || value.slice('aspect_'.length).replaceAll('_', ':');
+          return `${labels.aspect_ratio}: ${ratioLabel}`;
+        }
+        if (value.startsWith('resolution_')) {
+          const resKey = `res_${value.slice('resolution_'.length).toLowerCase()}`;
+          const resLabel = labels[resKey] || value.slice('resolution_'.length).toUpperCase();
+          return `${labels.resolution}: ${resLabel}`;
+        }
+        if (value.startsWith('output_format_')) {
+          return `${labels.output_format}: ${value.slice('output_format_'.length).toUpperCase()}`;
+        }
+        if (value.startsWith('ref_')) {
+          return labels.upload_label || 'References';
+        }
+        if (value.startsWith('bundle_')) {
+          return value.replaceAll('_', ' ');
+        }
+        return value.replaceAll('_', ' ');
+      }
+
+      function closeQuoteTooltip() {
+        const tooltip = document.getElementById('quoteTooltip');
+        const btn = document.getElementById('quoteInfoBtn');
+        if (!tooltip || !btn) return;
+        quoteTooltipOpen = false;
+        tooltip.classList.remove('open');
+        tooltip.setAttribute('aria-hidden', 'true');
+        btn.setAttribute('aria-expanded', 'false');
+      }
+
+      function openQuoteTooltip() {
+        const tooltip = document.getElementById('quoteTooltip');
+        const btn = document.getElementById('quoteInfoBtn');
+        if (!tooltip || !btn) return;
+        if (!quoteData || !quoteData.breakdown) return;
+        quoteTooltipOpen = true;
+        tooltip.classList.add('open');
+        tooltip.setAttribute('aria-hidden', 'false');
+        btn.setAttribute('aria-expanded', 'true');
+      }
+
+      function toggleQuoteTooltip() {
+        if (quoteTooltipOpen) {
+          closeQuoteTooltip();
+        } else {
+          openQuoteTooltip();
+        }
+      }
+
+      function renderQuote() {
+        const costText = document.getElementById('quoteCostText');
+        const infoBtn = document.getElementById('quoteInfoBtn');
+        const tooltip = document.getElementById('quoteTooltip');
+        if (!costText || !infoBtn || !tooltip) return;
+
+        if (!currentModel) {
+          costText.textContent = '';
+          infoBtn.style.display = 'none';
+          closeQuoteTooltip();
+          return;
+        }
+        if (!loggedIn) {
+          costText.textContent = labels.quote_login_required;
+          infoBtn.style.display = 'none';
+          closeQuoteTooltip();
+          return;
+        }
+        if (!quoteData || !Number.isFinite(Number(quoteData.total))) {
+          costText.textContent = labels.quote_unavailable;
+          infoBtn.style.display = 'none';
+          closeQuoteTooltip();
+          return;
+        }
+
+        const total = Number(quoteData.total);
+        costText.textContent = fmt(labels.quote_cost, { total });
+        infoBtn.style.display = 'inline-flex';
+
+        const breakdown = quoteData.breakdown || {};
+        const rows = [];
+        rows.push({
+          label: labels.quote_breakdown_base,
+          amount: Number(breakdown.base || 0),
+        });
+        const modifiers = Array.isArray(breakdown.modifiers) ? breakdown.modifiers : [];
+        modifiers.forEach((item) => {
+          const amount = Number(item.amount || 0);
+          if (!Number.isFinite(amount) || amount === 0) return;
+          rows.push({
+            label: labelForBreakdownKey(item.key),
+            amount,
+          });
+        });
+        const outputs = Number(breakdown.outputs || 1);
+        const outputsExtra = Number(breakdown.outputs_extra || 0);
+        if (outputs > 1) {
+          rows.push({
+            label: fmt(labels.quote_breakdown_outputs, { count: outputs }),
+            amount: outputsExtra,
+          });
+        }
+        const discountPct = Number(quoteData.discount_pct || 0);
+        if (discountPct > 0) {
+          const subtotal = Number(breakdown.subtotal || 0);
+          const discountValue = Math.max(0, subtotal - total);
+          rows.push({
+            label: `${labels.quote_breakdown_discount} (${discountPct}%)`,
+            amount: -discountValue,
+          });
+        }
+        rows.push({
+          label: labels.quote_breakdown_total,
+          amount: total,
+          total: true,
+        });
+
+        const html = [];
+        html.push(`<div class="quote-tooltip-title">${labels.quote_info_title}</div>`);
+        if (rows.length <= 1) {
+          html.push(`<div class="quote-tooltip-row">${labels.quote_breakdown_fallback}</div>`);
+        } else {
+          rows.forEach((row) => {
+            const sign = row.amount > 0 && !row.total ? '+' : '';
+            const rowClass = row.total ? 'quote-tooltip-row total' : 'quote-tooltip-row';
+            html.push(
+              `<div class="${rowClass}"><span>${row.label}</span><span>${sign}${row.amount}</span></div>`
+            );
+          });
+        }
+        tooltip.innerHTML = html.join('');
+      }
+
+      function openConfirmModal(costValue) {
+        const modal = document.getElementById('confirmModal');
+        const textEl = document.getElementById('confirmText');
+        const okBtn = document.getElementById('confirmOkBtn');
+        if (!modal || !textEl) return;
+        textEl.textContent = fmt(labels.confirm_message, { total: costValue });
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+        confirmModalOpen = true;
+        setRunButtonState();
+        if (okBtn) {
+          setTimeout(() => okBtn.focus(), 20);
+        }
+      }
+
+      function closeConfirmModal() {
+        const modal = document.getElementById('confirmModal');
+        if (!modal) return;
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
+        confirmModalOpen = false;
+        setRunButtonState();
+      }
+
+      function updateSkipConfirmToggleUi() {
+        const toggle = document.getElementById('skipConfirmToggle');
+        if (!toggle) return;
+        const mandatory = isNewUserMandatoryConfirm();
+        toggle.checked = getSkipConfirmSetting();
+        toggle.disabled = mandatory;
+        const wrapper = toggle.closest('.user-setting');
+        if (wrapper) {
+          wrapper.classList.toggle('disabled', mandatory);
+        }
       }
 
       function setUserInfo(me) {
@@ -1345,6 +1747,9 @@
         setBalance(data.balance);
         setUserInfo(data);
         maxOutputs = data.max_outputs || 1;
+        generationCount = Number(data.generation_count || 0);
+        updateSkipConfirmToggleUi();
+        renderQuote();
       }
 
       function setCryptoStatus(message, state = '') {
@@ -1900,20 +2305,20 @@
         pages.textContent = `${thumbsPage + 1} / ${totalPages}`;
       }
 
-      async function runGeneration() {
+      function buildGenerationForm() {
         if (!currentModel) return;
         if (!loggedIn) {
           document.getElementById('runStatus').textContent = labels.login_required;
-          return;
+          return null;
         }
         const prompt = document.getElementById('prompt').value.trim();
         if (!prompt) {
           document.getElementById('runStatus').textContent = labels.prompt_required;
-          return;
+          return null;
         }
         if (currentModel.requires_reference_images && selectedFiles.length === 0) {
           document.getElementById('runStatus').textContent = labels.upload_required;
-          return;
+          return null;
         }
         if (currentModel.key === 'nano_banana_pro') {
           optionsState.reference_images = selectedFiles.length > 0 ? 'has' : 'none';
@@ -1928,17 +2333,57 @@
         for (const file of selectedFiles) {
           form.append('files', file);
         }
+        return form;
+      }
+
+      async function executeGeneration() {
+        if (runInProgress) return;
+        const form = buildGenerationForm();
+        if (!form) return;
+        runInProgress = true;
+        setRunButtonState();
         document.getElementById('runStatus').textContent = labels.run_pending;
-        const res = await fetch('/api/generate', { method: 'POST', body: form });
-        if (res.ok) {
-          document.getElementById('runStatus').textContent = labels.request_sent;
-          updateQuote();
-          await loadMe();
-          await loadHistory();
-        } else {
-          const data = await res.json();
-          document.getElementById('runStatus').textContent = `${labels.error_prefix}: ${data.error || 'unknown'}`;
+        try {
+          const res = await fetch('/api/generate', { method: 'POST', body: form });
+          if (res.ok) {
+            document.getElementById('runStatus').textContent = labels.request_sent;
+            generationCount += 1;
+            updateSkipConfirmToggleUi();
+            updateQuote();
+            await loadMe();
+            await loadHistory();
+          } else {
+            const data = await res.json();
+            document.getElementById('runStatus').textContent = `${labels.error_prefix}: ${data.error || 'unknown'}`;
+          }
+        } finally {
+          runInProgress = false;
+          setRunButtonState();
         }
+      }
+
+      async function runGenerationFlow() {
+        if (runInProgress || confirmModalOpen) return;
+        const form = buildGenerationForm();
+        if (!form) return;
+        if (!quoteData || !Number.isFinite(Number(quoteData.total))) {
+          const quoted = await fetchQuoteOnce();
+          if (!quoted) {
+            document.getElementById('runStatus').textContent = labels.quote_unavailable;
+            return;
+          }
+        }
+        if (!hasEnoughCredits()) {
+          document.getElementById('runStatus').textContent = labels.quote_insufficient;
+          return;
+        }
+
+        const total = Number(quoteData.total || 0);
+        if (!isConfirmRequiredForCurrentUser()) {
+          await executeGeneration();
+          return;
+        }
+        openConfirmModal(total);
       }
 
       async function loadHistory() {
@@ -2180,10 +2625,62 @@
         openTelegramDeepLink(deepLink);
       }
 
-      document.getElementById('runBtn').onclick = runGeneration;
+      document.getElementById('runBtn').onclick = runGenerationFlow;
       const promoBtn = document.getElementById('promoBtn');
       if (promoBtn) {
         promoBtn.onclick = redeemPromo;
+      }
+      const quoteInfoBtn = document.getElementById('quoteInfoBtn');
+      const quoteLineEl = document.getElementById('quoteLine');
+      if (quoteInfoBtn) {
+        quoteInfoBtn.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleQuoteTooltip();
+        });
+        quoteInfoBtn.addEventListener('mouseenter', openQuoteTooltip);
+        quoteInfoBtn.addEventListener('focus', openQuoteTooltip);
+        quoteInfoBtn.addEventListener('blur', () => {
+          setTimeout(() => {
+            const quoteLineEl = document.getElementById('quoteLine');
+            if (!quoteLineEl || !quoteLineEl.contains(document.activeElement)) {
+              closeQuoteTooltip();
+            }
+          }, 0);
+        });
+      }
+      if (quoteLineEl) {
+        quoteLineEl.addEventListener('mouseleave', closeQuoteTooltip);
+      }
+      const skipConfirmToggleEl = document.getElementById('skipConfirmToggle');
+      if (skipConfirmToggleEl) {
+        skipConfirmToggleEl.addEventListener('change', () => {
+          if (isNewUserMandatoryConfirm()) {
+            skipConfirmToggleEl.checked = false;
+            setSkipConfirmSetting(false);
+            return;
+          }
+          setSkipConfirmSetting(!!skipConfirmToggleEl.checked);
+        });
+      }
+      const confirmCancelBtn = document.getElementById('confirmCancelBtn');
+      if (confirmCancelBtn) {
+        confirmCancelBtn.addEventListener('click', closeConfirmModal);
+      }
+      const confirmOkBtn = document.getElementById('confirmOkBtn');
+      if (confirmOkBtn) {
+        confirmOkBtn.addEventListener('click', async () => {
+          closeConfirmModal();
+          await executeGeneration();
+        });
+      }
+      const confirmModalEl = document.getElementById('confirmModal');
+      if (confirmModalEl) {
+        confirmModalEl.addEventListener('click', (event) => {
+          if (event.target === confirmModalEl) {
+            closeConfirmModal();
+          }
+        });
       }
       const cryptoCreateBtn = document.getElementById('cryptoCreateBtn');
       if (cryptoCreateBtn) {
@@ -2265,6 +2762,8 @@
       }
       document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
+          closeConfirmModal();
+          closeQuoteTooltip();
           closeTopupModal();
           closeTopDropdowns();
         }
@@ -2482,6 +2981,10 @@
         addReferenceFiles(files);
       });
 
+      setRunButtonState();
+      updateSkipConfirmToggleUi();
+      renderQuote();
+
       let quoteTimer = null;
 
       async function maybeAutoMiniAppAuth() {
@@ -2534,43 +3037,64 @@
         }
       })();
 
+      function buildQuotePayload() {
+        if (!currentModel) return null;
+        const payload = {
+          model_key: currentModel.key,
+          outputs: optionsState.outputs || 1,
+          options: { ...optionsState },
+        };
+        if (currentModel.key === 'nano_banana_pro') {
+          payload.options.reference_images = selectedFiles.length > 0 ? 'has' : 'none';
+        }
+        return payload;
+      }
+
+      async function fetchQuoteOnce() {
+        const payload = buildQuotePayload();
+        if (!payload) {
+          quoteData = null;
+          renderQuote();
+          return false;
+        }
+        try {
+          const res = await fetch('/api/quote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (!res.ok) {
+            quoteData = null;
+            renderQuote();
+            return false;
+          }
+          const data = await res.json();
+          quoteData = data;
+          renderQuote();
+          return true;
+        } catch (err) {
+          quoteData = null;
+          renderQuote();
+          return false;
+        }
+      }
+
       async function updateQuote() {
-        const quoteLine = document.getElementById('quoteLine');
         if (!currentModel) {
-          quoteLine.textContent = '';
+          quoteData = null;
+          renderQuote();
           return;
         }
         if (!loggedIn) {
-          quoteLine.textContent = labels.quote_login_required;
+          quoteData = null;
+          renderQuote();
           return;
         }
         if (quoteTimer) {
           clearTimeout(quoteTimer);
         }
         quoteTimer = setTimeout(async () => {
-          const payload = {
-            model_key: currentModel.key,
-            outputs: optionsState.outputs || 1,
-            options: { ...optionsState },
-          };
-          if (currentModel.key === 'nano_banana_pro') {
-            payload.options.reference_images = selectedFiles.length > 0 ? 'has' : 'none';
-          }
-          try {
-            const res = await fetch('/api/quote', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload),
-            });
-            if (!res.ok) {
-              quoteLine.textContent = labels.quote_unavailable;
-              return;
-            }
-            const data = await res.json();
-            quoteLine.textContent = fmt(labels.quote_line, { total: data.total });
-          } catch (err) {
-            quoteLine.textContent = labels.quote_unavailable;
-          }
+          await fetchQuoteOnce();
         }, 200);
       }
 
@@ -2635,7 +3159,13 @@
           }
         });
       }
-      document.addEventListener('click', closeTopDropdowns);
+      document.addEventListener('click', (event) => {
+        closeTopDropdowns();
+        const quoteLineEl = document.getElementById('quoteLine');
+        if (quoteTooltipOpen && quoteLineEl && !quoteLineEl.contains(event.target)) {
+          closeQuoteTooltip();
+        }
+      });
     </script>
   </body>
 </html>

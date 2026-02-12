@@ -21,7 +21,7 @@ from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.config import get_settings
 from app.db.models import Generation, GenerationTask, Order, PromoCode, StarProduct, User
@@ -658,6 +658,10 @@ def create_app() -> FastAPI:
             user = await credits.get_user(int(request.session["user_id"]))
             if not user:
                 return JSONResponse({"error": "user_not_found"}, status_code=404)
+            count_row = await session.execute(
+                select(func.count(Generation.id)).where(Generation.user_id == user.id)
+            )
+            generation_count = int(count_row.scalar_one() or 0)
             first_name = (user.settings.get("first_name") or "").strip()
             last_name = (user.settings.get("last_name") or "").strip()
             photo_url = (user.settings.get("photo_url") or "").strip()
@@ -672,6 +676,7 @@ def create_app() -> FastAPI:
                 "balance": user.balance_credits,
                 "lang": user.settings.get("lang", "ru"),
                 "max_outputs": settings.max_outputs_per_request,
+                "generation_count": generation_count,
             }
 
     @app.post("/api/providers/kie/webhook")
@@ -1274,11 +1279,23 @@ def create_app() -> FastAPI:
                 return JSONResponse({"error": "user_not_found"}, status_code=404)
             pricing = PricingService(session)
             breakdown = await pricing.resolve_cost(model, options_payload, outputs, user.referral_discount_pct or 0)
+            subtotal = breakdown.per_output * breakdown.outputs
             return {
                 "per_output": breakdown.per_output,
                 "outputs": breakdown.outputs,
                 "discount_pct": breakdown.discount_pct,
                 "total": breakdown.total,
+                "breakdown": {
+                    "base": breakdown.base,
+                    "modifiers": [
+                        {"key": modifier_key, "amount": modifier_amount}
+                        for modifier_key, modifier_amount in breakdown.modifiers
+                    ],
+                    "per_output": breakdown.per_output,
+                    "outputs": breakdown.outputs,
+                    "outputs_extra": max(0, subtotal - breakdown.per_output),
+                    "subtotal": subtotal,
+                },
             }
 
     @app.post("/api/redeem")
@@ -1574,6 +1591,20 @@ def create_app() -> FastAPI:
         "crypto_total_line",
         "delete_failed",
         "quote_line",
+        "quote_cost",
+        "quote_info_title",
+        "quote_info",
+        "quote_breakdown_base",
+        "quote_breakdown_outputs",
+        "quote_breakdown_discount",
+        "quote_breakdown_total",
+        "quote_breakdown_fallback",
+        "quote_insufficient",
+        "confirm_title",
+        "confirm_message",
+        "confirm_cancel",
+        "confirm_continue",
+        "confirm_skip_toggle",
         "quote_login_required",
         "quote_unavailable",
     ]
