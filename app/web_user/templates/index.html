@@ -844,6 +844,26 @@
         flex-direction: column;
         gap: 12px;
       }
+      .output-view-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0 0 10px;
+      }
+      .view-toggle-btn {
+        border-radius: 999px;
+        border: 1px solid #2b3f59;
+        background: #0f1b2b;
+        color: var(--text);
+        padding: 6px 11px;
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .view-toggle-btn.active {
+        border-color: #4f6f96;
+        background: #152742;
+      }
       .gallery {
         position: relative;
         border-radius: 16px;
@@ -863,6 +883,7 @@
         padding: 24px;
         color: var(--muted);
         text-align: center;
+        white-space: pre-line;
       }
       .gallery-badge {
         position: absolute;
@@ -910,6 +931,9 @@
         gap: 10px;
         align-items: center;
       }
+      .result-actions {
+        flex-wrap: wrap;
+      }
       .action-btn {
         border-radius: 10px;
         border: 1px solid #2b3f59;
@@ -922,9 +946,150 @@
         gap: 6px;
         align-items: center;
       }
+      .action-btn:hover,
+      .action-btn:focus-visible {
+        border-color: #48698f;
+        outline: none;
+      }
+      .action-btn.favorited {
+        border-color: #7a6632;
+        color: #ffd276;
+        background: rgba(88, 69, 25, 0.45);
+      }
       .action-btn.danger {
         border-color: rgba(255, 118, 118, 0.5);
         color: var(--danger);
+      }
+      .gallery-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 10px;
+      }
+      .gallery-card {
+        border-radius: 12px;
+        border: 1px solid #2b3f59;
+        background: #0f1b2b;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+      .gallery-card.active {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px rgba(245, 185, 79, 0.25);
+      }
+      .gallery-card-main {
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        border-radius: 10px;
+        overflow: hidden;
+        border: 1px solid #27425f;
+        background: #0a1524;
+        cursor: pointer;
+      }
+      .gallery-card-main img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .gallery-card-meta {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .gallery-card-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+      }
+      .gallery-card-actions .action-btn {
+        justify-content: center;
+        font-size: 11px;
+        padding: 7px 8px;
+      }
+      .result-skeleton {
+        border-radius: 12px;
+        border: 1px solid #253a54;
+        background: #0f1b2b;
+        padding: 8px;
+      }
+      .result-skeleton-img {
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        border-radius: 10px;
+        background: linear-gradient(90deg, #16273f 20%, #1f3350 50%, #16273f 80%);
+        background-size: 220% 100%;
+        animation: skeleton-shift 1.2s ease-in-out infinite;
+      }
+      .result-skeleton-line {
+        margin-top: 7px;
+        height: 10px;
+        border-radius: 8px;
+        background: linear-gradient(90deg, #16273f 20%, #1f3350 50%, #16273f 80%);
+        background-size: 220% 100%;
+        animation: skeleton-shift 1.2s ease-in-out infinite;
+      }
+      .result-skeleton-line.short {
+        width: 60%;
+      }
+      @keyframes skeleton-shift {
+        from { background-position: 200% 0; }
+        to { background-position: -20% 0; }
+      }
+      .edit-model-modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(6, 11, 18, 0.72);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        z-index: 85;
+      }
+      .edit-model-modal.open {
+        display: flex;
+        animation: overlay-in 0.14s ease;
+      }
+      .edit-model-card {
+        width: min(360px, 100%);
+        border-radius: 14px;
+        border: 1px solid #2f4868;
+        background: #0f1b2b;
+        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42);
+        padding: 14px;
+        animation: modal-in 0.16s ease;
+      }
+      .edit-model-title {
+        font-size: 14px;
+        color: #d7e6f7;
+        margin-bottom: 8px;
+        font-weight: 600;
+      }
+      .edit-model-list {
+        display: grid;
+        gap: 6px;
+      }
+      .edit-model-btn {
+        border-radius: 10px;
+        border: 1px solid #2b3f59;
+        background: #13243a;
+        color: var(--text);
+        text-align: left;
+        padding: 9px 10px;
+        font: inherit;
+        cursor: pointer;
+      }
+      .edit-model-btn:hover,
+      .edit-model-btn:focus-visible {
+        border-color: var(--accent-2);
+        outline: none;
+      }
+      .edit-model-empty {
+        border-radius: 10px;
+        border: 1px dashed #2a3d57;
+        color: var(--muted);
+        padding: 10px;
+        font-size: 12px;
       }
       .thumbs-wrap {
         position: relative;
@@ -1440,6 +1605,12 @@
           flex: 1 1 calc(50% - 5px);
           justify-content: center;
         }
+        .gallery-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .gallery-card-actions {
+          grid-template-columns: 1fr;
+        }
         .thumbs-wrap {
           padding: 0 28px;
         }
@@ -1530,6 +1701,16 @@
         }
         .action-btn {
           flex: 1 1 100%;
+        }
+        .gallery-grid {
+          grid-template-columns: 1fr;
+        }
+        .output-view-toggle {
+          width: 100%;
+        }
+        .view-toggle-btn {
+          flex: 1 1 0;
+          text-align: center;
         }
         .prompt-panel {
           top: calc(100% + 6px);
@@ -1706,15 +1887,23 @@
           <h2>{{ labels['output_title'] }}</h2>
           <div class="panel-note">{{ labels['site_notice'] }}</div>
         </div>
+        <div class="output-view-toggle" id="outputViewToggle" style="display:none;">
+          <button id="viewCarouselBtn" class="view-toggle-btn active" type="button">{{ labels['result_view_carousel'] }}</button>
+          <button id="viewGridBtn" class="view-toggle-btn" type="button">{{ labels['result_view_grid'] }}</button>
+        </div>
         <div class="output-preview" id="outputPreview">
           <div class="gallery" id="gallery">
-            <div class="gallery-empty">{{ labels['output_empty'] }}</div>
+            <div class="gallery-empty">{{ labels['output_empty_hint'] }}</div>
           </div>
-          <div class="gallery-actions" id="galleryActions" style="display:none;">
+          <div class="gallery-grid" id="galleryGrid" style="display:none;"></div>
+          <div class="gallery-actions result-actions" id="galleryActions" style="display:none;">
             <a class="action-btn" id="downloadBtn" href="#" download>
-              ⬇️ {{ labels['download'] }}
+              ⬇ {{ labels['result_download'] }}
             </a>
-            <button class="action-btn danger" id="deleteBtn">🗑️ {{ labels['delete'] }}</button>
+            <button class="action-btn" id="regenerateBtn">🔁 {{ labels['result_regenerate'] }}</button>
+            <button class="action-btn" id="editPromptBtn">✏ {{ labels['result_edit_prompt'] }}</button>
+            <button class="action-btn" id="editWithAiBtn">🧩 {{ labels['result_edit_ai'] }}</button>
+            <button class="action-btn" id="favoriteBtn">⭐ {{ labels['result_favorite_add'] }}</button>
           </div>
           <div class="thumbs-wrap" id="thumbsWrap">
             <button class="thumbs-nav prev" id="thumbsPrev" type="button" aria-label="Previous thumbnails">‹</button>
@@ -1775,6 +1964,13 @@
           </div>
         </div>
       </div>
+
+      <div class="edit-model-modal" id="editModelModal" aria-hidden="true">
+        <div class="edit-model-card" role="dialog" aria-modal="true" aria-labelledby="editModelTitle">
+          <div class="edit-model-title" id="editModelTitle">{{ labels['result_edit_with_title'] }}</div>
+          <div class="edit-model-list" id="editModelList"></div>
+        </div>
+      </div>
     {% endif %}
     <div class="ui-toast" id="uiToast"></div>
 
@@ -1790,10 +1986,15 @@
       let maxOutputs = 1;
       let galleryItems = [];
       let galleryIndex = 0;
+      let galleryMode = 'carousel';
+      let pendingSkeletonCount = 0;
+      let resultSkeletonActive = false;
       let thumbsPage = 0;
       let modelNames = {};
       let selectedFiles = [];
       let refPreviews = [];
+      let favorites = [];
+      let editWithAiSourceItem = null;
       let cryptoPackages = [];
       let cryptoInvoiceUuid = '';
       let cryptoInvoiceCredits = 0;
@@ -1814,6 +2015,8 @@
       const GENERATION_STATUS_POLL_MAX_MS = 15000;
       const GENERATION_LONG_WAIT_MS = 180000;
       const SKIP_CONFIRM_STORAGE_KEY = 'renderis.skip_confirm_generation';
+      const FAVORITES_STORAGE_KEY = 'renderis.favorites.v1';
+      const FAVORITES_MAX_ITEMS = 20;
       const PROMPT_HISTORY_STORAGE_KEY = 'renderis.prompt_history.v1';
       const PROMPT_HISTORY_LIMIT = 10;
       const PROMPT_TEMPLATES = [
@@ -2082,6 +2285,168 @@
         });
       }
 
+      function loadFavorites() {
+        try {
+          const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
+          if (!raw) return [];
+          const parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) return [];
+          return parsed
+            .map((entry) => ({
+              url: String(entry.url || '').trim(),
+              prompt: String(entry.prompt || '').trim(),
+              model: String(entry.model || '').trim(),
+              ts: Number(entry.ts || 0) || Date.now(),
+            }))
+            .filter((entry) => !!entry.url)
+            .slice(0, FAVORITES_MAX_ITEMS);
+        } catch (e) {
+          return [];
+        }
+      }
+
+      function persistFavorites() {
+        localStorage.setItem(
+          FAVORITES_STORAGE_KEY,
+          JSON.stringify(favorites.slice(0, FAVORITES_MAX_ITEMS))
+        );
+      }
+
+      function isFavoriteUrl(url) {
+        const key = String(url || '').trim();
+        if (!key) return false;
+        return favorites.some((entry) => entry.url === key);
+      }
+
+      function toggleFavorite(item) {
+        if (!item || !item.url) return;
+        const key = String(item.url).trim();
+        if (!key) return;
+        if (isFavoriteUrl(key)) {
+          favorites = favorites.filter((entry) => entry.url !== key);
+          persistFavorites();
+          showToast(labels.result_favorite_removed);
+          renderGallery();
+          return;
+        }
+        favorites = [
+          {
+            url: key,
+            prompt: String(item.prompt || '').trim(),
+            model: String(item.model || ''),
+            ts: Date.now(),
+          },
+          ...favorites.filter((entry) => entry.url !== key),
+        ].slice(0, FAVORITES_MAX_ITEMS);
+        persistFavorites();
+        showToast(labels.result_favorite_saved);
+        renderGallery();
+      }
+
+      function supportedReferenceModels() {
+        return models.filter((model) => !!(model && model.supportsReference));
+      }
+
+      function closeEditWithAiModal() {
+        editWithAiSourceItem = null;
+        const modal = document.getElementById('editModelModal');
+        if (!modal) return;
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
+      }
+
+      function renderEditWithAiModelList() {
+        const list = document.getElementById('editModelList');
+        if (!list) return;
+        const available = supportedReferenceModels();
+        if (!available.length) {
+          list.innerHTML = `<div class="edit-model-empty">${escapeHtml(labels.result_edit_with_no_models)}</div>`;
+          return;
+        }
+        list.innerHTML = available.map((model) => (
+          `<button class="edit-model-btn" type="button" data-edit-model="${escapeHtml(model.key)}">${escapeHtml(model.display_name)}</button>`
+        )).join('');
+      }
+
+      function openEditWithAiModal(item) {
+        if (!item || !item.url) return;
+        editWithAiSourceItem = item;
+        renderEditWithAiModelList();
+        const modal = document.getElementById('editModelModal');
+        if (!modal) return;
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+        const firstBtn = modal.querySelector('button.edit-model-btn');
+        if (firstBtn) {
+          setTimeout(() => firstBtn.focus(), 20);
+        }
+      }
+
+      async function fetchReferenceFileFromResult(url) {
+        const endpoint = `/api/download?url=${encodeURIComponent(url)}`;
+        const res = await fetch(endpoint, { credentials: 'include' });
+        if (!res.ok) {
+          throw new Error(`download_${res.status}`);
+        }
+        const blob = await res.blob();
+        const mime = String(blob.type || 'image/jpeg').toLowerCase();
+        let ext = 'jpg';
+        if (mime.includes('png')) ext = 'png';
+        if (mime.includes('webp')) ext = 'webp';
+        if (mime.includes('gif')) ext = 'gif';
+        const name = `reference-${Date.now()}.${ext}`;
+        return new File([blob], name, { type: blob.type || 'image/jpeg' });
+      }
+
+      async function applyEditWithAiModel(modelKey) {
+        const item = editWithAiSourceItem;
+        closeEditWithAiModal();
+        if (!item || !item.url) return;
+        const targetModel = models.find((model) => model.key === modelKey);
+        if (!targetModel || !targetModel.supportsReference) {
+          showToast(labels.result_edit_with_no_models, 'warning');
+          return;
+        }
+        selectModel(targetModel.key);
+        if (!modelSupportsRefImages()) {
+          showToast(labels.result_edit_with_no_models, 'warning');
+          return;
+        }
+        let file;
+        try {
+          file = await fetchReferenceFileFromResult(item.url);
+        } catch (err) {
+          showToast(labels.result_reference_failed, 'error');
+          const runStatus = document.getElementById('runStatus');
+          if (runStatus) {
+            runStatus.classList.add('error');
+            runStatus.textContent = labels.result_reference_failed;
+          }
+          return;
+        }
+        const added = addReferenceFiles([file]);
+        if (added < 1) {
+          showToast(labels.result_reference_limit, 'warning');
+          const runStatus = document.getElementById('runStatus');
+          if (runStatus) {
+            runStatus.classList.remove('error');
+            runStatus.textContent = labels.result_reference_limit;
+          }
+          return;
+        }
+        window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+        const promptEl = getPromptInput();
+        if (promptEl) {
+          setTimeout(() => promptEl.focus(), 140);
+        }
+        showToast(labels.result_reference_added);
+        const runStatus = document.getElementById('runStatus');
+        if (runStatus) {
+          runStatus.classList.remove('error');
+          runStatus.textContent = labels.result_reference_added;
+        }
+      }
+
       function showToast(message, tone = '') {
         const toast = document.getElementById('uiToast');
         if (!toast) return;
@@ -2346,6 +2711,9 @@
           active = false;
           clearTimers();
           generationInFlight = false;
+          resultSkeletonActive = false;
+          pendingSkeletonCount = 0;
+          renderGallery();
           setGenerationControlsLocked(false);
           setRunButtonState();
           setGenerationLiveState({
@@ -2369,6 +2737,9 @@
           active = false;
           clearTimers();
           generationInFlight = false;
+          resultSkeletonActive = false;
+          pendingSkeletonCount = 0;
+          renderGallery();
           setGenerationControlsLocked(false);
           setRunButtonState();
           setGenerationLiveState({
@@ -2397,6 +2768,9 @@
           active = false;
           clearTimers();
           generationInFlight = false;
+          resultSkeletonActive = false;
+          pendingSkeletonCount = 0;
+          renderGallery();
           setGenerationControlsLocked(false);
           setRunButtonState();
           callBackendCancel();
@@ -2421,6 +2795,9 @@
           active = false;
           clearTimers();
           generationInFlight = false;
+          resultSkeletonActive = false;
+          pendingSkeletonCount = 0;
+          renderGallery();
           setGenerationControlsLocked(false);
           setRunButtonState();
           setGenerationLiveState({
@@ -2433,10 +2810,12 @@
           });
         }
 
-        function start(nextGenerationId, nextModelKey) {
+        function start(nextGenerationId, nextModelKey, nextOutputs = 1) {
           stopAndHide();
           generationId = Number(nextGenerationId || 0);
           modelKey = String(nextModelKey || '').trim();
+          pendingSkeletonCount = Math.max(1, Number(nextOutputs || 1));
+          resultSkeletonActive = true;
           startedAt = Date.now();
           fakeStage = 0;
           pollBackoffMs = GENERATION_STATUS_POLL_BASE_MS;
@@ -2444,6 +2823,7 @@
           serverSnapshot = null;
           active = true;
           generationInFlight = true;
+          renderGallery();
           setGenerationControlsLocked(true);
           setRunButtonState();
           render();
@@ -3005,7 +3385,14 @@
         const res = await fetch('/api/models');
         if (!res.ok) return;
         const data = await res.json();
-        models = data.models || [];
+        const incoming = Array.isArray(data.models) ? data.models : [];
+        models = incoming.map((model) => ({
+          ...model,
+          supportsReference: !!(model.supportsReference || model.supports_reference_images),
+          requiresReference: !!(model.requiresReference || model.requires_reference_images),
+          supports_reference_images: !!(model.supportsReference || model.supports_reference_images),
+          requires_reference_images: !!(model.requiresReference || model.requires_reference_images),
+        }));
         modelNames = {};
         models.forEach((m) => { modelNames[m.key] = m.display_name; });
         renderModels();
@@ -3117,20 +3504,206 @@
         return -1;
       }
 
+      function setGalleryMode(mode) {
+        const nextMode = mode === 'grid' ? 'grid' : 'carousel';
+        galleryMode = nextMode;
+        const carouselBtn = document.getElementById('viewCarouselBtn');
+        const gridBtn = document.getElementById('viewGridBtn');
+        if (carouselBtn) {
+          carouselBtn.classList.toggle('active', galleryMode === 'carousel');
+        }
+        if (gridBtn) {
+          gridBtn.classList.toggle('active', galleryMode === 'grid');
+        }
+        renderGallery();
+      }
+
+      function renderOutputViewToggle(show) {
+        const wrap = document.getElementById('outputViewToggle');
+        if (!wrap) return;
+        wrap.style.display = show ? 'inline-flex' : 'none';
+        const carouselBtn = document.getElementById('viewCarouselBtn');
+        const gridBtn = document.getElementById('viewGridBtn');
+        if (carouselBtn) {
+          carouselBtn.classList.toggle('active', galleryMode === 'carousel');
+        }
+        if (gridBtn) {
+          gridBtn.classList.toggle('active', galleryMode === 'grid');
+        }
+      }
+
+      function getValidGalleryItems() {
+        return galleryItems.filter((item) => !item.invalid);
+      }
+
+      function renderGallerySkeleton() {
+        const gallery = document.getElementById('gallery');
+        const grid = document.getElementById('galleryGrid');
+        const actions = document.getElementById('galleryActions');
+        const thumbsWrap = document.getElementById('thumbsWrap');
+        const pages = document.getElementById('thumbsPages');
+        if (!gallery || !grid || !actions || !thumbsWrap || !pages) return;
+        const count = Math.max(1, Number(pendingSkeletonCount || 1));
+        const cardsHtml = Array.from({ length: count }).map(() => (
+          `<div class="result-skeleton">` +
+            `<div class="result-skeleton-img"></div>` +
+            `<div class="result-skeleton-line"></div>` +
+            `<div class="result-skeleton-line short"></div>` +
+          `</div>`
+        )).join('');
+        grid.innerHTML = cardsHtml;
+        grid.style.display = 'grid';
+        gallery.style.display = 'none';
+        actions.style.display = 'none';
+        thumbsWrap.style.display = 'none';
+        pages.style.display = 'none';
+        renderOutputViewToggle(count > 1);
+      }
+
+      function applyResultPrompt(item) {
+        if (!item || !item.prompt) return;
+        const promptEl = getPromptInput();
+        if (!promptEl) return;
+        promptEl.value = item.prompt;
+        updatePromptLengthHint();
+        window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+        setTimeout(() => promptEl.focus(), 120);
+      }
+
+      async function regenerateFromResult(forceSingleOutput = false) {
+        if (forceSingleOutput) {
+          optionsState.outputs = 1;
+          renderOptions();
+          updateQuote();
+        }
+        await runGenerationFlow();
+      }
+
+      function renderGalleryCardActions(item, compact = false) {
+        const fragment = document.createDocumentFragment();
+        const addAction = (element) => {
+          if (compact) {
+            element.classList.add('compact');
+          }
+          fragment.appendChild(element);
+        };
+
+        const download = document.createElement('a');
+        download.className = 'action-btn';
+        download.href = `/api/download?url=${encodeURIComponent(item.url)}`;
+        download.setAttribute('download', '');
+        download.textContent = `⬇ ${labels.result_download}`;
+        addAction(download);
+
+        const regenerateBtn = document.createElement('button');
+        regenerateBtn.className = 'action-btn';
+        regenerateBtn.type = 'button';
+        regenerateBtn.textContent = `🔁 ${compact ? labels.result_regenerate_this : labels.result_regenerate}`;
+        regenerateBtn.onclick = () => {
+          void regenerateFromResult(compact);
+        };
+        addAction(regenerateBtn);
+
+        const editPromptBtn = document.createElement('button');
+        editPromptBtn.className = 'action-btn';
+        editPromptBtn.type = 'button';
+        editPromptBtn.textContent = `✏ ${labels.result_edit_prompt}`;
+        editPromptBtn.onclick = () => applyResultPrompt(item);
+        addAction(editPromptBtn);
+
+        const editAiBtn = document.createElement('button');
+        editAiBtn.className = 'action-btn';
+        editAiBtn.type = 'button';
+        editAiBtn.textContent = `🧩 ${labels.result_edit_ai}`;
+        editAiBtn.onclick = () => openEditWithAiModal(item);
+        addAction(editAiBtn);
+
+        const favoriteBtn = document.createElement('button');
+        favoriteBtn.className = 'action-btn';
+        favoriteBtn.type = 'button';
+        const favored = isFavoriteUrl(item.url);
+        favoriteBtn.classList.toggle('favorited', favored);
+        favoriteBtn.textContent = `⭐ ${favored ? labels.result_favorite_remove : labels.result_favorite_add}`;
+        favoriteBtn.onclick = () => toggleFavorite(item);
+        addAction(favoriteBtn);
+
+        return fragment;
+      }
+
       function renderGallery() {
         const gallery = document.getElementById('gallery');
+        const grid = document.getElementById('galleryGrid');
         const actions = document.getElementById('galleryActions');
+        const thumbsWrap = document.getElementById('thumbsWrap');
+        const pages = document.getElementById('thumbsPages');
+        if (!gallery || !grid || !actions || !thumbsWrap || !pages) return;
+
+        if (resultSkeletonActive) {
+          renderGallerySkeleton();
+          return;
+        }
+
         gallery.innerHTML = '';
+        grid.innerHTML = '';
+        const validItems = getValidGalleryItems();
+        renderOutputViewToggle(validItems.length > 1);
 
         const validIndex = firstValidIndex(galleryIndex);
         if (validIndex === -1) {
+          gallery.style.display = 'block';
+          grid.style.display = 'none';
           actions.style.display = 'none';
-          gallery.innerHTML = `<div class="gallery-empty">${labels.output_empty}</div>`;
-          renderThumbs(null, true);
+          thumbsWrap.style.display = 'none';
+          pages.style.display = 'none';
+          gallery.innerHTML = `<div class="gallery-empty">${labels.output_empty_hint || labels.output_empty}</div>`;
           return;
         }
         galleryIndex = validIndex;
         const item = galleryItems[galleryIndex];
+
+        if (galleryMode === 'grid' && validItems.length > 1) {
+          gallery.style.display = 'none';
+          grid.style.display = 'grid';
+          actions.style.display = 'none';
+          thumbsWrap.style.display = 'none';
+          pages.style.display = 'none';
+          validItems.forEach((cardItem) => {
+            const card = document.createElement('div');
+            card.className = 'gallery-card';
+            if (cardItem.url === item.url) {
+              card.classList.add('active');
+            }
+            const main = document.createElement('div');
+            main.className = 'gallery-card-main';
+            const img = document.createElement('img');
+            img.src = cardItem.url;
+            img.onerror = () => {
+              cardItem.invalid = true;
+              renderGallery();
+            };
+            main.appendChild(img);
+            main.onclick = () => {
+              galleryIndex = galleryItems.indexOf(cardItem);
+              renderGallery();
+            };
+            card.appendChild(main);
+
+            const meta = document.createElement('div');
+            meta.className = 'gallery-card-meta';
+            meta.textContent = modelNames[cardItem.model] || cardItem.model;
+            card.appendChild(meta);
+
+            const cardActions = document.createElement('div');
+            cardActions.className = 'gallery-card-actions';
+            cardActions.appendChild(renderGalleryCardActions(cardItem, true));
+            card.appendChild(cardActions);
+            grid.appendChild(card);
+          });
+          return;
+        }
+
+        gallery.style.display = 'block';
+        grid.style.display = 'none';
 
         const img = document.createElement('img');
         img.src = item.url;
@@ -3147,47 +3720,34 @@
 
         const count = document.createElement('div');
         count.className = 'gallery-count';
-        count.textContent = `${galleryIndex + 1} / ${galleryItems.length}`;
+        count.textContent = `${validItems.findIndex((x) => x.url === item.url) + 1} / ${validItems.length}`;
         gallery.appendChild(count);
 
-        const prev = document.createElement('div');
-        prev.className = 'gallery-nav prev';
-        prev.textContent = '‹';
-        prev.onclick = () => {
-          galleryIndex = (galleryIndex - 1 + galleryItems.length) % galleryItems.length;
-          renderGallery();
-        };
-        gallery.appendChild(prev);
+        if (validItems.length > 1) {
+          const prev = document.createElement('div');
+          prev.className = 'gallery-nav prev';
+          prev.textContent = '‹';
+          prev.onclick = () => {
+            galleryIndex = (galleryIndex - 1 + galleryItems.length) % galleryItems.length;
+            renderGallery();
+          };
+          gallery.appendChild(prev);
 
-        const next = document.createElement('div');
-        next.className = 'gallery-nav next';
-        next.textContent = '›';
-        next.onclick = () => {
-          galleryIndex = (galleryIndex + 1) % galleryItems.length;
-          renderGallery();
-        };
-        gallery.appendChild(next);
+          const next = document.createElement('div');
+          next.className = 'gallery-nav next';
+          next.textContent = '›';
+          next.onclick = () => {
+            galleryIndex = (galleryIndex + 1) % galleryItems.length;
+            renderGallery();
+          };
+          gallery.appendChild(next);
+        }
 
-        const downloadBtn = document.getElementById('downloadBtn');
-        downloadBtn.href = `/api/download?url=${encodeURIComponent(item.url)}`;
-        downloadBtn.setAttribute('download', '');
+        actions.innerHTML = '';
+        actions.appendChild(renderGalleryCardActions(item, false));
         actions.style.display = 'flex';
-
-        const deleteBtn = document.getElementById('deleteBtn');
-        deleteBtn.onclick = async () => {
-          if (!item.generation_id) return;
-          const res = await fetch(`/api/generations/${item.generation_id}/delete`, {
-            method: 'POST',
-            credentials: 'include',
-          });
-          if (!res.ok) {
-            alert(labels.error_prefix + ': delete_failed');
-            return;
-          }
-          galleryItems = galleryItems.filter((x) => x.generation_id !== item.generation_id);
-          renderGallery();
-        };
-
+        thumbsWrap.style.display = validItems.length > 1 ? 'block' : 'none';
+        pages.style.display = 'none';
         renderThumbs(item, true);
       }
 
@@ -3334,7 +3894,7 @@
         for (const file of selectedFiles) {
           form.append('files', file);
         }
-        return { form, prompt };
+        return { form, prompt, outputs };
       }
 
       async function executeGeneration(prebuiltPayload = null) {
@@ -3361,7 +3921,7 @@
               generationId = await resolveActiveGenerationId(data.created_at || '');
             }
             if (generationId > 0) {
-              generationWaitController.start(generationId, currentModel ? currentModel.key : '');
+              generationWaitController.start(generationId, currentModel ? currentModel.key : '', Number(payload.outputs || 1));
             } else {
               setGenerationLiveState({
                 visible: true,
@@ -3664,6 +4224,7 @@
       const promptHistoryList = document.getElementById('promptHistoryList');
 
       promptHistory = loadPromptHistory();
+      favorites = loadFavorites();
       renderPromptHelper();
       renderPromptHistory();
       updatePromptLengthHint();
@@ -3724,6 +4285,32 @@
           insertIntoPrompt(value);
           closePromptPanels();
           trackUiEvent('prompt_history_reused', { history_index: index });
+        });
+      }
+      const viewCarouselBtn = document.getElementById('viewCarouselBtn');
+      const viewGridBtn = document.getElementById('viewGridBtn');
+      if (viewCarouselBtn) {
+        viewCarouselBtn.addEventListener('click', () => setGalleryMode('carousel'));
+      }
+      if (viewGridBtn) {
+        viewGridBtn.addEventListener('click', () => setGalleryMode('grid'));
+      }
+      const editModelModal = document.getElementById('editModelModal');
+      const editModelList = document.getElementById('editModelList');
+      if (editModelList) {
+        editModelList.addEventListener('click', (event) => {
+          const node = event.target instanceof Element ? event.target.closest('[data-edit-model]') : null;
+          if (!node) return;
+          const modelKey = node.getAttribute('data-edit-model') || '';
+          if (!modelKey) return;
+          void applyEditWithAiModel(modelKey);
+        });
+      }
+      if (editModelModal) {
+        editModelModal.addEventListener('click', (event) => {
+          if (event.target === editModelModal) {
+            closeEditWithAiModal();
+          }
         });
       }
       const genCancelBtn = document.getElementById('genCancelBtn');
@@ -3879,6 +4466,7 @@
           if (generationWaitController.isActive()) {
             generationWaitController.cancelLocally();
           }
+          closeEditWithAiModal();
           closeConfirmModal();
           closeQuoteTooltip();
           closePromptPanels();
@@ -3887,7 +4475,7 @@
         }
       });
       window.addEventListener('resize', () => {
-        if (!galleryItems.length) return;
+        if (!galleryItems.length || galleryMode !== 'carousel' || resultSkeletonActive) return;
         renderThumbs(galleryItems[galleryIndex] || null, false);
       });
       window.addEventListener('beforeunload', () => {
