@@ -14,7 +14,7 @@ from pathlib import Path
 from fastapi import Body, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from starlette.middleware.sessions import SessionMiddleware
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
@@ -27,6 +27,7 @@ from app.db.models import (
     AdminChangeRequest,
     CreditLedger,
     Generation,
+    GenerationTask,
     Order,
     Price,
     PromoCode,
@@ -470,6 +471,19 @@ def _parse_decimal(value: str) -> Decimal | None:
     except (InvalidOperation, ValueError):
         return None
     return parsed
+
+
+def _format_duration_seconds(value: float | None) -> str:
+    if value is None:
+        return "—"
+    total_seconds = max(0, int(round(value)))
+    hours, rem = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(rem, 60)
+    if hours > 0:
+        return f"{hours}ч {minutes}м {seconds}с"
+    if minutes > 0:
+        return f"{minutes}м {seconds}с"
+    return f"{seconds}с"
 
 
 def _format_msk(dt: datetime | None) -> str | None:
@@ -1853,18 +1867,100 @@ def create_app() -> FastAPI:
                 },
             ]
 
+            task_finished_subq = (
+                select(
+                    GenerationTask.generation_id.label("generation_id"),
+                    func.max(GenerationTask.finished_at).label("finished_at"),
+                )
+                .where(GenerationTask.finished_at.is_not(None))
+                .group_by(GenerationTask.generation_id)
+                .subquery()
+            )
+
+            ref_mode_expr = func.coalesce(Generation.options["reference_images"].astext, "none")
+            resolution_expr = func.coalesce(Generation.options["resolution"].astext, "1K")
+            row_id_expr = case(
+                (Generation.model == "nano_banana", "nano_banana"),
+                (Generation.model == "nano_banana_edit", "nano_banana_edit"),
+                (
+                    (Generation.model == "nano_banana_pro")
+                    & (ref_mode_expr == "none")
+                    & (resolution_expr == "1K"),
+                    "pro_no_refs_1k",
+                ),
+                (
+                    (Generation.model == "nano_banana_pro")
+                    & (ref_mode_expr == "none")
+                    & (resolution_expr == "2K"),
+                    "pro_no_refs_2k",
+                ),
+                (
+                    (Generation.model == "nano_banana_pro")
+                    & (ref_mode_expr == "none")
+                    & (resolution_expr == "4K"),
+                    "pro_no_refs_4k",
+                ),
+                (
+                    (Generation.model == "nano_banana_pro")
+                    & (ref_mode_expr == "has")
+                    & (resolution_expr == "1K"),
+                    "pro_refs_1k",
+                ),
+                (
+                    (Generation.model == "nano_banana_pro")
+                    & (ref_mode_expr == "has")
+                    & (resolution_expr == "2K"),
+                    "pro_refs_2k",
+                ),
+                (
+                    (Generation.model == "nano_banana_pro")
+                    & (ref_mode_expr == "has")
+                    & (resolution_expr == "4K"),
+                    "pro_refs_4k",
+                ),
+                else_=None,
+            ).label("row_id")
+            duration_seconds_expr = func.extract("epoch", task_finished_subq.c.finished_at - Generation.created_at)
+            averages_rows = await session.execute(
+                select(
+                    row_id_expr,
+                    func.avg(duration_seconds_expr).label("avg_seconds"),
+                    func.count(Generation.id).label("samples"),
+                )
+                .join(task_finished_subq, task_finished_subq.c.generation_id == Generation.id)
+                .where(Generation.status == "success")
+                .where(row_id_expr.is_not(None))
+                .group_by(row_id_expr)
+            )
+            row_avg_map: dict[str, dict[str, float | int | None]] = {}
+            for avg_row in averages_rows:
+                row_id = avg_row.row_id
+                if not row_id:
+                    continue
+                row_avg_map[row_id] = {
+                    "avg_seconds": float(avg_row.avg_seconds) if avg_row.avg_seconds is not None else None,
+                    "samples": int(avg_row.samples or 0),
+                }
+
             for row in rows:
                 kie_usd = round(row["kie_credits"] * kie_usd_per_credit, 4)
                 renderis_usd = round(row["renderis_credits"] * usd_per_credit, 4)
                 profit_pct = ""
                 if kie_usd > 0:
                     profit_pct = round((renderis_usd / kie_usd) * 100, 1)
+                avg_meta = row_avg_map.get(row["row_id"], {})
+                avg_seconds = avg_meta.get("avg_seconds")
+                avg_samples = int(avg_meta.get("samples") or 0)
+                avg_duration = _format_duration_seconds(float(avg_seconds) if avg_seconds is not None else None)
+                if avg_samples > 0 and avg_seconds is not None:
+                    avg_duration = f"{avg_duration} ({avg_samples})"
                 products.append(
                     {
                         **row,
                         "kie_usd": kie_usd,
                         "renderis_usd": renderis_usd,
                         "profit_pct": profit_pct,
+                        "avg_duration": avg_duration,
                     }
                 )
 

@@ -18,6 +18,7 @@
             <th>Renderis кредиты</th>
             <th>Renderis $</th>
             <th>Прибыль %</th>
+            <th>Среднее время (усп.)</th>
             <th></th>
           </tr>
         </thead>
@@ -40,6 +41,7 @@
                 {{ p.profit_pct }}%
               {% endif %}
             </td>
+            <td>{{ p.avg_duration }}</td>
             <td>
               {% if can_manage %}
               <button form="price-{{ p.row_id }}" type="submit">Сохранить</button>
@@ -48,7 +50,7 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="7" class="muted">Нет данных</td></tr>
+          <tr><td colspan="8" class="muted">Нет данных</td></tr>
           {% endfor %}
         </tbody>
       </table>
