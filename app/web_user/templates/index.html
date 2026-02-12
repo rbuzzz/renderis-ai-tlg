@@ -251,6 +251,20 @@
         border-radius: 12px;
         padding: 6px 10px;
       }
+      .miniapp-auth-note {
+        display: none;
+        max-width: 320px;
+        border: 1px solid #2a3d57;
+        background: #0f1b2b;
+        border-radius: 12px;
+        padding: 10px 12px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .miniapp-auth-note.error {
+        border-color: rgba(255, 118, 118, 0.45);
+        color: #ffc2c2;
+      }
       .balance {
         display: inline-flex;
         align-items: center;
@@ -1104,7 +1118,8 @@
             </div>
           </div>
         {% else %}
-          <div class="login-widget">
+          <div class="miniapp-auth-note" id="miniAppAuthNotice"></div>
+          <div class="login-widget" id="loginWidget">
             <script
               async
               src="https://telegram.org/js/telegram-widget.js?22"
@@ -1235,6 +1250,38 @@
       let cryptoPollBusy = false;
       let cryptoPollAttempts = 0;
       const THUMB_ROWS = 3;
+      const tgWebApp = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+      const isMiniApp = Boolean(tgWebApp && typeof tgWebApp.initData === 'string');
+      const loginWidget = document.getElementById('loginWidget');
+      const miniAppAuthNotice = document.getElementById('miniAppAuthNotice');
+
+      function setMiniAppAuthNotice(text, tone = '') {
+        if (!miniAppAuthNotice) return;
+        miniAppAuthNotice.classList.remove('error');
+        if (tone === 'error') {
+          miniAppAuthNotice.classList.add('error');
+        }
+        miniAppAuthNotice.textContent = text || '';
+        miniAppAuthNotice.style.display = text ? 'block' : 'none';
+      }
+
+      function openExternalLink(url) {
+        if (!url) return;
+        if (isMiniApp && tgWebApp && typeof tgWebApp.openLink === 'function') {
+          tgWebApp.openLink(url);
+          return;
+        }
+        window.open(url, '_blank', 'noopener');
+      }
+
+      function openTelegramDeepLink(url) {
+        if (!url) return;
+        if (isMiniApp && tgWebApp && typeof tgWebApp.openTelegramLink === 'function') {
+          tgWebApp.openTelegramLink(url);
+          return;
+        }
+        window.location.href = url;
+      }
 
       function fmt(template, params = {}) {
         let out = template || '';
@@ -2002,7 +2049,7 @@
         setCryptoStatus(fmt(labels.crypto_invoice_created, { amount, currency }));
 
         if (data.pay_url) {
-          window.open(data.pay_url, '_blank', 'noopener');
+          openExternalLink(data.pay_url);
         }
         stopCryptoPolling();
         cryptoPollTimer = setInterval(() => {
@@ -2121,7 +2168,7 @@
         if (runStatus) {
           runStatus.textContent = labels.topup_stars_redirect;
         }
-        window.location.href = deepLink;
+        openTelegramDeepLink(deepLink);
       }
 
       document.getElementById('runBtn').onclick = runGeneration;
@@ -2142,6 +2189,16 @@
       const cryptoCheckBtn = document.getElementById('cryptoCheckBtn');
       if (cryptoCheckBtn) {
         cryptoCheckBtn.onclick = () => checkCryptoStatus(true);
+      }
+      const cryptoPayLinkEl = document.getElementById('cryptoPayLink');
+      if (cryptoPayLinkEl) {
+        cryptoPayLinkEl.addEventListener('click', (event) => {
+          const href = cryptoPayLinkEl.getAttribute('href') || '';
+          if (!href || href === '#') return;
+          if (!isMiniApp) return;
+          event.preventDefault();
+          openExternalLink(href);
+        });
       }
       document.getElementById('thumbsPrev').onclick = (e) => {
         e.preventDefault();
@@ -2310,15 +2367,18 @@
 
       async function maybeAutoMiniAppAuth() {
         if (loggedIn) return false;
-        const webApp = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
-        if (!webApp) return false;
+        if (!isMiniApp || !tgWebApp) return false;
+        if (loginWidget) {
+          loginWidget.style.display = 'none';
+        }
+        setMiniAppAuthNotice(labels.miniapp_auth_in_progress || '');
         try {
-          webApp.ready();
-          webApp.expand();
+          tgWebApp.ready();
+          tgWebApp.expand();
         } catch (e) {
           // no-op
         }
-        const initData = (webApp.initData || '').trim();
+        const initData = (tgWebApp.initData || '').trim();
         if (!initData) return false;
         try {
           const res = await fetch('/auth/miniapp', {
@@ -2332,8 +2392,10 @@
           }
           const err = await res.json().catch(() => ({}));
           console.warn('miniapp auth rejected', err);
+          setMiniAppAuthNotice(labels.miniapp_auth_failed || '', 'error');
         } catch (err) {
           console.warn('miniapp auth failed', err);
+          setMiniAppAuthNotice(labels.miniapp_auth_failed || '', 'error');
         }
         return false;
       }
@@ -2341,10 +2403,16 @@
       (async () => {
         const reloading = await maybeAutoMiniAppAuth();
         if (reloading) return;
-        loadMe();
         loadModels();
-        loadHistory();
-        setInterval(loadHistory, 15000);
+        if (loggedIn) {
+          loadMe();
+          loadHistory();
+          setInterval(loadHistory, 15000);
+          return;
+        }
+        if (!isMiniApp) {
+          setMiniAppAuthNotice('');
+        }
       })();
 
       async function updateQuote() {

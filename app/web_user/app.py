@@ -1473,6 +1473,8 @@ def create_app() -> FastAPI:
         "logout",
         "prompt_required",
         "login_required",
+        "miniapp_auth_in_progress",
+        "miniapp_auth_failed",
         "request_sent",
         "error_prefix",
         "promo_added",
