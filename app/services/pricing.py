@@ -70,6 +70,8 @@ class PricingService:
                     price_key = v.price_key
                     break
             if price_key and price_key in provider_map:
+                if price_key.startswith("aspect_"):
+                    continue
                 if model.key == "nano_banana_pro" and opt.key == "reference_images" and val == "none":
                     continue
                 modifiers.append(provider_map[price_key])
@@ -125,6 +127,8 @@ class PricingService:
                     price_key = v.price_key
                     break
             if price_key and price_key in price_map:
+                if price_key.startswith("aspect_"):
+                    continue
                 if model.key == "nano_banana_pro" and opt.key == "reference_images" and val == "none":
                     continue
                 modifiers.append((price_key, price_map[price_key]))
