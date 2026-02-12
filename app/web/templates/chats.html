@@ -48,6 +48,14 @@
     color: var(--text);
     text-decoration: none;
   }
+  .chat-delete-btn {
+    background: #4a1f2a;
+    color: #ffd7de;
+    border: 1px solid #7e3346;
+  }
+  .chat-delete-btn:hover {
+    background: #5a2532;
+  }
   .chat-items {
     overflow-y: auto;
     flex: 1;
@@ -256,6 +264,7 @@
 </div>
 
 <script>
+  const canManage = {{ "true" if can_manage else "false" }};
   const chatItems = document.getElementById('chatItems');
   const chatMessages = document.getElementById('chatMessages');
   const chatHeader = document.getElementById('chatHeader');
@@ -323,8 +332,49 @@
       link.href = `/admin/users/${currentThreadUserId}`;
       link.textContent = 'Профиль пользователя';
       meta.appendChild(link);
+      if (canManage) {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'chat-delete-btn';
+        deleteBtn.textContent = 'Удалить чат';
+        deleteBtn.onclick = deleteCurrentThread;
+        meta.appendChild(deleteBtn);
+      }
       chatHeader.appendChild(meta);
     }
+  }
+
+  async function deleteCurrentThread() {
+    if (!canManage || !currentThread) return;
+    const threadId = currentThread;
+    const ok = window.confirm('Удалить этот чат и все сообщения? Действие необратимо.');
+    if (!ok) return;
+    setStatus('Удаляем чат...');
+    let res;
+    try {
+      res = await fetch(`/admin/api/chats/${threadId}`, { method: 'DELETE' });
+    } catch (err) {
+      setStatus('Не удалось удалить чат.', true);
+      return;
+    }
+    if (!res.ok) {
+      let error = `http_${res.status}`;
+      try {
+        const data = await res.json();
+        error = data.error || error;
+      } catch (e) {
+        // ignore parse errors
+      }
+      setStatus(`Не удалось удалить чат: ${error}`, true);
+      return;
+    }
+    currentThread = null;
+    currentThreadUserId = null;
+    currentThreadLabel = '';
+    chatMessages.innerHTML = '';
+    renderChatHeader();
+    await loadThreads();
+    setStatus('Чат удалён.');
   }
 
   async function loadThreads() {

@@ -4,6 +4,7 @@ import secrets
 import base64
 import logging
 import mimetypes
+import shutil
 import time
 import uuid
 from html import escape
@@ -14,7 +15,7 @@ from pathlib import Path
 from fastapi import Body, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, delete, func, or_, select
 from starlette.middleware.sessions import SessionMiddleware
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
@@ -652,6 +653,12 @@ async def _save_favicon_logo(upload: UploadFile, storage_root: str) -> tuple[boo
 
 def _support_media_root(storage_root: str) -> Path:
     return Path(storage_root) / SUPPORT_MEDIA_DIR
+
+
+def _delete_support_thread_media(storage_root: str, thread_id: int) -> None:
+    thread_dir = _support_media_root(storage_root) / str(thread_id)
+    if thread_dir.exists():
+        shutil.rmtree(thread_dir, ignore_errors=True)
 
 
 def _support_media_mime(path: Path) -> str:
@@ -2418,6 +2425,25 @@ def create_app() -> FastAPI:
                 for msg in rows.scalars().all()
             ]
         return {"messages": messages}
+
+    @app.delete("/admin/api/chats/{thread_id}")
+    async def admin_chats_delete(request: Request, thread_id: int):
+        if not _is_logged_in(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        if not _can_manage(request):
+            return JSONResponse({"error": "forbidden"}, status_code=403)
+
+        settings = get_settings()
+        async with app.state.sessionmaker() as session:
+            thread = await session.get(SupportThread, thread_id)
+            if not thread:
+                return JSONResponse({"error": "not_found"}, status_code=404)
+            await session.execute(delete(SupportMessage).where(SupportMessage.thread_id == thread_id))
+            await session.delete(thread)
+            await session.commit()
+
+        _delete_support_thread_media(settings.reference_storage_path, thread_id)
+        return {"ok": True}
 
     @app.get("/admin/api/chats/media/{message_id}")
     async def admin_chat_media(request: Request, message_id: int):
