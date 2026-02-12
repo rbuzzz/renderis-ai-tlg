@@ -376,8 +376,6 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def startup() -> None:
-        if not settings.user_web_poll_enabled:
-            return
         bot = Bot(
             token=settings.bot_token,
             default=DefaultBotProperties(parse_mode=ParseMode.HTML),
@@ -385,8 +383,9 @@ def create_app() -> FastAPI:
         kie_client = KieClient()
         poller = PollManager(bot, app.state.sessionmaker, kie_client)
         app.state.user_web_poller = poller
-        await poller.restore_pending()
-        app.state.user_web_poller_task = asyncio.create_task(poller.watch_pending())
+        if settings.user_web_poll_enabled:
+            await poller.restore_pending()
+            app.state.user_web_poller_task = asyncio.create_task(poller.watch_pending())
 
     @app.on_event("shutdown")
     async def shutdown() -> None:
@@ -674,6 +673,71 @@ def create_app() -> FastAPI:
                 "lang": user.settings.get("lang", "ru"),
                 "max_outputs": settings.max_outputs_per_request,
             }
+
+    @app.post("/api/providers/kie/webhook")
+    async def api_kie_webhook(request: Request):
+        try:
+            payload = await request.json()
+        except Exception:
+            return JSONResponse({"ok": False, "error": "invalid_payload"}, status_code=400)
+        if not isinstance(payload, dict):
+            return JSONResponse({"ok": False, "error": "invalid_payload"}, status_code=400)
+
+        task_id = KieClient.extract_task_id(payload)
+        if not task_id:
+            return JSONResponse({"ok": False, "error": "task_id_missing"}, status_code=400)
+
+        timestamp = (request.headers.get("x-webhook-timestamp") or "").strip()
+        signature = (request.headers.get("x-webhook-signature") or "").strip()
+        require_signature = bool(settings.kie_webhook_require_signature)
+        webhook_hmac_key = settings.kie_webhook_hmac_key.strip()
+
+        if require_signature and not webhook_hmac_key:
+            return JSONResponse({"ok": False, "error": "webhook_hmac_key_not_configured"}, status_code=503)
+
+        if require_signature or (timestamp and signature and webhook_hmac_key):
+            if not timestamp or not signature:
+                return JSONResponse({"ok": False, "error": "missing_signature_headers"}, status_code=401)
+            try:
+                timestamp_int = int(timestamp)
+            except (TypeError, ValueError):
+                return JSONResponse({"ok": False, "error": "invalid_timestamp"}, status_code=401)
+
+            now = int(time.time())
+            max_skew = max(1, int(settings.kie_webhook_max_skew_seconds))
+            if abs(now - timestamp_int) > max_skew:
+                return JSONResponse({"ok": False, "error": "timestamp_out_of_range"}, status_code=401)
+
+            is_valid = KieClient.verify_webhook_signature(
+                task_id=task_id,
+                timestamp_seconds=timestamp,
+                received_signature=signature,
+                webhook_hmac_key=webhook_hmac_key,
+            )
+            if not is_valid:
+                return JSONResponse({"ok": False, "error": "invalid_signature"}, status_code=401)
+
+        poller = app.state.user_web_poller
+        if not poller:
+            return JSONResponse({"ok": False, "error": "poller_unavailable"}, status_code=503)
+
+        try:
+            status = await poller.process_provider_webhook("kie", payload)
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        except KieError as exc:
+            return JSONResponse(
+                {"ok": False, "error": "kie_status_failed", "detail": str(exc)},
+                status_code=502,
+            )
+
+        return {"ok": True, "task_id": task_id, "status": status}
+
+    @app.api_route("/kie/webhook", methods=["POST", "GET", "HEAD"])
+    async def kie_webhook_alias(request: Request):
+        if request.method in {"GET", "HEAD"}:
+            return {"ok": True}
+        return await api_kie_webhook(request)
 
     @app.get("/api/payments/packages")
     async def api_payment_packages(request: Request):

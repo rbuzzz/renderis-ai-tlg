@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import os
@@ -13,9 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.bot.keyboards.main import generation_result_menu
 from app.config import get_settings
 from app.db.models import Generation, GenerationTask, User
+from app.i18n import normalize_lang, t, tf
 from app.services.credits import CreditsService
 from app.services.kie_client import KieClient, KieError
-from app.i18n import normalize_lang, t, tf
 from app.utils.logging import get_logger
 from app.utils.text import clamp_text, escape_html
 from app.utils.time import utcnow
@@ -82,6 +82,61 @@ class PollManager:
             return
         self._inflight.add(task_id)
         asyncio.create_task(self._poll_task(task_id))
+
+    async def process_provider_webhook(self, provider: str, payload: dict) -> str:
+        provider_key = (provider or '').strip().lower()
+        if provider_key != 'kie':
+            raise ValueError('unsupported_provider')
+        task_id = KieClient.extract_task_id(payload)
+        if not task_id:
+            raise ValueError('task_id_missing')
+        return await self.process_kie_webhook(task_id, payload)
+
+    async def process_kie_webhook(self, provider_task_id: str, payload: Optional[dict] = None) -> str:
+        task, generation, user = await self._get_task_context_by_provider_task_id(provider_task_id)
+        if not task:
+            logger.info('webhook_task_not_found', task_id=provider_task_id)
+            return 'not_found'
+        if task.state in ('success', 'fail'):
+            return task.state
+        if not generation:
+            logger.warning('webhook_generation_missing', task_id=provider_task_id, generation_id=task.generation_id)
+            return 'generation_missing'
+
+        try:
+            record = await self.kie.get_task(provider_task_id)
+        except KieError as exc:
+            if payload:
+                fallback_status = self.kie.get_status(payload).lower()
+                if fallback_status in SUCCESS_STATUSES or fallback_status in FAIL_STATUSES:
+                    record = payload
+                else:
+                    raise
+            else:
+                raise
+
+        status = self.kie.get_status(record).lower()
+        if status in SUCCESS_STATUSES:
+            urls = self.kie.parse_result_urls(record)
+            changed = await self._mark_success(task.id, urls, record)
+            if changed and user:
+                await self._deliver_results(user, generation, urls)
+            await self._update_generation_status(generation.id)
+            return 'success'
+
+        if status in FAIL_STATUSES:
+            fail_code, fail_msg = self.kie.get_fail_info(record)
+            changed = await self._mark_fail(task.id, fail_msg or 'Ошибка генерации', fail_code)
+            if changed:
+                await self._maybe_refund(generation.id)
+                if user:
+                    await self._notify_failure(user, fail_msg)
+            await self._update_generation_status(generation.id)
+            return 'fail'
+
+        await self._mark_pending(task.id)
+        self.schedule(task.id)
+        return status or 'pending'
 
     async def watch_pending(self, interval: int | None = None) -> None:
         poll_interval = max(2, int(interval)) if interval is not None else self._watch_interval()
@@ -181,15 +236,17 @@ class PollManager:
                         status = self.kie.get_status(record).lower()
                         if status in SUCCESS_STATUSES:
                             urls = self.kie.parse_result_urls(record)
-                            await self._mark_success(task_id, urls, record)
-                            await self._deliver_results(user, generation, urls)
+                            changed = await self._mark_success(task_id, urls, record)
+                            if changed:
+                                await self._deliver_results(user, generation, urls)
                             await self._update_generation_status(generation.id)
                             return
                         if status in FAIL_STATUSES:
                             fail_code, fail_msg = self.kie.get_fail_info(record)
-                            await self._mark_fail(task_id, fail_msg or 'Ошибка генерации', fail_code)
-                            await self._maybe_refund(generation.id)
-                            await self._notify_failure(user, fail_msg)
+                            changed = await self._mark_fail(task_id, fail_msg or 'Ошибка генерации', fail_code)
+                            if changed:
+                                await self._maybe_refund(generation.id)
+                                await self._notify_failure(user, fail_msg)
                             await self._update_generation_status(generation.id)
                             return
 
@@ -202,35 +259,84 @@ class PollManager:
         await asyncio.sleep(self._watch_interval())
         self.schedule(task_id)
 
-    async def _mark_success(self, task_id: int, urls: List[str], record: dict) -> None:
+    async def _mark_success(self, task_id: int, urls: List[str], record: dict) -> bool:
         async with self.sessionmaker() as session:
-            task = await session.get(GenerationTask, task_id)
-            if not task:
-                return
-            task.state = 'success'
-            task.result_urls = urls
-            task.finished_at = utcnow()
-            task.raw_response = record
+            stmt = (
+                update(GenerationTask)
+                .where(
+                    GenerationTask.id == task_id,
+                    ~GenerationTask.state.in_(['success', 'fail']),
+                )
+                .values(
+                    state='success',
+                    result_urls=urls,
+                    finished_at=utcnow(),
+                    raw_response=record,
+                )
+                .returning(GenerationTask.id)
+            )
+            result = await session.execute(stmt)
+            updated = result.scalar_one_or_none()
+            if not updated:
+                await session.rollback()
+                return False
             await session.commit()
+            return True
 
-    async def _mark_fail(self, task_id: int, msg: str, code: Optional[str]) -> None:
+    async def _mark_fail(self, task_id: int, msg: str, code: Optional[str]) -> bool:
         async with self.sessionmaker() as session:
-            task = await session.get(GenerationTask, task_id)
-            if not task:
-                return
-            task.state = 'fail'
-            task.fail_msg = msg
-            task.fail_code = code
-            task.finished_at = utcnow()
+            stmt = (
+                update(GenerationTask)
+                .where(
+                    GenerationTask.id == task_id,
+                    ~GenerationTask.state.in_(['success', 'fail']),
+                )
+                .values(
+                    state='fail',
+                    fail_msg=msg,
+                    fail_code=code,
+                    finished_at=utcnow(),
+                )
+                .returning(GenerationTask.id)
+            )
+            result = await session.execute(stmt)
+            updated = result.scalar_one_or_none()
+            if not updated:
+                await session.rollback()
+                return False
             await session.commit()
+            return True
 
     async def _mark_pending(self, task_id: int) -> None:
         async with self.sessionmaker() as session:
             task = await session.get(GenerationTask, task_id)
             if not task:
                 return
+            if task.state in ('success', 'fail'):
+                return
             task.state = 'pending'
             await session.commit()
+
+    async def _get_task_context_by_provider_task_id(
+        self,
+        provider_task_id: str,
+    ) -> tuple[GenerationTask | None, Generation | None, User | None]:
+        async with self.sessionmaker() as session:
+            result = await session.execute(
+                select(GenerationTask)
+                .where(GenerationTask.task_id == provider_task_id)
+                .order_by(GenerationTask.id.desc())
+                .limit(1)
+            )
+            task = result.scalar_one_or_none()
+            if not task:
+                return None, None, None
+
+            generation = await session.get(Generation, task.generation_id)
+            if not generation:
+                return task, None, None
+            user = await session.get(User, generation.user_id)
+            return task, generation, user
 
     async def _update_generation_status(self, generation_id: int) -> None:
         async with self.sessionmaker() as session:

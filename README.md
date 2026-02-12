@@ -4,6 +4,7 @@
 
 ## Возможности
 - Генерация через Kie.ai (Nano Banana / Nano Banana Pro)
+- Асинхронная обработка Kie через Webhook + fallback polling
 - Кредиты и журнал транзакций (append-only)
 - Платежи Telegram Stars (XTR)
 - Реферальные и промо‑коды
@@ -59,6 +60,24 @@ python -m app.main
 ## Настройка Telegram Stars
 - Валюта: `XTR`
 - Для Stars `STARS_PROVIDER_TOKEN` можно оставить пустым.
+
+## Настройка Kie.ai Webhook (рекомендуется)
+1. Заполните в `.env`:
+
+```env
+KIE_CALLBACK_URL=https://<your-domain>/api/providers/kie/webhook
+KIE_WEBHOOK_HMAC_KEY=<your_kie_webhook_hmac_key>
+KIE_WEBHOOK_REQUIRE_SIGNATURE=true
+KIE_WEBHOOK_MAX_SKEW_SECONDS=300
+```
+
+2. В Kie.ai откройте Settings и:
+- включите callback URL `https://<your-domain>/api/providers/kie/webhook` (или alias `https://<your-domain>/kie/webhook`);
+- включите HMAC и используйте тот же ключ в `KIE_WEBHOOK_HMAC_KEY`.
+
+3. Важно:
+- Webhook универсальный для любых моделей Kie (вся маршрутизация идет по `task_id`);
+- polling остается как fallback, чтобы не терять задачи при временных сетевых ошибках.
 
 ## Настройка Crypto Pay
 1. В `@CryptoBot` создайте app и получите `API Token`.

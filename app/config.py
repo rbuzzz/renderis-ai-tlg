@@ -21,6 +21,10 @@ class Settings(BaseSettings):
 
     # Kie.ai
     kie_api_key: str = Field(..., alias='KIE_API_KEY')
+    kie_callback_url: str = Field('', alias='KIE_CALLBACK_URL')
+    kie_webhook_hmac_key: str = Field('', alias='KIE_WEBHOOK_HMAC_KEY')
+    kie_webhook_require_signature: bool = Field(True, alias='KIE_WEBHOOK_REQUIRE_SIGNATURE')
+    kie_webhook_max_skew_seconds: int = Field(300, alias='KIE_WEBHOOK_MAX_SKEW_SECONDS')
 
     # Payments (Stars)
     stars_provider_token: str = Field('', alias='STARS_PROVIDER_TOKEN')
