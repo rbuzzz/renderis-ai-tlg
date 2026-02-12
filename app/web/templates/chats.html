@@ -187,6 +187,20 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .chat-clear-attach {
+    display: none;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid #2b3f59;
+    background: #1a2d44;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.1;
+  }
+  .chat-clear-attach:hover {
+    background: #243c59;
+    color: var(--text);
+  }
   @media (max-width: 980px) {
     .chat-grid { grid-template-columns: 1fr; }
     .chat-list {
@@ -254,6 +268,7 @@
         <div class="chat-input-tools">
           <button id="chatAttach" type="button">📎 Фото</button>
           <span id="chatFileName" class="chat-file-label"></span>
+          <button id="chatClearAttach" type="button" class="chat-clear-attach">Убрать</button>
         </div>
         <input id="chatInput" placeholder="Введите сообщение..." />
         <button id="chatSend">Отправить</button>
@@ -278,6 +293,7 @@
   const chatFile = document.getElementById('chatFile');
   const chatAttach = document.getElementById('chatAttach');
   const chatFileName = document.getElementById('chatFileName');
+  const chatClearAttach = document.getElementById('chatClearAttach');
   const chatSend = document.getElementById('chatSend');
   const chatStatus = document.getElementById('chatStatus');
   const imagePreviewModal = document.getElementById('imagePreviewModal');
@@ -319,6 +335,11 @@
   function setFileLabel() {
     if (!chatFileName) return;
     chatFileName.textContent = pendingImageFile ? pendingImageFile.name : '';
+    if (chatClearAttach) {
+      const hasFile = !!pendingImageFile;
+      chatClearAttach.style.display = hasFile ? 'inline-flex' : 'none';
+      chatClearAttach.disabled = !hasFile;
+    }
   }
 
   function isImageFile(file) {
@@ -659,6 +680,12 @@
         return;
       }
       setPendingImage(file);
+    });
+  }
+  if (chatClearAttach) {
+    chatClearAttach.addEventListener('click', () => {
+      clearPendingImage();
+      setStatus('Вложение удалено.');
     });
   }
   if (chatInput) {
