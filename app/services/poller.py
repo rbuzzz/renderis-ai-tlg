@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import mimetypes
 import os
+import tempfile
 import time
 from datetime import timedelta
 from typing import Dict, List, Optional
+from urllib.parse import urlparse
 
+import httpx
 from aiogram import Bot
+from aiogram.types import FSInputFile
 from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -399,19 +404,40 @@ class PollManager:
         if not urls:
             await self.bot.send_message(user.telegram_id, t(lang, "result_no_urls"))
             return
+        downloaded_files: Dict[str, Optional[str]] = {}
         try:
             prompt_short = clamp_text(generation.prompt or '', 800)
             caption = tf(lang, "result_caption", prompt=escape_html(prompt_short))
             for url in urls:
+                doc_sent = False
                 try:
                     await self.bot.send_document(user.telegram_id, url, caption=t(lang, "result_original"))
+                    doc_sent = True
                 except Exception as exc:
                     logger.warning('send_document_failed', url=url, error=str(exc))
+                    local_file = await self._ensure_local_media(url, downloaded_files)
+                    if local_file:
+                        try:
+                            await self.bot.send_document(user.telegram_id, FSInputFile(local_file), caption=t(lang, "result_original"))
+                            doc_sent = True
+                        except Exception as upload_exc:
+                            logger.warning('send_document_upload_failed', url=url, error=str(upload_exc))
+                photo_sent = False
                 if self._is_image_url(url):
                     try:
                         await self.bot.send_photo(user.telegram_id, url, caption=caption)
+                        photo_sent = True
                     except Exception as exc:
                         logger.warning('send_photo_failed', url=url, error=str(exc))
+                        local_file = await self._ensure_local_media(url, downloaded_files)
+                        if local_file:
+                            try:
+                                await self.bot.send_photo(user.telegram_id, FSInputFile(local_file), caption=caption)
+                                photo_sent = True
+                            except Exception as upload_exc:
+                                logger.warning('send_photo_upload_failed', url=url, error=str(upload_exc))
+                if not doc_sent and not photo_sent:
+                    await self.bot.send_message(user.telegram_id, f"{t(lang, 'result_original')}: {url}", disable_web_page_preview=True)
             await self.bot.send_message(
                 user.telegram_id,
                 t(lang, "result_next"),
@@ -420,11 +446,55 @@ class PollManager:
         except Exception as exc:
             logger.warning('deliver_failed', error=str(exc))
             await self.bot.send_message(user.telegram_id, t(lang, "result_send_failed"))
+        finally:
+            for file_path in downloaded_files.values():
+                if not file_path:
+                    continue
+                try:
+                    os.remove(file_path)
+                except OSError:
+                    pass
 
     @staticmethod
     def _is_image_url(url: str) -> bool:
-        lowered = url.lower()
-        return lowered.endswith(('.png', '.jpg', '.jpeg', '.webp'))
+        path = urlparse(url).path.lower()
+        return path.endswith(('.png', '.jpg', '.jpeg', '.webp'))
+
+    async def _ensure_local_media(self, url: str, cache: Dict[str, Optional[str]]) -> Optional[str]:
+        if url in cache:
+            return cache[url]
+        local_path = await self._download_media_to_temp(url)
+        cache[url] = local_path
+        return local_path
+
+    async def _download_media_to_temp(self, url: str) -> Optional[str]:
+        try:
+            timeout = httpx.Timeout(connect=10.0, read=60.0, write=30.0, pool=10.0)
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                suffix = self._media_suffix(url, resp.headers.get("content-type"))
+                fd, path = tempfile.mkstemp(prefix="renderis_media_", suffix=suffix)
+                os.close(fd)
+                with open(path, "wb") as f:
+                    f.write(resp.content)
+                return path
+        except Exception as exc:
+            logger.warning('media_download_failed', url=url, error=str(exc))
+            return None
+
+    @staticmethod
+    def _media_suffix(url: str, content_type: Optional[str]) -> str:
+        parsed = urlparse(url)
+        ext = os.path.splitext(parsed.path)[1]
+        if ext:
+            return ext[:10]
+        if content_type:
+            ctype = content_type.split(";")[0].strip().lower()
+            guessed = mimetypes.guess_extension(ctype)
+            if guessed:
+                return guessed
+        return ".bin"
 
     async def _notify_failure(self, user: User, msg: Optional[str]) -> None:
         lang = normalize_lang((user.settings or {}).get("lang"))
