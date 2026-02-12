@@ -321,7 +321,6 @@ async def pay_cryptopay_product(callback: CallbackQuery, session: AsyncSession) 
     amount = get_product_usd_price(product, stars_per_credit, usd_per_star)
 
     local_order_id = f"cp_bot_{uuid.uuid4().hex[:20]}"
-    invoice_payload = f"user={user.id};product={product.id};order={local_order_id}"
     description = f"{product.title} - {credits_total} credits"
     client = CryptoPayClient(
         api_token=settings.cryptopay_api_token,
@@ -334,7 +333,7 @@ async def pay_cryptopay_product(callback: CallbackQuery, session: AsyncSession) 
             fiat=settings.cryptopay_fiat,
             accepted_assets=settings.cryptopay_accepted_assets or None,
             description=description,
-            payload=invoice_payload,
+            payload=local_order_id,
             expires_in=settings.cryptopay_expires_in,
             allow_comments=False,
             allow_anonymous=True,
@@ -411,6 +410,11 @@ async def pay_cryptopay_check(callback: CallbackQuery, session: AsyncSession) ->
         await callback.answer(t(lang, "payment_invalid"), show_alert=True)
         return
 
+    if order.status == "paid":
+        await callback.message.answer(tf(lang, "payment_success", credits=int(order.credits_amount or 0)))
+        await callback.answer()
+        return
+
     client = CryptoPayClient(
         api_token=settings.cryptopay_api_token,
         base_url=settings.cryptopay_base_url,
@@ -418,9 +422,17 @@ async def pay_cryptopay_check(callback: CallbackQuery, session: AsyncSession) ->
     try:
         invoice = await client.get_invoice(order.provider_payment_charge_id)
     except CryptoPayError:
+        if order.status == "paid":
+            await callback.message.answer(tf(lang, "payment_success", credits=int(order.credits_amount or 0)))
+            await callback.answer()
+            return
         await callback.answer(t(lang, "cryptopay_status_failed"), show_alert=True)
         return
     if not invoice:
+        if order.status == "paid":
+            await callback.message.answer(tf(lang, "payment_success", credits=int(order.credits_amount or 0)))
+            await callback.answer()
+            return
         await callback.answer(t(lang, "cryptopay_status_failed"), show_alert=True)
         return
 
@@ -429,10 +441,8 @@ async def pay_cryptopay_check(callback: CallbackQuery, session: AsyncSession) ->
         payments = PaymentsService(session)
         paid_now, credited = await payments.settle_cryptopay_order(order)
         await session.commit()
-        if paid_now:
-            await callback.message.answer(tf(lang, "payment_success", credits=credited))
-        else:
-            await callback.message.answer(t(lang, "payment_processed"))
+        credited_total = credited if paid_now else int(order.credits_amount or 0)
+        await callback.message.answer(tf(lang, "payment_success", credits=credited_total))
         await callback.answer()
         return
 

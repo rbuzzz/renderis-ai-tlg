@@ -74,6 +74,26 @@ def _invoice_status_from_info(info: dict[str, Any] | None) -> str:
     return _normalize_invoice_status(info.get("status") or info.get("invoice_status") or info.get("status_invoice"))
 
 
+def _cryptopay_payload_order_id(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith("cp_"):
+        return raw
+
+    normalized = raw.replace("&", ";")
+    for chunk in normalized.split(";"):
+        piece = chunk.strip()
+        if not piece or "=" not in piece:
+            continue
+        key, data = piece.split("=", 1)
+        if key.strip().lower() == "order":
+            candidate = data.strip()
+            if candidate.startswith("cp_"):
+                return candidate
+    return ""
+
+
 async def _cryptocloud_pricing(session) -> tuple[float, float]:
     settings_service = AppSettingsService(session)
     stars_per_credit = await settings_service.get_float("stars_per_credit", 2.0)
@@ -721,7 +741,7 @@ def create_app() -> FastAPI:
             return {"ok": True}
 
         invoice_id = str(payload.get("invoice_id") or "").strip()
-        local_order_id = str(payload.get("payload") or "").strip()
+        local_order_id = _cryptopay_payload_order_id(payload.get("payload"))
 
         async with app.state.sessionmaker() as session:
             order: Order | None = None
