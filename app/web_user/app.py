@@ -8,7 +8,7 @@ import json
 import os
 import time
 import uuid
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlparse
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -131,6 +131,54 @@ def _verify_telegram_auth(data: Dict[str, Any], token: str) -> bool:
     secret_key = hashlib.sha256(token.encode()).digest()
     calculated = hmac.new(secret_key, check_string.encode(), hashlib.sha256).hexdigest()
     return hmac.compare_digest(calculated, received_hash)
+
+
+def _verify_telegram_webapp_init_data(init_data: str, token: str) -> tuple[bool, Dict[str, Any]]:
+    raw = (init_data or "").strip()
+    if not raw:
+        return False, {}
+
+    try:
+        pairs = parse_qsl(raw, keep_blank_values=True)
+    except Exception:
+        return False, {}
+    if not pairs:
+        return False, {}
+
+    data_check: Dict[str, str] = {}
+    received_hash = ""
+    for key, value in pairs:
+        if key == "hash":
+            received_hash = value
+            continue
+        data_check[key] = value
+
+    if not received_hash:
+        return False, {}
+
+    auth_date_raw = data_check.get("auth_date", "")
+    try:
+        auth_date = int(auth_date_raw) if auth_date_raw else 0
+    except (TypeError, ValueError):
+        return False, {}
+    if auth_date and int(time.time()) - auth_date > 86400:
+        return False, {}
+
+    check_string = "\n".join(f"{k}={v}" for k, v in sorted(data_check.items()))
+    secret_key = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
+    calculated = hmac.new(secret_key, check_string.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(calculated, received_hash):
+        return False, {}
+
+    payload: Dict[str, Any] = dict(data_check)
+    user_raw = payload.get("user", "")
+    if user_raw:
+        try:
+            payload["user"] = json.loads(user_raw)
+        except json.JSONDecodeError:
+            return False, {}
+
+    return True, payload
 
 
 def _option_label(lang: str, key: str) -> str:
@@ -508,6 +556,55 @@ def create_app() -> FastAPI:
         request.session["user_id"] = int(data["id"])
         request.session["lang"] = lang
         request.session["username"] = data.get("username")
+        return {"ok": True}
+
+    @app.post("/auth/miniapp")
+    async def auth_miniapp(request: Request):
+        payload = await request.json()
+        init_data = str(payload.get("init_data") or "").strip()
+        if not init_data:
+            return JSONResponse({"error": "init_data_required"}, status_code=400)
+
+        valid, parsed = _verify_telegram_webapp_init_data(init_data, settings.bot_token)
+        if not valid:
+            return JSONResponse({"error": "invalid"}, status_code=400)
+
+        user_data = parsed.get("user")
+        if not isinstance(user_data, dict):
+            return JSONResponse({"error": "user_required"}, status_code=400)
+
+        try:
+            telegram_id = int(user_data.get("id") or 0)
+        except (TypeError, ValueError):
+            return JSONResponse({"error": "invalid_user_id"}, status_code=400)
+        if telegram_id <= 0:
+            return JSONResponse({"error": "invalid_user_id"}, status_code=400)
+
+        lang = normalize_lang(user_data.get("language_code") or parsed.get("language_code"))
+        first_name = str(user_data.get("first_name") or "").strip()
+        last_name = str(user_data.get("last_name") or "").strip()
+        photo_url = str(user_data.get("photo_url") or "").strip()
+        username = str(user_data.get("username") or "").strip() or None
+
+        async with app.state.sessionmaker() as session:
+            credits = CreditsService(session)
+            is_admin = telegram_id in settings.admin_ids()
+            user = await credits.ensure_user(telegram_id, username, is_admin)
+            settings_payload = dict(user.settings or {})
+            settings_payload["lang"] = lang
+            if first_name:
+                settings_payload["first_name"] = first_name
+            if last_name:
+                settings_payload["last_name"] = last_name
+            if photo_url:
+                settings_payload["photo_url"] = photo_url
+            user.settings = settings_payload
+            await credits.apply_signup_bonus(user, settings.signup_bonus_credits)
+            await session.commit()
+
+        request.session["user_id"] = telegram_id
+        request.session["lang"] = lang
+        request.session["username"] = username
         return {"ok": True}
 
     @app.get("/logout")

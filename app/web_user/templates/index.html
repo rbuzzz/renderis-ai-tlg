@@ -1213,6 +1213,7 @@
       </div>
     {% endif %}
 
+    <script src="https://telegram.org/js/telegram-web-app.js?59"></script>
     <script>
       const labels = {{ labels | tojson }};
       const loggedIn = {{ 'true' if logged_in else 'false' }};
@@ -2305,11 +2306,44 @@
         renderRefGrid();
       });
 
-      loadMe();
-      loadModels();
-      loadHistory();
-      setInterval(loadHistory, 15000);
       let quoteTimer = null;
+
+      async function maybeAutoMiniAppAuth() {
+        if (loggedIn) return false;
+        const webApp = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+        if (!webApp) return false;
+        try {
+          webApp.ready();
+          webApp.expand();
+        } catch (e) {
+          // no-op
+        }
+        const initData = (webApp.initData || '').trim();
+        if (!initData) return false;
+        try {
+          const res = await fetch('/auth/miniapp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ init_data: initData }),
+          });
+          if (res.ok) {
+            window.location.reload();
+            return true;
+          }
+        } catch (err) {
+          console.warn('miniapp auth failed', err);
+        }
+        return false;
+      }
+
+      (async () => {
+        const reloading = await maybeAutoMiniAppAuth();
+        if (reloading) return;
+        loadMe();
+        loadModels();
+        loadHistory();
+        setInterval(loadHistory, 15000);
+      })();
 
       async function updateQuote() {
         const quoteLine = document.getElementById('quoteLine');
