@@ -75,6 +75,11 @@
     flex-direction: column;
     height: 72vh;
     min-height: 380px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .chat-pane.dragover {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(92, 225, 155, 0.25) inset;
   }
   .chat-messages {
     flex: 1;
@@ -241,7 +246,7 @@
       <header>Диалоги</header>
       <div class="chat-items" id="chatItems"></div>
     </div>
-    <div class="chat-pane">
+    <div class="chat-pane" id="chatPane">
       <header id="chatHeader">Выберите чат</header>
       <div class="chat-messages" id="chatMessages"></div>
       <div class="chat-input">
@@ -266,6 +271,7 @@
 <script>
   const canManage = {{ "true" if can_manage else "false" }};
   const chatItems = document.getElementById('chatItems');
+  const chatPane = document.getElementById('chatPane');
   const chatMessages = document.getElementById('chatMessages');
   const chatHeader = document.getElementById('chatHeader');
   const chatInput = document.getElementById('chatInput');
@@ -280,6 +286,8 @@
   let currentThread = null;
   let currentThreadUserId = null;
   let currentThreadLabel = '';
+  let pendingImageFile = null;
+  let dragCounter = 0;
 
   function openImagePreview(src, alt) {
     if (!imagePreviewModal || !imagePreviewImg) return;
@@ -309,9 +317,69 @@
   }
 
   function setFileLabel() {
-    if (!chatFileName || !chatFile) return;
-    const file = chatFile.files && chatFile.files[0];
-    chatFileName.textContent = file ? file.name : '';
+    if (!chatFileName) return;
+    chatFileName.textContent = pendingImageFile ? pendingImageFile.name : '';
+  }
+
+  function isImageFile(file) {
+    return !!(file && file.type && file.type.toLowerCase().startsWith('image/'));
+  }
+
+  function syncFileInput(file) {
+    if (!chatFile) return;
+    if (!file) {
+      chatFile.value = '';
+      return;
+    }
+    try {
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      chatFile.files = transfer.files;
+    } catch (err) {
+      // ignore browser limitations; pendingImageFile is the source of truth
+    }
+  }
+
+  function setPendingImage(file) {
+    if (!isImageFile(file)) {
+      setStatus('Поддерживаются только изображения.', true);
+      return;
+    }
+    pendingImageFile = file;
+    syncFileInput(file);
+    setFileLabel();
+    setStatus(`Фото прикреплено: ${file.name}`);
+  }
+
+  function clearPendingImage() {
+    pendingImageFile = null;
+    syncFileInput(null);
+    setFileLabel();
+  }
+
+  function extractImageFromDataTransfer(dataTransfer) {
+    if (!dataTransfer) return null;
+    if (dataTransfer.items && dataTransfer.items.length) {
+      for (const item of dataTransfer.items) {
+        if (item.kind === 'file') {
+          const file = item.getAsFile();
+          if (isImageFile(file)) return file;
+        }
+      }
+    }
+    if (dataTransfer.files && dataTransfer.files.length) {
+      for (const file of dataTransfer.files) {
+        if (isImageFile(file)) return file;
+      }
+    }
+    return null;
+  }
+
+  function resetDragState() {
+    dragCounter = 0;
+    if (chatPane) {
+      chatPane.classList.remove('dragover');
+    }
   }
 
   function renderChatHeader() {
@@ -375,6 +443,56 @@
     renderChatHeader();
     await loadThreads();
     setStatus('Чат удалён.');
+  }
+
+  function handlePasteImage(event) {
+    if (!currentThread) return;
+    const file = extractImageFromDataTransfer(event.clipboardData);
+    if (!file) return;
+    event.preventDefault();
+    setPendingImage(file);
+  }
+
+  function handleDragEnter(event) {
+    if (!chatPane) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragCounter += 1;
+    chatPane.classList.add('dragover');
+  }
+
+  function handleDragOver(event) {
+    if (!chatPane) return;
+    event.preventDefault();
+    event.stopPropagation();
+    chatPane.classList.add('dragover');
+  }
+
+  function handleDragLeave(event) {
+    if (!chatPane) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragCounter = Math.max(0, dragCounter - 1);
+    if (dragCounter === 0) {
+      chatPane.classList.remove('dragover');
+    }
+  }
+
+  function handleDropImage(event) {
+    if (!chatPane) return;
+    event.preventDefault();
+    event.stopPropagation();
+    resetDragState();
+    if (!currentThread) {
+      setStatus('Сначала выберите чат.', true);
+      return;
+    }
+    const file = extractImageFromDataTransfer(event.dataTransfer);
+    if (!file) {
+      setStatus('Перетащите изображение (PNG/JPG/WebP/GIF/BMP).', true);
+      return;
+    }
+    setPendingImage(file);
   }
 
   async function loadThreads() {
@@ -479,6 +597,8 @@
     currentThread = threadId;
     currentThreadLabel = label || '';
     currentThreadUserId = userId || null;
+    clearPendingImage();
+    resetDragState();
     renderChatHeader();
     await loadMessages(true);
     await loadThreads();
@@ -487,7 +607,7 @@
   async function sendMessage() {
     if (!currentThread) return;
     const text = (chatInput.value || '').trim();
-    const image = chatFile && chatFile.files ? chatFile.files[0] : null;
+    const image = pendingImageFile;
     if (!text && !image) return;
     chatSend.disabled = true;
     if (chatAttach) chatAttach.disabled = true;
@@ -520,10 +640,7 @@
         return;
       }
       chatInput.value = '';
-      if (chatFile) {
-        chatFile.value = '';
-      }
-      setFileLabel();
+      clearPendingImage();
       setStatus('');
       await loadMessages(true);
     } finally {
@@ -535,7 +652,24 @@
   chatSend.onclick = sendMessage;
   if (chatAttach && chatFile) {
     chatAttach.onclick = () => chatFile.click();
-    chatFile.addEventListener('change', setFileLabel);
+    chatFile.addEventListener('change', () => {
+      const file = chatFile.files && chatFile.files[0] ? chatFile.files[0] : null;
+      if (!file) {
+        clearPendingImage();
+        return;
+      }
+      setPendingImage(file);
+    });
+  }
+  if (chatInput) {
+    chatInput.addEventListener('paste', handlePasteImage);
+  }
+  if (chatPane) {
+    chatPane.addEventListener('paste', handlePasteImage);
+    chatPane.addEventListener('dragenter', handleDragEnter);
+    chatPane.addEventListener('dragover', handleDragOver);
+    chatPane.addEventListener('dragleave', handleDragLeave);
+    chatPane.addEventListener('drop', handleDropImage);
   }
   if (imagePreviewClose) {
     imagePreviewClose.addEventListener('click', closeImagePreview);
