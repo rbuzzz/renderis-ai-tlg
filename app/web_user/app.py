@@ -38,7 +38,9 @@ from app.services.payments import PaymentsService
 from app.services.poller import PollManager
 from app.services.promos import PromoService
 from app.services.app_settings import AppSettingsService
+from app.services.brain import AIBrainService, BrainProviderError
 from app.services.product_pricing import get_product_credits, get_product_stars_price, get_product_usd_price
+from app.services.rate_limit import RateLimiter
 from app.utils.text import clamp_text
 from app.utils.time import utcnow
 
@@ -373,6 +375,7 @@ def create_app() -> FastAPI:
     app.state.sessionmaker = create_sessionmaker()
     app.state.user_web_poller = None
     app.state.user_web_poller_task = None
+    app.state.brain_rate_limiter = RateLimiter(2)
 
     @app.on_event("startup")
     async def startup() -> None:
@@ -669,6 +672,19 @@ def create_app() -> FastAPI:
             display_name = " ".join([part for part in [first_name, last_name] if part]) or user.username or str(
                 user.telegram_id
             )
+            brain_service = AIBrainService(
+                session,
+                openai_api_key=settings.openai_api_key,
+                openai_base_url=settings.openai_base_url,
+            )
+            brain_cfg = await brain_service.get_config()
+            brain_daily_used = await brain_service.get_daily_success_count(user.id)
+            brain_pack_remaining = await brain_service.get_remaining_improvements(user.id)
+            brain_daily_limit = max(0, int(brain_cfg.daily_limit_per_user or 0))
+            if brain_daily_limit > 0:
+                brain_daily_remaining = max(0, brain_daily_limit - brain_daily_used)
+            else:
+                brain_daily_remaining = None
             return {
                 "telegram_id": user.telegram_id,
                 "username": user.username,
@@ -678,6 +694,17 @@ def create_app() -> FastAPI:
                 "lang": user.settings.get("lang", "ru"),
                 "max_outputs": settings.max_outputs_per_request,
                 "generation_count": generation_count,
+                "ai_brain": {
+                    "enabled": bool(brain_cfg.enabled) and bool(settings.openai_api_key.strip()),
+                    "openai_ready": bool(settings.openai_api_key.strip()),
+                    "price_per_improve": max(0, int(brain_cfg.price_per_improve or 0)),
+                    "daily_limit_per_user": brain_daily_limit,
+                    "daily_used": brain_daily_used,
+                    "daily_remaining": brain_daily_remaining,
+                    "pack_remaining": brain_pack_remaining,
+                    "pack_price_credits": max(0, int(brain_cfg.pack_price_credits or 0)),
+                    "pack_size_improvements": max(1, int(brain_cfg.pack_size_improvements or 1)),
+                },
             }
 
     @app.post("/api/providers/kie/webhook")
@@ -1301,6 +1328,317 @@ def create_app() -> FastAPI:
                 },
             }
 
+    @app.post("/api/brain/improve")
+    async def api_brain_improve(request: Request):
+        if not _is_logged_in(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+        raw_prompt = str((data or {}).get("prompt") or "")
+        prompt = raw_prompt.strip()
+
+        async with app.state.sessionmaker() as session:
+            credits = CreditsService(session)
+            user = await credits.get_user(int(request.session["user_id"]))
+            if not user:
+                return JSONResponse({"error": "user_not_found"}, status_code=404)
+
+            brain = AIBrainService(
+                session,
+                openai_api_key=settings.openai_api_key,
+                openai_base_url=settings.openai_base_url,
+            )
+            config = await brain.get_config()
+            action_id = uuid.uuid4().hex
+            model_name = (config.openai_model or "gpt-4o-mini").strip()
+            temperature = float(config.temperature or 0.7)
+            max_tokens = max(1, int(config.max_tokens or 600))
+            price_per_improve = max(0, int(config.price_per_improve or 0))
+            if not prompt:
+                await brain.log_improve(
+                    user_id=user.id,
+                    action="improve_prompt",
+                    status="rejected",
+                    source="none",
+                    spent_credits=0,
+                    prompt_original=raw_prompt,
+                    prompt_result=None,
+                    model=model_name,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    error_code="prompt_required",
+                    error_message="Prompt is empty",
+                    meta={},
+                )
+                await session.commit()
+                return JSONResponse({"error": "prompt_required"}, status_code=400)
+            if settings.max_prompt_length > 0 and len(raw_prompt) > settings.max_prompt_length:
+                await brain.log_improve(
+                    user_id=user.id,
+                    action="improve_prompt",
+                    status="rejected",
+                    source="none",
+                    spent_credits=0,
+                    prompt_original=raw_prompt,
+                    prompt_result=None,
+                    model=model_name,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    error_code="prompt_too_long",
+                    error_message=f"Prompt length exceeds limit: {settings.max_prompt_length}",
+                    meta={"max_prompt_length": settings.max_prompt_length},
+                )
+                await session.commit()
+                return JSONResponse({"error": "prompt_too_long"}, status_code=400)
+            meta_base = {
+                "request_id": action_id,
+                "ip": request.client.host if request.client else "",
+                "user_agent": str(request.headers.get("user-agent") or "")[:255],
+            }
+
+            if not config.enabled or not settings.openai_api_key.strip():
+                await brain.log_improve(
+                    user_id=user.id,
+                    action="improve_prompt",
+                    status="rejected",
+                    source="none",
+                    spent_credits=0,
+                    prompt_original=prompt,
+                    prompt_result=None,
+                    model=model_name,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    error_code="brain_disabled",
+                    error_message="AI Brain feature is disabled or OpenAI key is not configured",
+                    meta=meta_base,
+                )
+                await session.commit()
+                return JSONResponse({"error": "brain_disabled"}, status_code=503)
+
+            rate_limiter = app.state.brain_rate_limiter
+            if rate_limiter and not rate_limiter.allow(int(user.id)):
+                await brain.log_improve(
+                    user_id=user.id,
+                    action="improve_prompt",
+                    status="rejected",
+                    source="none",
+                    spent_credits=0,
+                    prompt_original=prompt,
+                    prompt_result=None,
+                    model=model_name,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    error_code="rate_limited",
+                    error_message="Too many requests",
+                    meta=meta_base,
+                )
+                await session.commit()
+                return JSONResponse({"error": "rate_limited"}, status_code=429)
+
+            daily_used = await brain.get_daily_success_count(user.id)
+            daily_limit = max(0, int(config.daily_limit_per_user or 0))
+            if daily_limit > 0 and daily_used >= daily_limit:
+                await brain.log_improve(
+                    user_id=user.id,
+                    action="improve_prompt",
+                    status="rejected",
+                    source="none",
+                    spent_credits=0,
+                    prompt_original=prompt,
+                    prompt_result=None,
+                    model=model_name,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    error_code="daily_limit_reached",
+                    error_message=f"Daily limit reached: {daily_limit}",
+                    meta={**meta_base, "daily_used": daily_used, "daily_limit": daily_limit},
+                )
+                await session.commit()
+                return JSONResponse({"error": "daily_limit_reached"}, status_code=429)
+
+            pack_remaining_before = await brain.get_remaining_improvements(user.id)
+            if pack_remaining_before <= 0 and price_per_improve > 0 and int(user.balance_credits or 0) < price_per_improve:
+                await brain.log_improve(
+                    user_id=user.id,
+                    action="improve_prompt",
+                    status="rejected",
+                    source="none",
+                    spent_credits=0,
+                    prompt_original=prompt,
+                    prompt_result=None,
+                    model=model_name,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    error_code="insufficient_credits",
+                    error_message="Not enough credits for prompt improvement",
+                    meta=meta_base,
+                )
+                await session.commit()
+                return JSONResponse({"error": "insufficient_credits"}, status_code=400)
+
+            try:
+                improved_prompt = await brain.improvePrompt(prompt, config)
+            except BrainProviderError as exc:
+                await brain.log_improve(
+                    user_id=user.id,
+                    action="improve_prompt",
+                    status="error",
+                    source="none",
+                    spent_credits=0,
+                    prompt_original=prompt,
+                    prompt_result=None,
+                    model=model_name,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    error_code=exc.code,
+                    error_message=exc.message,
+                    meta=meta_base,
+                )
+                await session.commit()
+                return JSONResponse({"error": "brain_provider_error"}, status_code=502)
+
+            improved_prompt = clamp_text(improved_prompt or "", settings.max_prompt_length).strip()
+            if not improved_prompt:
+                await brain.log_improve(
+                    user_id=user.id,
+                    action="improve_prompt",
+                    status="error",
+                    source="none",
+                    spent_credits=0,
+                    prompt_original=prompt,
+                    prompt_result=None,
+                    model=model_name,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    error_code="empty_improved_prompt",
+                    error_message="Provider returned empty prompt",
+                    meta=meta_base,
+                )
+                await session.commit()
+                return JSONResponse({"error": "brain_provider_error"}, status_code=502)
+
+            try:
+                charge = await brain.consume_for_improvement(
+                    user,
+                    price_per_improve=price_per_improve,
+                    request_id=action_id,
+                )
+            except ValueError:
+                await brain.log_improve(
+                    user_id=user.id,
+                    action="improve_prompt",
+                    status="rejected",
+                    source="none",
+                    spent_credits=0,
+                    prompt_original=prompt,
+                    prompt_result=None,
+                    model=model_name,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    error_code="insufficient_credits",
+                    error_message="Not enough credits after provider response",
+                    meta=meta_base,
+                )
+                await session.commit()
+                return JSONResponse({"error": "insufficient_credits"}, status_code=400)
+
+            await brain.log_improve(
+                user_id=user.id,
+                action="improve_prompt",
+                status="success",
+                source=charge.source,
+                spent_credits=charge.spent_credits,
+                prompt_original=prompt,
+                prompt_result=improved_prompt,
+                model=model_name,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                meta={
+                    **meta_base,
+                    "daily_used_after": daily_used + 1,
+                    "daily_limit": daily_limit,
+                    "pack_remaining_before": pack_remaining_before,
+                    "pack_remaining_after": charge.remaining_improvements,
+                },
+            )
+            await session.commit()
+            return {
+                "ok": True,
+                "improved_prompt": improved_prompt,
+                "spent_credits": charge.spent_credits,
+                "charged_from": charge.source,
+                "balance": charge.balance_credits,
+                "remaining_improvements": charge.remaining_improvements,
+                "daily_used": daily_used + 1,
+                "daily_limit_per_user": daily_limit,
+                "price_per_improve": price_per_improve,
+            }
+
+    @app.post("/api/brain/pack/buy")
+    async def api_brain_buy_pack(request: Request):
+        if not _is_logged_in(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+        async with app.state.sessionmaker() as session:
+            credits = CreditsService(session)
+            user = await credits.get_user(int(request.session["user_id"]))
+            if not user:
+                return JSONResponse({"error": "user_not_found"}, status_code=404)
+
+            brain = AIBrainService(
+                session,
+                openai_api_key=settings.openai_api_key,
+                openai_base_url=settings.openai_base_url,
+            )
+            config = await brain.get_config()
+            if not config.enabled:
+                return JSONResponse({"error": "brain_disabled"}, status_code=503)
+
+            pack_price = max(0, int(config.pack_price_credits or 0))
+            pack_size = max(1, int(config.pack_size_improvements or 1))
+            if pack_price > 0 and int(user.balance_credits or 0) < pack_price:
+                return JSONResponse({"error": "insufficient_credits"}, status_code=400)
+
+            action_id = uuid.uuid4().hex
+            try:
+                charge = await brain.purchase_pack(
+                    user,
+                    pack_price_credits=pack_price,
+                    pack_size_improvements=pack_size,
+                    request_id=action_id,
+                )
+            except ValueError:
+                return JSONResponse({"error": "insufficient_credits"}, status_code=400)
+
+            await brain.log_improve(
+                user_id=user.id,
+                action="buy_pack",
+                status="success",
+                source=charge.source,
+                spent_credits=charge.spent_credits,
+                prompt_original="(pack_purchase)",
+                prompt_result=None,
+                model=(config.openai_model or "gpt-4o-mini").strip(),
+                temperature=float(config.temperature or 0.7),
+                max_tokens=max(1, int(config.max_tokens or 600)),
+                meta={
+                    "request_id": action_id,
+                    "pack_size": pack_size,
+                    "pack_price": pack_price,
+                },
+            )
+            await session.commit()
+            return {
+                "ok": True,
+                "pack_size_improvements": pack_size,
+                "pack_price_credits": pack_price,
+                "remaining_improvements": charge.remaining_improvements,
+                "balance": charge.balance_credits,
+            }
+
     @app.post("/api/redeem")
     async def api_redeem(request: Request, code: str = Form("")):
         if not _is_logged_in(request):
@@ -1618,6 +1956,17 @@ def create_app() -> FastAPI:
         "prompt_history_remove",
         "prompt_length_hint",
         "prompt_too_long",
+        "brain_improve_button",
+        "brain_improve_loading",
+        "brain_restore_original",
+        "brain_improve_success",
+        "brain_unavailable",
+        "brain_daily_limit_reached",
+        "brain_not_enough_credits",
+        "brain_rate_limited",
+        "brain_failed",
+        "brain_pack_used",
+        "brain_credits_used",
         "prompt_template_logo_title",
         "prompt_template_logo_text",
         "prompt_template_social_title",

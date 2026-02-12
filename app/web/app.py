@@ -40,6 +40,7 @@ from app.db.models import (
 from app.db.session import create_sessionmaker
 from app.modelspecs.registry import list_models
 from app.services.app_settings import AppSettingsService
+from app.services.brain import AIBrainService
 from app.services.credits import CreditsService
 from app.services.kie_balance import KieBalanceService
 from app.services.promos import PromoService
@@ -2361,6 +2362,12 @@ def create_app() -> FastAPI:
                     int(favicon_path.stat().st_mtime_ns)
                 )
                 favicon_logo_url = f"/assets/favicon-logo?v={favicon_version}"
+            brain_service = AIBrainService(
+                session,
+                openai_api_key=settings.openai_api_key,
+                openai_base_url=settings.openai_base_url,
+            )
+            brain_cfg = await brain_service.get_config()
 
         return app.state.templates.TemplateResponse(
             "settings.html",
@@ -2380,6 +2387,17 @@ def create_app() -> FastAPI:
                 "site_logo_url": site_logo_url,
                 "favicon_logo_url": favicon_logo_url,
                 "logo_max_size_mb": int(MAX_LOGO_SIZE_BYTES / 1024 / 1024),
+                "openai_key_configured": bool(settings.openai_api_key.strip()),
+                "openai_base_url": settings.openai_base_url,
+                "ai_brain_enabled": bool(brain_cfg.enabled),
+                "ai_brain_model": brain_cfg.openai_model,
+                "ai_brain_temperature": float(brain_cfg.temperature or 0.7),
+                "ai_brain_max_tokens": int(brain_cfg.max_tokens or 600),
+                "ai_brain_price_per_improve": int(brain_cfg.price_per_improve or 1),
+                "ai_brain_daily_limit_per_user": int(brain_cfg.daily_limit_per_user or 20),
+                "ai_brain_pack_price_credits": int(brain_cfg.pack_price_credits or 3),
+                "ai_brain_pack_size_improvements": int(brain_cfg.pack_size_improvements or 10),
+                "ai_brain_system_prompt": brain_cfg.system_prompt,
                 "storage_usage": storage_usage,
                 "saved": bool(saved),
                 "error": (error or "").strip(),
@@ -2403,6 +2421,15 @@ def create_app() -> FastAPI:
         remove_logo: str = Form(""),
         favicon_file: UploadFile | None = File(default=None),
         remove_favicon_logo: str = Form(""),
+        ai_brain_enabled: str = Form(""),
+        ai_brain_model: str = Form(""),
+        ai_brain_temperature: str = Form(""),
+        ai_brain_max_tokens: str = Form(""),
+        ai_brain_price_per_improve: str = Form(""),
+        ai_brain_daily_limit_per_user: str = Form(""),
+        ai_brain_pack_price_credits: str = Form(""),
+        ai_brain_pack_size_improvements: str = Form(""),
+        ai_brain_system_prompt: str = Form(""),
     ):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
@@ -2412,6 +2439,11 @@ def create_app() -> FastAPI:
         async with app.state.sessionmaker() as session:
             settings_service = AppSettingsService(session)
             kie_balance_service = KieBalanceService(session)
+            brain_service = AIBrainService(
+                session,
+                openai_api_key=settings.openai_api_key,
+                openai_base_url=settings.openai_base_url,
+            )
             errors: list[str] = []
             if stars_per_credit.strip():
                 parsed = _parse_float(stars_per_credit.strip())
@@ -2465,6 +2497,38 @@ def create_app() -> FastAPI:
                     await settings_service.set("favicon_logo_version", str(int(time.time())))
                 elif favicon_error:
                     errors.append(f"favicon_logo:{favicon_error}")
+
+            current_brain_cfg = await brain_service.get_config()
+            parsed_ai_brain_temperature = _parse_float(ai_brain_temperature.strip())
+            if parsed_ai_brain_temperature is None:
+                parsed_ai_brain_temperature = float(current_brain_cfg.temperature or 0.7)
+            parsed_ai_brain_max_tokens = _parse_int(ai_brain_max_tokens.strip())
+            if parsed_ai_brain_max_tokens is None:
+                parsed_ai_brain_max_tokens = int(current_brain_cfg.max_tokens or 600)
+            parsed_ai_brain_price_per_improve = _parse_int(ai_brain_price_per_improve.strip())
+            if parsed_ai_brain_price_per_improve is None:
+                parsed_ai_brain_price_per_improve = int(current_brain_cfg.price_per_improve or 1)
+            parsed_ai_brain_daily_limit = _parse_int(ai_brain_daily_limit_per_user.strip())
+            if parsed_ai_brain_daily_limit is None:
+                parsed_ai_brain_daily_limit = int(current_brain_cfg.daily_limit_per_user or 20)
+            parsed_ai_brain_pack_price = _parse_int(ai_brain_pack_price_credits.strip())
+            if parsed_ai_brain_pack_price is None:
+                parsed_ai_brain_pack_price = int(current_brain_cfg.pack_price_credits or 3)
+            parsed_ai_brain_pack_size = _parse_int(ai_brain_pack_size_improvements.strip())
+            if parsed_ai_brain_pack_size is None:
+                parsed_ai_brain_pack_size = int(current_brain_cfg.pack_size_improvements or 10)
+
+            await brain_service.update_config(
+                enabled=ai_brain_enabled.strip() == "1",
+                openai_model=(ai_brain_model or "").strip() or current_brain_cfg.openai_model,
+                temperature=float(parsed_ai_brain_temperature),
+                max_tokens=int(parsed_ai_brain_max_tokens),
+                price_per_improve=int(parsed_ai_brain_price_per_improve),
+                daily_limit_per_user=int(parsed_ai_brain_daily_limit),
+                pack_price_credits=int(parsed_ai_brain_pack_price),
+                pack_size_improvements=int(parsed_ai_brain_pack_size),
+                system_prompt=(ai_brain_system_prompt or "").strip() or current_brain_cfg.system_prompt,
+            )
             await session.commit()
         if errors:
             return RedirectResponse(url=f"/admin/settings?error={'|'.join(errors)}", status_code=302)

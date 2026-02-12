@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     kie_webhook_require_signature: bool = Field(True, alias='KIE_WEBHOOK_REQUIRE_SIGNATURE')
     kie_webhook_max_skew_seconds: int = Field(300, alias='KIE_WEBHOOK_MAX_SKEW_SECONDS')
 
+    # OpenAI / AI Brain
+    openai_api_key: str = Field('', alias='OPENAI_API_KEY')
+    openai_base_url: str = Field('https://api.openai.com/v1', alias='OPENAI_BASE_URL')
+
     # Payments (Stars)
     stars_provider_token: str = Field('', alias='STARS_PROVIDER_TOKEN')
     stars_currency: str = Field('XTR', alias='STARS_CURRENCY')

@@ -141,6 +141,69 @@
       </div>
 
       <div style="height: 16px;"></div>
+      <h3 style="margin: 0 0 8px;">AI Brain Settings</h3>
+      <p class="muted" style="margin-top: 6px;">
+        Улучшение промптов через OpenAI на backend. Ключ хранится только в env.
+      </p>
+      <div class="form-row">
+        <div>
+          <label>Статус OpenAI API ключа</label>
+          <input value="{% if openai_key_configured %}Настроен{% else %}Не настроен{% endif %}" readonly />
+        </div>
+        <div>
+          <label>OpenAI Base URL</label>
+          <input value="{{ openai_base_url }}" readonly />
+        </div>
+        <div>
+          <label>Включить AI Brain</label>
+          <label style="display: inline-flex; align-items: center; gap: 8px; margin-top: 8px;">
+            <input type="checkbox" name="ai_brain_enabled" value="1" style="width: auto;" {% if ai_brain_enabled %}checked{% endif %} />
+            <span class="muted" style="font-size: 13px;">Функция улучшения промпта активна</span>
+          </label>
+        </div>
+      </div>
+      <div class="form-row">
+        <div>
+          <label>OpenAI model</label>
+          <input name="ai_brain_model" value="{{ ai_brain_model }}" />
+        </div>
+        <div>
+          <label>Temperature</label>
+          <input name="ai_brain_temperature" value="{{ ai_brain_temperature }}" />
+        </div>
+        <div>
+          <label>Max tokens</label>
+          <input name="ai_brain_max_tokens" value="{{ ai_brain_max_tokens }}" />
+        </div>
+        <div>
+          <label>Цена за улучшение (кредиты)</label>
+          <input name="ai_brain_price_per_improve" value="{{ ai_brain_price_per_improve }}" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div>
+          <label>Дневной лимит на пользователя</label>
+          <input name="ai_brain_daily_limit_per_user" value="{{ ai_brain_daily_limit_per_user }}" />
+        </div>
+        <div>
+          <label>Цена пакета улучшений (кредиты)</label>
+          <input name="ai_brain_pack_price_credits" value="{{ ai_brain_pack_price_credits }}" />
+        </div>
+        <div>
+          <label>Размер пакета (улучшений)</label>
+          <input name="ai_brain_pack_size_improvements" value="{{ ai_brain_pack_size_improvements }}" />
+        </div>
+      </div>
+      <div style="margin-top: 10px;">
+        <label>System prompt</label>
+        <textarea
+          name="ai_brain_system_prompt"
+          rows="4"
+          style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #2b3f59; background: #0f1b2b; color: var(--text); resize: vertical;"
+        >{{ ai_brain_system_prompt }}</textarea>
+      </div>
+
+      <div style="height: 16px;"></div>
       <h3 style="margin: 0 0 8px;">Занятое место в хранилище</h3>
       <p class="muted" style="margin-top: 6px;">
         Путь: <code>{{ storage_usage.root_path }}</code>

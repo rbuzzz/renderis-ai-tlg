@@ -5,6 +5,7 @@
 ## Возможности
 - Генерация через Kie.ai (Nano Banana / Nano Banana Pro)
 - Асинхронная обработка Kie через Webhook + fallback polling
+- AI Brain Layer для улучшения промптов через OpenAI (с лимитами и списанием кредитов)
 - Кредиты и журнал транзакций (append-only)
 - Платежи Telegram Stars (XTR)
 - Реферальные и промо‑коды
@@ -95,6 +96,27 @@ CRYPTOPAY_EXPIRES_IN=10800
 - `https://<your-domain>/api/payments/cryptopay/postback`
 или
 - `https://<your-domain>/cryptopay/callback`
+
+## Настройка AI Brain (OpenAI)
+1. Заполните в `.env`:
+
+```env
+OPENAI_API_KEY=sk-...
+OPENAI_BASE_URL=https://api.openai.com/v1
+```
+
+2. Примените миграции:
+
+```bash
+alembic upgrade head
+```
+
+3. В админке откройте `Настройки -> AI Brain Settings` и укажите:
+- модель OpenAI;
+- temperature / max tokens;
+- цену за улучшение, дневной лимит;
+- параметры пакета улучшений;
+- system prompt.
 
 ## Админ‑команды
 - `/admin` — админ‑панель

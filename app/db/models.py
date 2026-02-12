@@ -69,6 +69,64 @@ class AppSetting(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class AIBrainConfig(Base):
+    __tablename__ = "ai_brain_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    openai_model: Mapped[str] = mapped_column(String(128), default="gpt-4o-mini")
+    temperature: Mapped[Decimal] = mapped_column(Numeric(4, 2), default=Decimal("0.7"))
+    max_tokens: Mapped[int] = mapped_column(Integer, default=600)
+    price_per_improve: Mapped[int] = mapped_column(Integer, default=1)
+    daily_limit_per_user: Mapped[int] = mapped_column(Integer, default=20)
+    pack_price_credits: Mapped[int] = mapped_column(Integer, default=3)
+    pack_size_improvements: Mapped[int] = mapped_column(Integer, default=10)
+    system_prompt: Mapped[str] = mapped_column(
+        Text,
+        default=(
+            "You are a professional AI prompt engineer. Improve the user's prompt to be more detailed, "
+            "cinematic, structured, and optimized for image generation models. "
+            "Do not add unrelated concepts. Keep original intent."
+        ),
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class AIImprovementBalance(Base):
+    __tablename__ = "ai_improvement_balances"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True, index=True)
+    remaining_improvements: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped["User"] = relationship()
+
+
+class AIBrainLog(Base):
+    __tablename__ = "ai_brain_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    action: Mapped[str] = mapped_column(String(32), default="improve_prompt")
+    status: Mapped[str] = mapped_column(String(16))
+    source: Mapped[str] = mapped_column(String(16), default="none")
+    spent_credits: Mapped[int] = mapped_column(Integer, default=0)
+    prompt_original: Mapped[str] = mapped_column(Text)
+    prompt_result: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model: Mapped[str] = mapped_column(String(128))
+    temperature: Mapped[Decimal] = mapped_column(Numeric(4, 2), default=Decimal("0.7"))
+    max_tokens: Mapped[int] = mapped_column(Integer, default=600)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    meta: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped["User"] = relationship()
+
+
 class ReferralCode(Base):
     __tablename__ = 'referral_codes'
 

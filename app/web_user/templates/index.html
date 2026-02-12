@@ -394,8 +394,15 @@
       .prompt-label-row label {
         margin-bottom: 0;
       }
+      .prompt-label-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
       .prompt-helper-btn,
-      .prompt-history-btn {
+      .prompt-history-btn,
+      .prompt-improve-btn,
+      .prompt-restore-btn {
         border-radius: 10px;
         border: 1px solid #2b3f59;
         background: #0f1b2b;
@@ -408,15 +415,25 @@
       }
       .prompt-helper-btn:hover,
       .prompt-helper-btn:focus-visible,
+      .prompt-improve-btn:hover,
+      .prompt-improve-btn:focus-visible,
+      .prompt-restore-btn:hover,
+      .prompt-restore-btn:focus-visible,
       .prompt-history-btn:hover,
       .prompt-history-btn:focus-visible {
         border-color: var(--accent);
         outline: none;
       }
       .prompt-helper-btn[aria-expanded="true"],
+      .prompt-improve-btn.active,
       .prompt-history-btn[aria-expanded="true"] {
         border-color: var(--accent-2);
         background: #112238;
+      }
+      .prompt-improve-btn[disabled],
+      .prompt-restore-btn[disabled] {
+        opacity: 0.55;
+        cursor: not-allowed;
       }
       .prompt-footer {
         margin-top: 8px;
@@ -424,6 +441,23 @@
         align-items: center;
         justify-content: space-between;
         gap: 10px;
+      }
+      .prompt-brain-row {
+        margin-top: 8px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .prompt-brain-status {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .prompt-brain-status.error {
+        color: #ff9fa2;
+      }
+      .prompt-brain-status.success {
+        color: #8de3bb;
       }
       .prompt-limit {
         font-size: 12px;
@@ -1630,7 +1664,15 @@
         .prompt-label-row {
           flex-wrap: wrap;
         }
-        .prompt-helper-btn {
+        .prompt-label-actions {
+          width: 100%;
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 8px;
+        }
+        .prompt-helper-btn,
+        .prompt-improve-btn,
+        .prompt-restore-btn {
           width: 100%;
         }
         .prompt-footer {
@@ -1802,15 +1844,24 @@
         <div class="field prompt-field gen-lock-target" id="promptField">
           <div class="prompt-label-row">
             <label for="prompt">{{ labels['prompt_label'] }}</label>
-            <button
-              class="prompt-helper-btn"
-              id="promptHelperBtn"
-              type="button"
-              aria-haspopup="dialog"
-              aria-expanded="false"
-            >
-              ✨ {{ labels['prompt_helper_button'] }}
-            </button>
+            <div class="prompt-label-actions">
+              <button
+                class="prompt-helper-btn"
+                id="promptHelperBtn"
+                type="button"
+                aria-haspopup="dialog"
+                aria-expanded="false"
+              >
+                ✨ {{ labels['prompt_helper_button'] }}
+              </button>
+              <button
+                class="prompt-improve-btn"
+                id="improvePromptBtn"
+                type="button"
+              >
+                ✨ {{ labels['brain_improve_button'] }}
+              </button>
+            </div>
           </div>
           <textarea id="prompt" placeholder="{{ labels['prompt_placeholder'] }}"></textarea>
           <div class="prompt-footer">
@@ -1824,6 +1875,17 @@
               ↓ {{ labels['prompt_history_button'] }}
             </button>
             <div class="prompt-limit" id="promptLimitHint" aria-live="polite"></div>
+          </div>
+          <div class="prompt-brain-row">
+            <button
+              class="prompt-restore-btn"
+              id="restorePromptBtn"
+              type="button"
+              style="display:none;"
+            >
+              {{ labels['brain_restore_original'] }}
+            </button>
+            <div class="prompt-brain-status" id="brainPromptStatus" aria-live="polite"></div>
           </div>
           <div class="prompt-panel" id="promptHelperPanel" role="dialog" aria-hidden="true">
             <div class="prompt-panel-title">{{ labels['prompt_helper_title'] }}</div>
@@ -2004,6 +2066,19 @@
       let currentBalance = 0;
       let generationCount = 0;
       let quoteData = null;
+      let aiBrainState = {
+        enabled: false,
+        openai_ready: false,
+        price_per_improve: 1,
+        daily_limit_per_user: 0,
+        daily_used: 0,
+        daily_remaining: null,
+        pack_remaining: 0,
+        pack_price_credits: 0,
+        pack_size_improvements: 0,
+      };
+      let improvePromptBusy = false;
+      let originalPromptBeforeImprove = '';
       let runInProgress = false;
       let generationInFlight = false;
       let confirmModalOpen = false;
@@ -2474,7 +2549,7 @@
         if (promptEl) {
           promptEl.disabled = !!locked;
         }
-        ['promptHelperBtn', 'promptHistoryBtn', 'refFiles', 'refReplaceFile'].forEach((id) => {
+        ['promptHelperBtn', 'promptHistoryBtn', 'improvePromptBtn', 'restorePromptBtn', 'refFiles', 'refReplaceFile'].forEach((id) => {
           const el = document.getElementById(id);
           if (!el) return;
           if ('disabled' in el) {
@@ -2870,10 +2945,69 @@
         return !getSkipConfirmSetting();
       }
 
+      function parseAiBrainState(raw) {
+        const source = raw && typeof raw === 'object' ? raw : {};
+        const toNumber = (value, fallback = 0) => {
+          const parsed = Number(value);
+          return Number.isFinite(parsed) ? parsed : fallback;
+        };
+        const dailyLimit = Math.max(0, Math.trunc(toNumber(source.daily_limit_per_user, 0)));
+        const dailyUsed = Math.max(0, Math.trunc(toNumber(source.daily_used, 0)));
+        const remainingRaw = source.daily_remaining;
+        const dailyRemaining = remainingRaw === null || remainingRaw === undefined
+          ? null
+          : Math.max(0, Math.trunc(toNumber(remainingRaw, 0)));
+        return {
+          enabled: !!source.enabled,
+          openai_ready: !!source.openai_ready,
+          price_per_improve: Math.max(0, Math.trunc(toNumber(source.price_per_improve, 1))),
+          daily_limit_per_user: dailyLimit,
+          daily_used: dailyUsed,
+          daily_remaining: dailyRemaining,
+          pack_remaining: Math.max(0, Math.trunc(toNumber(source.pack_remaining, 0))),
+          pack_price_credits: Math.max(0, Math.trunc(toNumber(source.pack_price_credits, 0))),
+          pack_size_improvements: Math.max(0, Math.trunc(toNumber(source.pack_size_improvements, 0))),
+        };
+      }
+
+      function setBrainPromptStatus(message, tone = '') {
+        const statusEl = document.getElementById('brainPromptStatus');
+        if (!statusEl) return;
+        statusEl.textContent = message || '';
+        statusEl.classList.remove('error', 'success');
+        if (tone === 'error') statusEl.classList.add('error');
+        if (tone === 'success') statusEl.classList.add('success');
+      }
+
+      function updateRestorePromptButton() {
+        const restoreBtn = document.getElementById('restorePromptBtn');
+        if (!restoreBtn) return;
+        restoreBtn.style.display = originalPromptBeforeImprove ? 'inline-flex' : 'none';
+        restoreBtn.disabled = !originalPromptBeforeImprove || improvePromptBusy || runInProgress || generationInFlight;
+      }
+
+      function updateImprovePromptButton() {
+        const improveBtn = document.getElementById('improvePromptBtn');
+        if (!improveBtn) return;
+        const cost = Math.max(0, Number(aiBrainState.price_per_improve || 0));
+        improveBtn.textContent = `✨ ${fmt(labels.brain_improve_button, { cost })}`;
+        improveBtn.disabled = (
+          !loggedIn
+          || !aiBrainState.enabled
+          || improvePromptBusy
+          || runInProgress
+          || generationInFlight
+          || confirmModalOpen
+        );
+        improveBtn.classList.toggle('active', !!aiBrainState.enabled);
+      }
+
       function setRunButtonState() {
         const runBtn = document.getElementById('runBtn');
         if (!runBtn) return;
         runBtn.disabled = runInProgress || confirmModalOpen || generationInFlight;
+        updateImprovePromptButton();
+        updateRestorePromptButton();
       }
 
       function labelForBreakdownKey(key) {
@@ -3100,8 +3234,10 @@
         setUserInfo(data);
         maxOutputs = data.max_outputs || 1;
         generationCount = Number(data.generation_count || 0);
+        aiBrainState = parseAiBrainState(data.ai_brain || {});
         updateSkipConfirmToggleUi();
         renderQuote();
+        setRunButtonState();
       }
 
       function setCryptoStatus(message, state = '') {
@@ -4061,6 +4197,129 @@
         }
       }
 
+      function mapBrainImproveError(errorCode) {
+        const code = String(errorCode || '').trim().toLowerCase();
+        if (!code) return labels.brain_failed;
+        if (code === 'prompt_required') return labels.prompt_required;
+        if (code === 'prompt_too_long') return fmt(labels.prompt_too_long, { max: maxPromptLength });
+        if (code === 'brain_disabled') return labels.brain_unavailable;
+        if (code === 'daily_limit_reached') return labels.brain_daily_limit_reached;
+        if (code === 'insufficient_credits') return labels.brain_not_enough_credits;
+        if (code === 'rate_limited') return labels.brain_rate_limited;
+        return labels.brain_failed;
+      }
+
+      async function improvePromptWithBrain() {
+        if (!loggedIn) {
+          setBrainPromptStatus(labels.login_required, 'error');
+          return;
+        }
+        if (improvePromptBusy) return;
+        if (!aiBrainState.enabled) {
+          setBrainPromptStatus(labels.brain_unavailable, 'error');
+          return;
+        }
+        const promptEl = getPromptInput();
+        if (!promptEl) return;
+        const promptRaw = String(promptEl.value || '');
+        const prompt = promptRaw.trim();
+        if (!prompt) {
+          setBrainPromptStatus(labels.prompt_required, 'error');
+          return;
+        }
+        if (maxPromptLength > 0 && promptRaw.length > maxPromptLength) {
+          setBrainPromptStatus(fmt(labels.prompt_too_long, { max: maxPromptLength }), 'error');
+          return;
+        }
+        if (
+          Number(aiBrainState.daily_limit_per_user || 0) > 0
+          && Number(aiBrainState.daily_remaining || 0) <= 0
+        ) {
+          setBrainPromptStatus(labels.brain_daily_limit_reached, 'error');
+          return;
+        }
+        if (Number(aiBrainState.pack_remaining || 0) <= 0) {
+          const cost = Math.max(0, Number(aiBrainState.price_per_improve || 0));
+          if (cost > 0 && currentBalance < cost) {
+            setBrainPromptStatus(labels.brain_not_enough_credits, 'error');
+            return;
+          }
+        }
+
+        improvePromptBusy = true;
+        setRunButtonState();
+        setBrainPromptStatus(labels.brain_improve_loading);
+        try {
+          const res = await fetch('/api/brain/improve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ prompt }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            setBrainPromptStatus(mapBrainImproveError(data.error), 'error');
+            return;
+          }
+          const improved = String(data.improved_prompt || '').trim();
+          if (!improved) {
+            setBrainPromptStatus(labels.brain_failed, 'error');
+            return;
+          }
+          originalPromptBeforeImprove = promptRaw;
+          promptEl.value = improved;
+          updatePromptLengthHint();
+          updateQuote();
+
+          if (Number.isFinite(Number(data.balance))) {
+            setBalance(Number(data.balance));
+          }
+          aiBrainState = {
+            ...aiBrainState,
+            daily_used: Number.isFinite(Number(data.daily_used)) ? Number(data.daily_used) : aiBrainState.daily_used,
+            daily_limit_per_user: Number.isFinite(Number(data.daily_limit_per_user))
+              ? Number(data.daily_limit_per_user)
+              : aiBrainState.daily_limit_per_user,
+            pack_remaining: Number.isFinite(Number(data.remaining_improvements))
+              ? Number(data.remaining_improvements)
+              : aiBrainState.pack_remaining,
+          };
+          if (aiBrainState.daily_limit_per_user > 0) {
+            aiBrainState.daily_remaining = Math.max(0, aiBrainState.daily_limit_per_user - aiBrainState.daily_used);
+          } else {
+            aiBrainState.daily_remaining = null;
+          }
+
+          let successText = labels.brain_improve_success;
+          if (String(data.charged_from || '') === 'pack') {
+            successText = `${successText} ${labels.brain_pack_used}`;
+          } else if (Number(data.spent_credits || 0) > 0) {
+            successText = `${successText} ${fmt(labels.brain_credits_used, { credits: Number(data.spent_credits) })}`;
+          }
+          setBrainPromptStatus(successText, 'success');
+          trackUiEvent('brain_prompt_improved', { source: data.charged_from || 'unknown' });
+        } catch (err) {
+          setBrainPromptStatus(labels.brain_failed, 'error');
+        } finally {
+          improvePromptBusy = false;
+          setRunButtonState();
+        }
+      }
+
+      function restoreOriginalPrompt() {
+        if (!originalPromptBeforeImprove) return;
+        const promptEl = getPromptInput();
+        if (!promptEl) return;
+        promptEl.value = originalPromptBeforeImprove;
+        originalPromptBeforeImprove = '';
+        updatePromptLengthHint();
+        updateQuote();
+        setBrainPromptStatus('');
+        setRunButtonState();
+        promptEl.focus();
+        trackUiEvent('brain_prompt_restore');
+      }
+
       async function createCryptoInvoice() {
         if (!loggedIn) {
           setCryptoStatus(labels.login_required, 'error');
@@ -4243,6 +4502,8 @@
       const promptInputEl = getPromptInput();
       const promptHelperBtn = document.getElementById('promptHelperBtn');
       const promptHistoryBtn = document.getElementById('promptHistoryBtn');
+      const improvePromptBtn = document.getElementById('improvePromptBtn');
+      const restorePromptBtn = document.getElementById('restorePromptBtn');
       const promptHelperPanel = document.getElementById('promptHelperPanel');
       const promptHistoryPanel = document.getElementById('promptHistoryPanel');
       const promptHelperList = document.getElementById('promptHelperList');
@@ -4272,6 +4533,20 @@
           event.stopPropagation();
           renderPromptHistory();
           openPromptPanel('promptHistoryPanel', 'promptHistoryBtn');
+        });
+      }
+      if (improvePromptBtn) {
+        improvePromptBtn.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          void improvePromptWithBrain();
+        });
+      }
+      if (restorePromptBtn) {
+        restorePromptBtn.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          restoreOriginalPrompt();
         });
       }
       if (promptHelperPanel) {
