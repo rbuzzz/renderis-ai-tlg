@@ -22,7 +22,7 @@ def normalize_lang(code: str | None) -> str:
 BASE_RU: Dict[str, str] = {
     # Site
     "site_title": "Renderis Studio",
-    "site_tagline": "Генерация изображений прямо в браузере",
+    "site_tagline": "Creative Cloud",
     "site_notice": (
         "Результаты на сайте хранятся не более 15 дней. "
         "Все генерации также дублируются в Telegram-боте Renderis Studio."
@@ -429,7 +429,7 @@ BASE_RU: Dict[str, str] = {
 
 BASE_EN: Dict[str, str] = {
     "site_title": "Renderis Studio",
-    "site_tagline": "Generate images right in your browser",
+    "site_tagline": "Creative Cloud",
     "site_notice": "Site results are stored for no more than 15 days. All generations are also delivered in the Renderis Studio Telegram bot.",
     "input_title": "Generation panel",
     "output_title": "Result",
@@ -795,7 +795,7 @@ BASE_EN: Dict[str, str] = {
 BASE_ES: Dict[str, str] = dict(BASE_EN)
 BASE_ES.update(
     {
-        "site_tagline": "Genera imagenes directamente en tu navegador",
+        "site_tagline": "Creative Cloud",
         "site_notice": (
             "Los resultados en el sitio se guardan no mas de 15 dias. "
             "Todas las generaciones tambien se duplican en el bot de Telegram Renderis Studio."
