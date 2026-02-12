@@ -25,7 +25,7 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.db.models import Generation, GenerationTask, Order, PromoCode, StarProduct, User
 from app.db.session import create_sessionmaker
-from app.i18n import SUPPORTED_LANGS, normalize_lang, t
+from app.i18n import SUPPORTED_LANGS, normalize_lang, t, tf
 from app.modelspecs.registry import get_model, list_models
 from app.services.credits import CreditsService
 from app.services.cryptopay import CryptoPayClient, CryptoPayError
@@ -366,6 +366,23 @@ def create_app() -> FastAPI:
         if invoice_status and order.status != "paid":
             order.status = f"cp_{invoice_status}"[:32]
         return invoice_status, order.status == "paid", 0
+
+    async def notify_payment_success(telegram_id: int, lang: str, credits_added: int) -> None:
+        if credits_added <= 0:
+            return
+        bot = Bot(
+            token=settings.bot_token,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        )
+        try:
+            await bot.send_message(
+                chat_id=telegram_id,
+                text=tf(lang, "payment_success", credits=credits_added),
+            )
+        except Exception:
+            pass
+        finally:
+            await bot.session.close()
 
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request):
@@ -759,7 +776,12 @@ def create_app() -> FastAPI:
                 return {"ok": True}
 
             invoice_status, is_paid, credits_added = await apply_cryptopay_settlement(session, order, payload)
+            user = await session.get(User, order.user_id)
             await session.commit()
+
+        if user and credits_added > 0:
+            lang = normalize_lang((user.settings or {}).get("lang"))
+            await notify_payment_success(user.telegram_id, lang, credits_added)
 
         return {
             "ok": True,
