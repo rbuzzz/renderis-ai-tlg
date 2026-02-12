@@ -126,6 +126,7 @@ BASE_RU: Dict[str, str] = {
     "res_4k": "4K",
     # Bot menu
     "menu_generate": "🎨 Сгенерировать",
+    "menu_open_app": "📱 Открыть в приложении",
     "menu_buy": "💳 Пополнить баланс",
     "menu_prices": "🧮 Арифметика расхода",
     "menu_history": "🕘 История",
@@ -426,6 +427,7 @@ BASE_EN: Dict[str, str] = {
     "res_2k": "2K",
     "res_4k": "4K",
     "menu_generate": "🎨 Generate",
+    "menu_open_app": "📱 Open app",
     "menu_buy": "💳 Top up balance",
     "menu_prices": "🧮 Credit math",
     "menu_history": "🕘 History",
@@ -679,6 +681,7 @@ BASE_ES.update(
         "quote_login_required": "Inicia sesion para ver el costo.",
         "quote_unavailable": "No se pudo calcular el costo.",
         "menu_buy": "💳 Recargar saldo",
+        "menu_open_app": "📱 Abrir aplicacion",
         "menu_settings": "⚙️ Ajustes",
         "payment_topup_choose": "💳 Elige metodo de recarga:",
         "payment_topup_promo": "🎟️ Introducir codigo promo",
