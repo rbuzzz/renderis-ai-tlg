@@ -76,7 +76,8 @@ class Settings(BaseSettings):
 
     # Polling
     poll_max_wait_seconds: int = Field(180, alias='POLL_MAX_WAIT_SECONDS')
-    poll_backoff_sequence: str = Field('1,2,3,5,8,13,20', alias='POLL_BACKOFF_SEQUENCE')
+    poll_backoff_sequence: str = Field('1,2,3,5,8,8,8,8', alias='POLL_BACKOFF_SEQUENCE')
+    poll_watch_interval_seconds: int = Field(10, alias='POLL_WATCH_INTERVAL_SECONDS')
     poll_stale_running_seconds: int = Field(600, alias='POLL_STALE_RUNNING_SECONDS')
 
     # Safety

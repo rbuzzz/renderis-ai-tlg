@@ -1327,6 +1327,15 @@ def create_app() -> FastAPI:
             finally:
                 await kie.close()
 
+            result = await session.execute(
+                select(GenerationTask.id).where(GenerationTask.generation_id == generation.id)
+            )
+            task_ids = [row[0] for row in result.all()]
+            poller = app.state.user_web_poller
+            if poller:
+                for task_id in task_ids:
+                    poller.schedule(task_id)
+
             return {"ok": True, "generation_id": generation.id, "created_at": generation.created_at.isoformat()}
 
     @app.get("/api/history")

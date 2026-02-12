@@ -39,6 +39,13 @@ class PollManager:
         self._inflight: set[int] = set()
         self._last_ref_cleanup = 0.0
 
+    def _watch_interval(self) -> int:
+        try:
+            val = int(self.settings.poll_watch_interval_seconds)
+        except (TypeError, ValueError):
+            val = 10
+        return max(2, val)
+
     def _user_sem(self, user_id: int) -> asyncio.Semaphore:
         if user_id not in self.user_sems:
             self.user_sems[user_id] = asyncio.Semaphore(self.settings.per_user_max_concurrent_jobs)
@@ -76,7 +83,8 @@ class PollManager:
         self._inflight.add(task_id)
         asyncio.create_task(self._poll_task(task_id))
 
-    async def watch_pending(self, interval: int = 30) -> None:
+    async def watch_pending(self, interval: int | None = None) -> None:
+        poll_interval = max(2, int(interval)) if interval is not None else self._watch_interval()
         while True:
             try:
                 async with self.sessionmaker() as session:
@@ -102,7 +110,7 @@ class PollManager:
                 await self._maybe_cleanup_reference_files()
             except Exception as exc:
                 logger.warning('poll_watch_failed', error=str(exc))
-            await asyncio.sleep(interval)
+            await asyncio.sleep(poll_interval)
 
     async def _claim_task(self, session: AsyncSession, task_id: int) -> bool:
         stale_cutoff = self._stale_cutoff()
@@ -191,7 +199,7 @@ class PollManager:
             self._inflight.discard(task_id)
 
     async def _delayed_reschedule(self, task_id: int) -> None:
-        await asyncio.sleep(30)
+        await asyncio.sleep(self._watch_interval())
         self.schedule(task_id)
 
     async def _mark_success(self, task_id: int, urls: List[str], record: dict) -> None:
