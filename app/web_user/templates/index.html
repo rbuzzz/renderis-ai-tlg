@@ -2128,7 +2128,10 @@
       ];
       let promptHistory = [];
       const tgWebApp = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
-      const isMiniApp = Boolean(tgWebApp && typeof tgWebApp.initData === 'string');
+      const miniAppInitData = tgWebApp && typeof tgWebApp.initData === 'string'
+        ? tgWebApp.initData.trim()
+        : '';
+      const isMiniApp = Boolean(miniAppInitData);
       const loginWidget = document.getElementById('loginWidget');
       const miniAppAuthNotice = document.getElementById('miniAppAuthNotice');
 
@@ -4999,6 +5002,14 @@
       async function maybeAutoMiniAppAuth() {
         if (loggedIn) return false;
         if (!isMiniApp || !tgWebApp) return false;
+        const initData = (tgWebApp.initData || '').trim();
+        if (!initData) {
+          if (loginWidget) {
+            loginWidget.style.display = '';
+          }
+          setMiniAppAuthNotice('');
+          return false;
+        }
         if (loginWidget) {
           loginWidget.style.display = 'none';
         }
@@ -5009,8 +5020,6 @@
         } catch (e) {
           // no-op
         }
-        const initData = (tgWebApp.initData || '').trim();
-        if (!initData) return false;
         try {
           const res = await fetch('/auth/miniapp', {
             method: 'POST',
