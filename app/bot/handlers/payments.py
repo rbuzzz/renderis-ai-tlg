@@ -411,7 +411,7 @@ async def pay_cryptopay_check(callback: CallbackQuery, session: AsyncSession) ->
         return
 
     if order.status == "paid":
-        await callback.message.answer(tf(lang, "payment_success", credits=int(order.credits_amount or 0)))
+        await callback.message.answer(tf(lang, "cryptopay_paid_notify", credits=int(order.credits_amount or 0)))
         await callback.answer()
         return
 
@@ -423,14 +423,14 @@ async def pay_cryptopay_check(callback: CallbackQuery, session: AsyncSession) ->
         invoice = await client.get_invoice(order.provider_payment_charge_id)
     except CryptoPayError:
         if order.status == "paid":
-            await callback.message.answer(tf(lang, "payment_success", credits=int(order.credits_amount or 0)))
+            await callback.message.answer(tf(lang, "cryptopay_paid_notify", credits=int(order.credits_amount or 0)))
             await callback.answer()
             return
         await callback.answer(t(lang, "cryptopay_status_failed"), show_alert=True)
         return
     if not invoice:
         if order.status == "paid":
-            await callback.message.answer(tf(lang, "payment_success", credits=int(order.credits_amount or 0)))
+            await callback.message.answer(tf(lang, "cryptopay_paid_notify", credits=int(order.credits_amount or 0)))
             await callback.answer()
             return
         await callback.answer(t(lang, "cryptopay_status_failed"), show_alert=True)
@@ -442,7 +442,7 @@ async def pay_cryptopay_check(callback: CallbackQuery, session: AsyncSession) ->
         paid_now, credited = await payments.settle_cryptopay_order(order)
         await session.commit()
         credited_total = credited if paid_now else int(order.credits_amount or 0)
-        await callback.message.answer(tf(lang, "payment_success", credits=credited_total))
+        await callback.message.answer(tf(lang, "cryptopay_paid_notify", credits=credited_total))
         await callback.answer()
         return
 

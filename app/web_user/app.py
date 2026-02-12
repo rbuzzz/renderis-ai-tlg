@@ -377,7 +377,7 @@ def create_app() -> FastAPI:
         try:
             await bot.send_message(
                 chat_id=telegram_id,
-                text=tf(lang, "payment_success", credits=credits_added),
+                text=tf(lang, "cryptopay_paid_notify", credits=credits_added),
             )
         except Exception:
             pass
