@@ -2332,11 +2332,32 @@ def create_app() -> FastAPI:
         return RedirectResponse(url="/admin/products?saved=1", status_code=302)
 
     @app.get("/admin/settings", response_class=HTMLResponse)
-    async def admin_settings(request: Request, saved: int | None = None, error: str | None = None):
+    async def admin_settings(
+        request: Request,
+        saved: int | None = None,
+        error: str | None = None,
+        brain_error: int | None = None,
+    ):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
 
         storage_usage = _storage_usage_summary(settings.reference_storage_path)
+        brain_ctx = {
+            "ai_brain_enabled": False,
+            "ai_brain_model": "gpt-4o-mini",
+            "ai_brain_temperature": 0.7,
+            "ai_brain_max_tokens": 600,
+            "ai_brain_price_per_improve": 1,
+            "ai_brain_daily_limit_per_user": 20,
+            "ai_brain_pack_price_credits": 3,
+            "ai_brain_pack_size_improvements": 10,
+            "ai_brain_system_prompt": (
+                "You are a professional AI prompt engineer. Improve the user's prompt to be more detailed, "
+                "cinematic, structured, and optimized for image generation models. Do not add unrelated "
+                "concepts. Keep original intent."
+            ),
+        }
+        brain_runtime_error = bool(brain_error)
 
         async with app.state.sessionmaker() as session:
             settings_service = AppSettingsService(session)
@@ -2362,12 +2383,29 @@ def create_app() -> FastAPI:
                     int(favicon_path.stat().st_mtime_ns)
                 )
                 favicon_logo_url = f"/assets/favicon-logo?v={favicon_version}"
-            brain_service = AIBrainService(
-                session,
-                openai_api_key=settings.openai_api_key,
-                openai_base_url=settings.openai_base_url,
-            )
-            brain_cfg = await brain_service.get_config()
+            try:
+                brain_service = AIBrainService(
+                    session,
+                    openai_api_key=settings.openai_api_key,
+                    openai_base_url=settings.openai_base_url,
+                )
+                brain_cfg = await brain_service.get_config()
+                brain_ctx.update(
+                    {
+                        "ai_brain_enabled": bool(brain_cfg.enabled),
+                        "ai_brain_model": brain_cfg.openai_model,
+                        "ai_brain_temperature": float(brain_cfg.temperature or 0.7),
+                        "ai_brain_max_tokens": int(brain_cfg.max_tokens or 600),
+                        "ai_brain_price_per_improve": int(brain_cfg.price_per_improve or 1),
+                        "ai_brain_daily_limit_per_user": int(brain_cfg.daily_limit_per_user or 20),
+                        "ai_brain_pack_price_credits": int(brain_cfg.pack_price_credits or 3),
+                        "ai_brain_pack_size_improvements": int(brain_cfg.pack_size_improvements or 10),
+                        "ai_brain_system_prompt": brain_cfg.system_prompt,
+                    }
+                )
+            except Exception:
+                logger.exception("admin_settings_ai_brain_unavailable")
+                brain_runtime_error = True
 
         return app.state.templates.TemplateResponse(
             "settings.html",
@@ -2389,15 +2427,16 @@ def create_app() -> FastAPI:
                 "logo_max_size_mb": int(MAX_LOGO_SIZE_BYTES / 1024 / 1024),
                 "openai_key_configured": bool(settings.openai_api_key.strip()),
                 "openai_base_url": settings.openai_base_url,
-                "ai_brain_enabled": bool(brain_cfg.enabled),
-                "ai_brain_model": brain_cfg.openai_model,
-                "ai_brain_temperature": float(brain_cfg.temperature or 0.7),
-                "ai_brain_max_tokens": int(brain_cfg.max_tokens or 600),
-                "ai_brain_price_per_improve": int(brain_cfg.price_per_improve or 1),
-                "ai_brain_daily_limit_per_user": int(brain_cfg.daily_limit_per_user or 20),
-                "ai_brain_pack_price_credits": int(brain_cfg.pack_price_credits or 3),
-                "ai_brain_pack_size_improvements": int(brain_cfg.pack_size_improvements or 10),
-                "ai_brain_system_prompt": brain_cfg.system_prompt,
+                "ai_brain_enabled": brain_ctx["ai_brain_enabled"],
+                "ai_brain_model": brain_ctx["ai_brain_model"],
+                "ai_brain_temperature": brain_ctx["ai_brain_temperature"],
+                "ai_brain_max_tokens": brain_ctx["ai_brain_max_tokens"],
+                "ai_brain_price_per_improve": brain_ctx["ai_brain_price_per_improve"],
+                "ai_brain_daily_limit_per_user": brain_ctx["ai_brain_daily_limit_per_user"],
+                "ai_brain_pack_price_credits": brain_ctx["ai_brain_pack_price_credits"],
+                "ai_brain_pack_size_improvements": brain_ctx["ai_brain_pack_size_improvements"],
+                "ai_brain_system_prompt": brain_ctx["ai_brain_system_prompt"],
+                "brain_runtime_error": brain_runtime_error,
                 "storage_usage": storage_usage,
                 "saved": bool(saved),
                 "error": (error or "").strip(),
@@ -2498,40 +2537,47 @@ def create_app() -> FastAPI:
                 elif favicon_error:
                     errors.append(f"favicon_logo:{favicon_error}")
 
-            current_brain_cfg = await brain_service.get_config()
-            parsed_ai_brain_temperature = _parse_float(ai_brain_temperature.strip())
-            if parsed_ai_brain_temperature is None:
-                parsed_ai_brain_temperature = float(current_brain_cfg.temperature or 0.7)
-            parsed_ai_brain_max_tokens = _parse_int(ai_brain_max_tokens.strip())
-            if parsed_ai_brain_max_tokens is None:
-                parsed_ai_brain_max_tokens = int(current_brain_cfg.max_tokens or 600)
-            parsed_ai_brain_price_per_improve = _parse_int(ai_brain_price_per_improve.strip())
-            if parsed_ai_brain_price_per_improve is None:
-                parsed_ai_brain_price_per_improve = int(current_brain_cfg.price_per_improve or 1)
-            parsed_ai_brain_daily_limit = _parse_int(ai_brain_daily_limit_per_user.strip())
-            if parsed_ai_brain_daily_limit is None:
-                parsed_ai_brain_daily_limit = int(current_brain_cfg.daily_limit_per_user or 20)
-            parsed_ai_brain_pack_price = _parse_int(ai_brain_pack_price_credits.strip())
-            if parsed_ai_brain_pack_price is None:
-                parsed_ai_brain_pack_price = int(current_brain_cfg.pack_price_credits or 3)
-            parsed_ai_brain_pack_size = _parse_int(ai_brain_pack_size_improvements.strip())
-            if parsed_ai_brain_pack_size is None:
-                parsed_ai_brain_pack_size = int(current_brain_cfg.pack_size_improvements or 10)
+            brain_update_failed = False
+            try:
+                current_brain_cfg = await brain_service.get_config()
+                parsed_ai_brain_temperature = _parse_float(ai_brain_temperature.strip())
+                if parsed_ai_brain_temperature is None:
+                    parsed_ai_brain_temperature = float(current_brain_cfg.temperature or 0.7)
+                parsed_ai_brain_max_tokens = _parse_int(ai_brain_max_tokens.strip())
+                if parsed_ai_brain_max_tokens is None:
+                    parsed_ai_brain_max_tokens = int(current_brain_cfg.max_tokens or 600)
+                parsed_ai_brain_price_per_improve = _parse_int(ai_brain_price_per_improve.strip())
+                if parsed_ai_brain_price_per_improve is None:
+                    parsed_ai_brain_price_per_improve = int(current_brain_cfg.price_per_improve or 1)
+                parsed_ai_brain_daily_limit = _parse_int(ai_brain_daily_limit_per_user.strip())
+                if parsed_ai_brain_daily_limit is None:
+                    parsed_ai_brain_daily_limit = int(current_brain_cfg.daily_limit_per_user or 20)
+                parsed_ai_brain_pack_price = _parse_int(ai_brain_pack_price_credits.strip())
+                if parsed_ai_brain_pack_price is None:
+                    parsed_ai_brain_pack_price = int(current_brain_cfg.pack_price_credits or 3)
+                parsed_ai_brain_pack_size = _parse_int(ai_brain_pack_size_improvements.strip())
+                if parsed_ai_brain_pack_size is None:
+                    parsed_ai_brain_pack_size = int(current_brain_cfg.pack_size_improvements or 10)
 
-            await brain_service.update_config(
-                enabled=ai_brain_enabled.strip() == "1",
-                openai_model=(ai_brain_model or "").strip() or current_brain_cfg.openai_model,
-                temperature=float(parsed_ai_brain_temperature),
-                max_tokens=int(parsed_ai_brain_max_tokens),
-                price_per_improve=int(parsed_ai_brain_price_per_improve),
-                daily_limit_per_user=int(parsed_ai_brain_daily_limit),
-                pack_price_credits=int(parsed_ai_brain_pack_price),
-                pack_size_improvements=int(parsed_ai_brain_pack_size),
-                system_prompt=(ai_brain_system_prompt or "").strip() or current_brain_cfg.system_prompt,
-            )
+                await brain_service.update_config(
+                    enabled=ai_brain_enabled.strip() == "1",
+                    openai_model=(ai_brain_model or "").strip() or current_brain_cfg.openai_model,
+                    temperature=float(parsed_ai_brain_temperature),
+                    max_tokens=int(parsed_ai_brain_max_tokens),
+                    price_per_improve=int(parsed_ai_brain_price_per_improve),
+                    daily_limit_per_user=int(parsed_ai_brain_daily_limit),
+                    pack_price_credits=int(parsed_ai_brain_pack_price),
+                    pack_size_improvements=int(parsed_ai_brain_pack_size),
+                    system_prompt=(ai_brain_system_prompt or "").strip() or current_brain_cfg.system_prompt,
+                )
+            except Exception:
+                logger.exception("admin_settings_ai_brain_update_failed")
+                brain_update_failed = True
             await session.commit()
         if errors:
             return RedirectResponse(url=f"/admin/settings?error={'|'.join(errors)}", status_code=302)
+        if brain_update_failed:
+            return RedirectResponse(url="/admin/settings?saved=1&brain_error=1", status_code=302)
         return RedirectResponse(url="/admin/settings?saved=1", status_code=302)
 
     @app.get("/admin/chats", response_class=HTMLResponse)

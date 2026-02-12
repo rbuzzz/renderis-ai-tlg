@@ -672,29 +672,32 @@ def create_app() -> FastAPI:
             display_name = " ".join([part for part in [first_name, last_name] if part]) or user.username or str(
                 user.telegram_id
             )
-            brain_service = AIBrainService(
-                session,
-                openai_api_key=settings.openai_api_key,
-                openai_base_url=settings.openai_base_url,
-            )
-            brain_cfg = await brain_service.get_config()
-            brain_daily_used = await brain_service.get_daily_success_count(user.id)
-            brain_pack_remaining = await brain_service.get_remaining_improvements(user.id)
-            brain_daily_limit = max(0, int(brain_cfg.daily_limit_per_user or 0))
-            if brain_daily_limit > 0:
-                brain_daily_remaining = max(0, brain_daily_limit - brain_daily_used)
-            else:
-                brain_daily_remaining = None
-            return {
-                "telegram_id": user.telegram_id,
-                "username": user.username,
-                "display_name": display_name,
-                "photo_url": photo_url,
-                "balance": user.balance_credits,
-                "lang": user.settings.get("lang", "ru"),
-                "max_outputs": settings.max_outputs_per_request,
-                "generation_count": generation_count,
-                "ai_brain": {
+            ai_brain = {
+                "enabled": False,
+                "openai_ready": bool(settings.openai_api_key.strip()),
+                "price_per_improve": 0,
+                "daily_limit_per_user": 0,
+                "daily_used": 0,
+                "daily_remaining": None,
+                "pack_remaining": 0,
+                "pack_price_credits": 0,
+                "pack_size_improvements": 10,
+            }
+            try:
+                brain_service = AIBrainService(
+                    session,
+                    openai_api_key=settings.openai_api_key,
+                    openai_base_url=settings.openai_base_url,
+                )
+                brain_cfg = await brain_service.get_config()
+                brain_daily_used = await brain_service.get_daily_success_count(user.id)
+                brain_pack_remaining = await brain_service.get_remaining_improvements(user.id)
+                brain_daily_limit = max(0, int(brain_cfg.daily_limit_per_user or 0))
+                if brain_daily_limit > 0:
+                    brain_daily_remaining = max(0, brain_daily_limit - brain_daily_used)
+                else:
+                    brain_daily_remaining = None
+                ai_brain = {
                     "enabled": bool(brain_cfg.enabled) and bool(settings.openai_api_key.strip()),
                     "openai_ready": bool(settings.openai_api_key.strip()),
                     "price_per_improve": max(0, int(brain_cfg.price_per_improve or 0)),
@@ -704,7 +707,19 @@ def create_app() -> FastAPI:
                     "pack_remaining": brain_pack_remaining,
                     "pack_price_credits": max(0, int(brain_cfg.pack_price_credits or 0)),
                     "pack_size_improvements": max(1, int(brain_cfg.pack_size_improvements or 1)),
-                },
+                }
+            except Exception:
+                logger.exception("ai_brain_state_unavailable", extra={"user_id": user.id})
+            return {
+                "telegram_id": user.telegram_id,
+                "username": user.username,
+                "display_name": display_name,
+                "photo_url": photo_url,
+                "balance": user.balance_credits,
+                "lang": user.settings.get("lang", "ru"),
+                "max_outputs": settings.max_outputs_per_request,
+                "generation_count": generation_count,
+                "ai_brain": ai_brain,
             }
 
     @app.post("/api/providers/kie/webhook")
@@ -1351,7 +1366,11 @@ def create_app() -> FastAPI:
                 openai_api_key=settings.openai_api_key,
                 openai_base_url=settings.openai_base_url,
             )
-            config = await brain.get_config()
+            try:
+                config = await brain.get_config()
+            except Exception:
+                logger.exception("ai_brain_config_unavailable_improve", extra={"user_id": user.id})
+                return JSONResponse({"error": "brain_unavailable"}, status_code=503)
             action_id = uuid.uuid4().hex
             model_name = (config.openai_model or "gpt-4o-mini").strip()
             temperature = float(config.temperature or 0.7)
@@ -1593,7 +1612,11 @@ def create_app() -> FastAPI:
                 openai_api_key=settings.openai_api_key,
                 openai_base_url=settings.openai_base_url,
             )
-            config = await brain.get_config()
+            try:
+                config = await brain.get_config()
+            except Exception:
+                logger.exception("ai_brain_config_unavailable_pack", extra={"user_id": user.id})
+                return JSONResponse({"error": "brain_unavailable"}, status_code=503)
             if not config.enabled:
                 return JSONResponse({"error": "brain_disabled"}, status_code=503)
 

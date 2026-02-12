@@ -11,6 +11,11 @@
       Допустимы изображения PNG/JPG/JPEG/WEBP/SVG/ICO/GIF/BMP/AVIF/HEIC/HEIF/JFIF, размер до {{ logo_max_size_mb }} MB.
     </div>
     {% endif %}
+    {% if brain_runtime_error %}
+    <div style="color: #f5c26b; font-size: 13px; margin-bottom: 8px;">
+      AI Brain сейчас недоступен (проверьте миграции и таблицы в рабочей БД). Остальные настройки работают.
+    </div>
+    {% endif %}
     {% if not can_manage %}
     <div class="notice" style="color: var(--muted);">Режим только просмотра: изменение настроек недоступно для субадмина.</div>
     {% endif %}
