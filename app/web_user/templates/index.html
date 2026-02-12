@@ -639,6 +639,127 @@
       .status { font-size: 12px; color: var(--muted); margin-top: 8px; }
       .status.error { color: var(--danger); }
       .status.success { color: var(--accent-2); }
+      .gen-live {
+        margin-top: 10px;
+        border-radius: 12px;
+        border: 1px solid #29415e;
+        background: #0f1b2b;
+        padding: 10px 12px;
+        display: none;
+      }
+      .gen-live.visible {
+        display: block;
+      }
+      .gen-live-main {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .gen-live-line {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+      .gen-live-spinner {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 2px solid #2f4e72;
+        border-top-color: #9fc2e6;
+        animation: gen-spin 0.9s linear infinite;
+        flex: 0 0 auto;
+      }
+      .gen-live-spinner.hidden {
+        display: none;
+      }
+      .gen-live-text {
+        font-size: 13px;
+        color: #d6e4f4;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .gen-live-eta {
+        font-size: 12px;
+        color: #93abc7;
+      }
+      .gen-live-sub {
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .gen-live.error {
+        border-color: rgba(255, 118, 118, 0.5);
+      }
+      .gen-live.error .gen-live-text,
+      .gen-live.error .gen-live-sub {
+        color: #ffc6c6;
+      }
+      .gen-live.warning {
+        border-color: rgba(245, 185, 79, 0.5);
+      }
+      .gen-live.warning .gen-live-text {
+        color: #ffd89d;
+      }
+      .gen-cancel-btn {
+        border-radius: 9px;
+        border: 1px solid #35506f;
+        background: #13243a;
+        color: #d3e3f5;
+        padding: 6px 10px;
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .gen-cancel-btn:hover,
+      .gen-cancel-btn:focus-visible {
+        border-color: rgba(255, 118, 118, 0.55);
+        color: #ffc0c0;
+        outline: none;
+      }
+      .gen-cancel-btn.hidden {
+        display: none;
+      }
+      .gen-lock-target.locked {
+        opacity: 0.6;
+        pointer-events: none;
+        user-select: none;
+      }
+      .ui-toast {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 100;
+        border-radius: 10px;
+        border: 1px solid #2d4563;
+        background: rgba(10, 18, 30, 0.96);
+        color: #dce9f8;
+        padding: 9px 12px;
+        font-size: 12px;
+        opacity: 0;
+        transform: translateY(6px);
+        pointer-events: none;
+        transition: opacity 0.16s ease, transform 0.16s ease;
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+      }
+      .ui-toast.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      .ui-toast.warning {
+        border-color: rgba(245, 185, 79, 0.5);
+        color: #ffd89d;
+      }
+      .ui-toast.error {
+        border-color: rgba(255, 118, 118, 0.5);
+        color: #ffc4c4;
+      }
+      @keyframes gen-spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
       .confirm-modal {
         position: fixed;
         inset: 0;
@@ -1359,6 +1480,10 @@
         .run-btn {
           width: 100%;
         }
+        .gen-live-main {
+          flex-direction: column;
+          align-items: flex-start;
+        }
         .redeem-row { grid-template-columns: 1fr; }
         .promo-btn { width: 100%; }
         .crypto-row { grid-template-columns: 1fr; }
@@ -1490,10 +1615,10 @@
     <div class="grid">
       <div class="panel">
         <h2>{{ labels['input_title'] }}</h2>
-        <div class="model-buttons" id="modelButtons"></div>
+        <div class="model-buttons gen-lock-target" id="modelButtons"></div>
         <div class="tagline" id="modelTagline"></div>
 
-        <div class="field prompt-field" id="promptField">
+        <div class="field prompt-field gen-lock-target" id="promptField">
           <div class="prompt-label-row">
             <label for="prompt">{{ labels['prompt_label'] }}</label>
             <button
@@ -1529,7 +1654,7 @@
           </div>
         </div>
 
-        <div class="field" id="uploadBlock">
+        <div class="field gen-lock-target" id="uploadBlock">
           <div class="ref-header">
             <div class="ref-title" id="refTitle"></div>
             <div class="ref-sub" id="refSub"></div>
@@ -1540,13 +1665,24 @@
           <div class="ref-note" id="refNote"></div>
         </div>
 
-        <div class="field" id="optionsContainer">
+        <div class="field gen-lock-target" id="optionsContainer">
           <label>{{ labels['options_label'] }}</label>
         </div>
 
         <div class="run-row">
           <button class="run-btn" id="runBtn">{{ labels['run'] }}</button>
           <div class="status" id="runStatus"></div>
+        </div>
+        <div class="gen-live" id="genLive" aria-live="polite">
+          <div class="gen-live-main">
+            <div class="gen-live-line">
+              <span class="gen-live-spinner" id="genLiveSpinner" aria-hidden="true"></span>
+              <span class="gen-live-text" id="genLiveText"></span>
+              <span class="gen-live-eta" id="genLiveEta"></span>
+            </div>
+            <button class="gen-cancel-btn hidden" id="genCancelBtn" type="button">{{ labels['gen_cancel'] }}</button>
+          </div>
+          <div class="gen-live-sub" id="genLiveSub"></div>
         </div>
         <div class="quote-line" id="quoteLine">
           <span class="quote-cost" id="quoteCostText"></span>
@@ -1640,6 +1776,7 @@
         </div>
       </div>
     {% endif %}
+    <div class="ui-toast" id="uiToast"></div>
 
     <script src="https://telegram.org/js/telegram-web-app.js?59"></script>
     <script>
@@ -1667,10 +1804,15 @@
       let generationCount = 0;
       let quoteData = null;
       let runInProgress = false;
+      let generationInFlight = false;
       let confirmModalOpen = false;
       let quoteTooltipOpen = false;
+      let toastTimer = null;
       const THUMB_ROWS = 3;
       const NEW_USER_CONFIRM_REQUIRED_COUNT = 5;
+      const GENERATION_STATUS_POLL_BASE_MS = 2200;
+      const GENERATION_STATUS_POLL_MAX_MS = 15000;
+      const GENERATION_LONG_WAIT_MS = 180000;
       const SKIP_CONFIRM_STORAGE_KEY = 'renderis.skip_confirm_generation';
       const PROMPT_HISTORY_STORAGE_KEY = 'renderis.prompt_history.v1';
       const PROMPT_HISTORY_LIMIT = 10;
@@ -1940,6 +2082,388 @@
         });
       }
 
+      function showToast(message, tone = '') {
+        const toast = document.getElementById('uiToast');
+        if (!toast) return;
+        if (toastTimer) {
+          clearTimeout(toastTimer);
+          toastTimer = null;
+        }
+        toast.classList.remove('warning', 'error', 'visible');
+        if (tone === 'warning' || tone === 'error') {
+          toast.classList.add(tone);
+        }
+        toast.textContent = message || '';
+        if (!message) return;
+        toast.classList.add('visible');
+        toastTimer = setTimeout(() => {
+          toast.classList.remove('visible');
+        }, 2500);
+      }
+
+      function setGenerationControlsLocked(locked) {
+        document.querySelectorAll('.gen-lock-target').forEach((node) => {
+          node.classList.toggle('locked', !!locked);
+        });
+        const promptEl = getPromptInput();
+        if (promptEl) {
+          promptEl.disabled = !!locked;
+        }
+        ['promptHelperBtn', 'promptHistoryBtn', 'refFiles', 'refReplaceFile'].forEach((id) => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          if ('disabled' in el) {
+            el.disabled = !!locked;
+          }
+        });
+      }
+
+      function setGenerationLiveState({
+        visible = false,
+        text = '',
+        eta = '',
+        sub = '',
+        tone = '',
+        showSpinner = true,
+        showCancel = false,
+      }) {
+        const wrap = document.getElementById('genLive');
+        const textEl = document.getElementById('genLiveText');
+        const etaEl = document.getElementById('genLiveEta');
+        const subEl = document.getElementById('genLiveSub');
+        const spinner = document.getElementById('genLiveSpinner');
+        const cancelBtn = document.getElementById('genCancelBtn');
+        if (!wrap || !textEl || !etaEl || !subEl || !spinner || !cancelBtn) return;
+
+        wrap.classList.remove('error', 'warning');
+        if (tone === 'error' || tone === 'warning') {
+          wrap.classList.add(tone);
+        }
+        wrap.classList.toggle('visible', !!visible);
+        textEl.textContent = text || '';
+        etaEl.textContent = eta || '';
+        subEl.textContent = sub || '';
+        spinner.classList.toggle('hidden', !showSpinner);
+        cancelBtn.classList.toggle('hidden', !showCancel);
+      }
+
+      function createGenerationWaitController() {
+        const fakeStageDurations = [
+          [1000, 3000],
+          [3000, 6000],
+          [5000, 10000],
+          [2000, 6000],
+        ];
+        const etaProfiles = {
+          default: {
+            queued: [10, 30],
+            generating: [10, 20],
+            finalizing: [5, 10],
+          },
+          nano_banana: {
+            queued: [8, 22],
+            generating: [8, 18],
+            finalizing: [4, 9],
+          },
+          nano_banana_pro: {
+            queued: [15, 35],
+            generating: [14, 28],
+            finalizing: [7, 14],
+          },
+          nano_banana_edit: {
+            queued: [12, 30],
+            generating: [12, 24],
+            finalizing: [6, 12],
+          },
+        };
+        let active = false;
+        let generationId = 0;
+        let modelKey = '';
+        let startedAt = 0;
+        let fakeStage = 0;
+        let fakeTimer = null;
+        let pollTimer = null;
+        let pollBackoffMs = GENERATION_STATUS_POLL_BASE_MS;
+        let connectionIssue = false;
+        let serverSnapshot = null;
+
+        function randomBetween(min, max) {
+          const a = Number(min || 0);
+          const b = Number(max || a);
+          return Math.floor(a + Math.random() * Math.max(1, b - a + 1));
+        }
+
+        function clearTimers() {
+          if (fakeTimer) {
+            clearTimeout(fakeTimer);
+            fakeTimer = null;
+          }
+          if (pollTimer) {
+            clearTimeout(pollTimer);
+            pollTimer = null;
+          }
+        }
+
+        function normalizeStatus(statusValue) {
+          return String(statusValue || '').trim().toLowerCase();
+        }
+
+        function stageLabel(stageIndex) {
+          if (stageIndex <= 0) return labels.gen_status_queued;
+          if (stageIndex === 1) return labels.gen_status_step_1;
+          if (stageIndex === 2) return labels.gen_status_step_2;
+          return labels.gen_status_finalizing;
+        }
+
+        function etaRange(stageIndex) {
+          const profile = etaProfiles[modelKey] || etaProfiles.default;
+          if (stageIndex <= 0) return profile.queued;
+          if (stageIndex >= 3) return profile.finalizing;
+          return profile.generating;
+        }
+
+        function etaText(stageIndex) {
+          const [minSec, maxSec] = etaRange(stageIndex);
+          return fmt(labels.gen_eta_format, { min: minSec, max: maxSec });
+        }
+
+        function inferStageFromServer(snapshot) {
+          if (!snapshot) return fakeStage;
+          const status = normalizeStatus(snapshot.status);
+          if (status === 'queued' || status === 'pending') {
+            return 0;
+          }
+          if (status !== 'running') {
+            return fakeStage;
+          }
+          const total = Number(snapshot.tasks_total || 0);
+          if (total <= 0) {
+            return fakeStage;
+          }
+          const success = Number(snapshot.tasks_success || 0);
+          const fail = Number(snapshot.tasks_fail || 0);
+          const running = Number(snapshot.tasks_running || 0);
+          const progress = Math.max(0, Math.min(1, (success + fail + running * 0.6) / total));
+          if (progress < 0.34) return 1;
+          if (progress < 0.82) return 2;
+          return 3;
+        }
+
+        function render() {
+          if (!active) return;
+          const stage = inferStageFromServer(serverSnapshot);
+          let sub = '';
+          let tone = '';
+          if (connectionIssue) {
+            sub = labels.gen_connection_retrying;
+          }
+          if (Date.now() - startedAt >= GENERATION_LONG_WAIT_MS) {
+            sub = sub ? `${sub} ${labels.gen_taking_long}` : labels.gen_taking_long;
+            tone = tone || 'warning';
+          }
+          setGenerationLiveState({
+            visible: true,
+            text: stageLabel(stage),
+            eta: etaText(stage),
+            sub,
+            tone,
+            showSpinner: true,
+            showCancel: true,
+          });
+        }
+
+        function scheduleFakeStage() {
+          if (!active) return;
+          if (fakeStage >= 3) return;
+          const [minMs, maxMs] = fakeStageDurations[fakeStage] || [3000, 5000];
+          fakeTimer = setTimeout(() => {
+            if (!active) return;
+            fakeStage = Math.min(3, fakeStage + 1);
+            render();
+            scheduleFakeStage();
+          }, randomBetween(minMs, maxMs));
+        }
+
+        function schedulePoll(delayMs) {
+          if (!active) return;
+          if (pollTimer) {
+            clearTimeout(pollTimer);
+            pollTimer = null;
+          }
+          const jitter = randomBetween(-250, 250);
+          const nextDelay = Math.max(600, Number(delayMs || GENERATION_STATUS_POLL_BASE_MS) + jitter);
+          pollTimer = setTimeout(() => {
+            void pollStatus();
+          }, nextDelay);
+        }
+
+        async function pollStatus() {
+          if (!active) return;
+          if (!generationId) {
+            schedulePoll(pollBackoffMs);
+            return;
+          }
+          try {
+            const res = await fetch(`/api/generations/${generationId}/status`, {
+              credentials: 'include',
+            });
+            if (!res.ok) {
+              throw new Error(`status_${res.status}`);
+            }
+            const data = await res.json();
+            serverSnapshot = data || {};
+            connectionIssue = false;
+            pollBackoffMs = GENERATION_STATUS_POLL_BASE_MS;
+
+            const status = normalizeStatus(data.status);
+            if (status === 'success') {
+              await finishSuccess(false);
+              return;
+            }
+            if (status === 'partial') {
+              await finishSuccess(true);
+              return;
+            }
+            if (status === 'fail') {
+              finishFail(data.error_message || labels.gen_failed_basic);
+              return;
+            }
+
+            render();
+            schedulePoll(pollBackoffMs);
+          } catch (err) {
+            connectionIssue = true;
+            pollBackoffMs = Math.min(
+              GENERATION_STATUS_POLL_MAX_MS,
+              Math.floor(pollBackoffMs * 1.7)
+            );
+            render();
+            schedulePoll(pollBackoffMs);
+          }
+        }
+
+        async function finishSuccess(isPartial = false) {
+          active = false;
+          clearTimers();
+          generationInFlight = false;
+          setGenerationControlsLocked(false);
+          setRunButtonState();
+          setGenerationLiveState({
+            visible: false,
+            text: '',
+            eta: '',
+            sub: '',
+            showSpinner: false,
+            showCancel: false,
+          });
+          const runStatus = document.getElementById('runStatus');
+          if (runStatus) {
+            runStatus.classList.remove('error');
+            runStatus.textContent = isPartial ? labels.gen_partial_done : labels.request_sent;
+          }
+          await loadMe();
+          await loadHistory();
+        }
+
+        function finishFail(message) {
+          active = false;
+          clearTimers();
+          generationInFlight = false;
+          setGenerationControlsLocked(false);
+          setRunButtonState();
+          setGenerationLiveState({
+            visible: true,
+            text: labels.gen_failed_basic,
+            eta: '',
+            sub: message || '',
+            tone: 'error',
+            showSpinner: false,
+            showCancel: false,
+          });
+          const runStatus = document.getElementById('runStatus');
+          if (runStatus) {
+            runStatus.classList.add('error');
+            runStatus.textContent = `${labels.error_prefix}: ${message || labels.gen_failed_basic}`;
+          }
+        }
+
+        function callBackendCancel() {
+          if (!generationId) return;
+          void fetch(`/api/generations/${generationId}/cancel`, {
+            method: 'POST',
+            credentials: 'include',
+          }).catch(() => {});
+        }
+
+        function cancelLocally() {
+          if (!active) return false;
+          active = false;
+          clearTimers();
+          generationInFlight = false;
+          setGenerationControlsLocked(false);
+          setRunButtonState();
+          callBackendCancel();
+          setGenerationLiveState({
+            visible: true,
+            text: labels.gen_canceled_local,
+            eta: '',
+            sub: '',
+            tone: 'warning',
+            showSpinner: false,
+            showCancel: false,
+          });
+          const runStatus = document.getElementById('runStatus');
+          if (runStatus) {
+            runStatus.classList.remove('error');
+            runStatus.textContent = labels.gen_canceled_local;
+          }
+          return true;
+        }
+
+        function stopAndHide() {
+          active = false;
+          clearTimers();
+          generationInFlight = false;
+          setGenerationControlsLocked(false);
+          setRunButtonState();
+          setGenerationLiveState({
+            visible: false,
+            text: '',
+            eta: '',
+            sub: '',
+            showSpinner: false,
+            showCancel: false,
+          });
+        }
+
+        function start(nextGenerationId, nextModelKey) {
+          stopAndHide();
+          generationId = Number(nextGenerationId || 0);
+          modelKey = String(nextModelKey || '').trim();
+          startedAt = Date.now();
+          fakeStage = 0;
+          pollBackoffMs = GENERATION_STATUS_POLL_BASE_MS;
+          connectionIssue = false;
+          serverSnapshot = null;
+          active = true;
+          generationInFlight = true;
+          setGenerationControlsLocked(true);
+          setRunButtonState();
+          render();
+          scheduleFakeStage();
+          schedulePoll(900);
+        }
+
+        return {
+          start,
+          cancelLocally,
+          isActive: () => active,
+          stopAndHide,
+        };
+      }
+
+      const generationWaitController = createGenerationWaitController();
+
       function setBalance(balance) {
         currentBalance = Number.isFinite(Number(balance)) ? Number(balance) : 0;
         const label = `${labels.balance}: ${balance} ${labels.credits}`;
@@ -1972,7 +2496,7 @@
       function setRunButtonState() {
         const runBtn = document.getElementById('runBtn');
         if (!runBtn) return;
-        runBtn.disabled = runInProgress || confirmModalOpen;
+        runBtn.disabled = runInProgress || confirmModalOpen || generationInFlight;
       }
 
       function labelForBreakdownKey(key) {
@@ -2756,6 +3280,29 @@
         pages.textContent = `${thumbsPage + 1} / ${totalPages}`;
       }
 
+      async function resolveActiveGenerationId(createdAtIso = '') {
+        try {
+          const res = await fetch('/api/history', { credentials: 'include' });
+          if (!res.ok) return 0;
+          const data = await res.json();
+          const history = Array.isArray(data.history) ? data.history : [];
+          const activeStatuses = new Set(['queued', 'running', 'pending']);
+          if (createdAtIso) {
+            const exact = history.find((item) => (
+              String(item.created_at || '') === String(createdAtIso || '')
+              && activeStatuses.has(String(item.status || '').toLowerCase())
+            ));
+            if (exact && Number(exact.id || 0) > 0) {
+              return Number(exact.id);
+            }
+          }
+          const active = history.find((item) => activeStatuses.has(String(item.status || '').toLowerCase()));
+          return Number(active && active.id ? active.id : 0);
+        } catch (err) {
+          return 0;
+        }
+      }
+
       function buildGenerationForm() {
         if (!currentModel) return;
         if (!loggedIn) {
@@ -2804,6 +3351,7 @@
         document.getElementById('runStatus').textContent = labels.run_pending;
         try {
           const res = await fetch('/api/generate', { method: 'POST', body: form });
+          const data = await res.json().catch(() => ({}));
           if (res.ok) {
             document.getElementById('runStatus').textContent = labels.request_sent;
             addPromptToHistory(prompt);
@@ -2811,10 +3359,26 @@
             updateSkipConfirmToggleUi();
             updateQuote();
             await loadMe();
-            await loadHistory();
+            let generationId = Number(data.generation_id || 0);
+            if (!(generationId > 0)) {
+              generationId = await resolveActiveGenerationId(data.created_at || '');
+            }
+            if (generationId > 0) {
+              generationWaitController.start(generationId, currentModel ? currentModel.key : '');
+            } else {
+              setGenerationLiveState({
+                visible: true,
+                text: labels.gen_status_queued,
+                eta: fmt(labels.gen_eta_format, { min: 10, max: 30 }),
+                sub: labels.gen_taking_long,
+                tone: 'warning',
+                showSpinner: false,
+                showCancel: false,
+              });
+            }
           } else {
-            const data = await res.json();
             document.getElementById('runStatus').textContent = `${labels.error_prefix}: ${data.error || 'unknown'}`;
+            showToast(labels.gen_failed_basic, 'error');
           }
         } finally {
           runInProgress = false;
@@ -2823,6 +3387,15 @@
       }
 
       async function runGenerationFlow() {
+        if (generationInFlight) {
+          showToast(labels.gen_running_already, 'warning');
+          const runStatus = document.getElementById('runStatus');
+          if (runStatus) {
+            runStatus.classList.remove('error');
+            runStatus.textContent = labels.gen_running_already;
+          }
+          return;
+        }
         if (runInProgress || confirmModalOpen) return;
         const payload = buildGenerationForm();
         if (!payload) return;
@@ -3156,6 +3729,12 @@
           trackUiEvent('prompt_history_reused', { history_index: index });
         });
       }
+      const genCancelBtn = document.getElementById('genCancelBtn');
+      if (genCancelBtn) {
+        genCancelBtn.addEventListener('click', () => {
+          generationWaitController.cancelLocally();
+        });
+      }
 
       document.getElementById('runBtn').onclick = runGenerationFlow;
       const promoBtn = document.getElementById('promoBtn');
@@ -3300,6 +3879,9 @@
       }
       document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
+          if (generationWaitController.isActive()) {
+            generationWaitController.cancelLocally();
+          }
           closeConfirmModal();
           closeQuoteTooltip();
           closePromptPanels();
@@ -3311,7 +3893,10 @@
         if (!galleryItems.length) return;
         renderThumbs(galleryItems[galleryIndex] || null, false);
       });
-      window.addEventListener('beforeunload', stopCryptoPolling);
+      window.addEventListener('beforeunload', () => {
+        stopCryptoPolling();
+        generationWaitController.stopAndHide();
+      });
       const refInput = document.getElementById('refFiles');
       const refReplaceInput = document.getElementById('refReplaceFile');
       const refGrid = document.getElementById('refGrid');

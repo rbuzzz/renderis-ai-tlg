@@ -1461,6 +1461,57 @@ def create_app() -> FastAPI:
                 )
         return {"history": history}
 
+    @app.get("/api/generations/{generation_id}/status")
+    async def api_generation_status(request: Request, generation_id: int):
+        if not _is_logged_in(request):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        async with app.state.sessionmaker() as session:
+            credits = CreditsService(session)
+            user = await credits.get_user(int(request.session["user_id"]))
+            if not user:
+                return JSONResponse({"error": "user_not_found"}, status_code=404)
+
+            generation = await session.get(Generation, generation_id)
+            if not generation:
+                return JSONResponse({"error": "generation_not_found"}, status_code=404)
+            if generation.user_id != user.id:
+                return JSONResponse({"error": "forbidden"}, status_code=403)
+
+            task_rows = await session.execute(
+                select(GenerationTask.state, GenerationTask.fail_msg).where(GenerationTask.generation_id == generation.id)
+            )
+            states = []
+            error_message = ""
+            for state, fail_msg in task_rows.all():
+                state_value = str(state or "").strip().lower() or "queued"
+                states.append(state_value)
+                if not error_message and fail_msg:
+                    error_message = str(fail_msg)
+
+            counts = {
+                "queued": sum(1 for state in states if state == "queued"),
+                "pending": sum(1 for state in states if state == "pending"),
+                "running": sum(1 for state in states if state == "running"),
+                "success": sum(1 for state in states if state == "success"),
+                "fail": sum(1 for state in states if state == "fail"),
+            }
+            total = len(states)
+            done = generation.status in {"success", "partial", "fail"}
+            return {
+                "generation_id": generation.id,
+                "status": generation.status,
+                "done": done,
+                "created_at": generation.created_at.isoformat(),
+                "updated_at": generation.updated_at.isoformat(),
+                "tasks_total": total,
+                "tasks_queued": counts["queued"],
+                "tasks_pending": counts["pending"],
+                "tasks_running": counts["running"],
+                "tasks_success": counts["success"],
+                "tasks_fail": counts["fail"],
+                "error_message": error_message,
+            }
+
     @app.get("/api/download")
     async def api_download(request: Request, url: str):
         if not _is_logged_in(request):
@@ -1630,6 +1681,18 @@ def create_app() -> FastAPI:
         "confirm_skip_toggle",
         "quote_login_required",
         "quote_unavailable",
+        "gen_status_queued",
+        "gen_status_step_1",
+        "gen_status_step_2",
+        "gen_status_finalizing",
+        "gen_eta_format",
+        "gen_cancel",
+        "gen_canceled_local",
+        "gen_running_already",
+        "gen_connection_retrying",
+        "gen_taking_long",
+        "gen_failed_basic",
+        "gen_partial_done",
     ]
 
     return app
