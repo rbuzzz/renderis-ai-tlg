@@ -2044,9 +2044,6 @@
     <div class="ui-toast" id="uiToast"></div>
 
     <script src="https://telegram.org/js/telegram-web-app.js?59"></script>
-    {% if miniapp_analytics_token and miniapp_analytics_app_name %}
-      <script async src="https://tganalytics.xyz/index.js"></script>
-    {% endif %}
     <script>
       const labels = {{ labels | tojson }};
       const loggedIn = {{ 'true' if logged_in else 'false' }};
@@ -2190,16 +2187,25 @@
         'improve_prompt_used',
       ]);
       const MINIAPP_ANALYTICS_SESSION_KEY = 'renderis.miniapp.analytics.session.v1';
+      const MINIAPP_ANALYTICS_APP_OPEN_KEY = 'tg_analytics_app_open_sent';
+      const MINIAPP_ANALYTICS_PURCHASE_SUCCESS_PREFIX = 'tg_analytics_purchase_success';
+      const MINIAPP_ANALYTICS_SDK_URL = 'https://tganalytics.xyz/index.js';
       const miniAppAnalyticsState = {
         enabled: false,
         userId: 0,
         sessionId: '',
-        appOpenSent: false,
       };
+      let miniAppAnalyticsSdkPromise = null;
+
+      function hasStrictTelegramWebAppContext() {
+        if (!tgWebApp) return false;
+        const initData = typeof tgWebApp.initData === 'string' ? tgWebApp.initData.trim() : '';
+        return Boolean(initData || tgWebApp.initDataUnsafe);
+      }
 
       function miniAppAnalyticsEnabled() {
         return (
-          isMiniApp
+          hasStrictTelegramWebAppContext()
           && !!miniAppAnalyticsToken
           && !!miniAppAnalyticsAppName
           && miniAppAnalyticsState.enabled
@@ -2231,6 +2237,62 @@
           value = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
         }
         return value;
+      }
+
+      function loadMiniAppAnalyticsSdk() {
+        if (!hasStrictTelegramWebAppContext()) return Promise.resolve(false);
+        if (window.telegramAnalytics) return Promise.resolve(true);
+        if (miniAppAnalyticsSdkPromise) return miniAppAnalyticsSdkPromise;
+
+        miniAppAnalyticsSdkPromise = new Promise((resolve) => {
+          try {
+            const existing = document.querySelector('script[data-tg-analytics-sdk="1"]');
+            if (existing) {
+              existing.addEventListener('load', () => resolve(true), { once: true });
+              existing.addEventListener('error', () => resolve(false), { once: true });
+              return;
+            }
+
+            const script = document.createElement('script');
+            script.async = true;
+            script.src = MINIAPP_ANALYTICS_SDK_URL;
+            script.dataset.tgAnalyticsSdk = '1';
+            script.addEventListener('load', () => resolve(true), { once: true });
+            script.addEventListener('error', () => resolve(false), { once: true });
+            document.head.appendChild(script);
+          } catch (e) {
+            resolve(false);
+          }
+        });
+
+        return miniAppAnalyticsSdkPromise;
+      }
+
+      function markAppOpenSentOnce() {
+        try {
+          if (sessionStorage.getItem(MINIAPP_ANALYTICS_APP_OPEN_KEY) === '1') {
+            return false;
+          }
+          sessionStorage.setItem(MINIAPP_ANALYTICS_APP_OPEN_KEY, '1');
+          return true;
+        } catch (e) {
+          return true;
+        }
+      }
+
+      function shouldEmitPurchaseSuccess(invoiceIdOrChargeId) {
+        const dedupeValue = String(invoiceIdOrChargeId || '').trim();
+        if (!dedupeValue) return true;
+        const key = `${MINIAPP_ANALYTICS_PURCHASE_SUCCESS_PREFIX}:${dedupeValue}`;
+        try {
+          if (sessionStorage.getItem(key) === '1') {
+            return false;
+          }
+          sessionStorage.setItem(key, '1');
+          return true;
+        } catch (e) {
+          return true;
+        }
       }
 
       function mapUiEventToMiniAppEvent(eventName, payload = {}) {
@@ -2278,16 +2340,17 @@
         });
       }
 
-      function initMiniAppAnalytics() {
+      async function initMiniAppAnalytics() {
         const userId = miniAppAnalyticsUserId();
-        if (!isMiniApp || !miniAppAnalyticsToken || !miniAppAnalyticsAppName || !userId) return;
+        if (!hasStrictTelegramWebAppContext() || !miniAppAnalyticsToken || !miniAppAnalyticsAppName || !userId) return;
 
         miniAppAnalyticsState.enabled = true;
         miniAppAnalyticsState.userId = userId;
         miniAppAnalyticsState.sessionId = ensureMiniAppAnalyticsSessionId();
 
         try {
-          if (window.telegramAnalytics && typeof window.telegramAnalytics.init === 'function') {
+          const sdkReady = await loadMiniAppAnalyticsSdk();
+          if (sdkReady && window.telegramAnalytics && typeof window.telegramAnalytics.init === 'function') {
             window.telegramAnalytics.init({
               token: miniAppAnalyticsToken,
               appName: miniAppAnalyticsAppName,
@@ -2297,8 +2360,7 @@
           // SDK init is optional; custom events still go through direct endpoint call.
         }
 
-        if (!miniAppAnalyticsState.appOpenSent) {
-          miniAppAnalyticsState.appOpenSent = true;
+        if (markAppOpenSentOnce()) {
           sendMiniAppAnalyticsEvent('app_open', { source: 'miniapp' });
         }
       }
@@ -2792,6 +2854,18 @@
           return String(statusValue || '').trim().toLowerCase();
         }
 
+        function sanitizeGenerationFailCode(message) {
+          const raw = String(message || '').trim().toLowerCase();
+          if (!raw) return 'unknown';
+          if (raw.includes('timeout') || raw.includes('timed out')) return 'timeout';
+          if (raw.includes('rate') && raw.includes('limit')) return 'rate_limited';
+          if (raw.includes('insufficient')) return 'insufficient_credits';
+          if (raw.includes('cancel')) return 'canceled';
+          if (raw.includes('network') || raw.includes('connection')) return 'network';
+          if (raw.includes('forbidden') || raw.includes('unauthorized') || raw.includes('401') || raw.includes('403')) return 'auth';
+          return 'generation_failed';
+        }
+
         function stageLabel(stageIndex) {
           if (stageIndex <= 0) return labels.gen_status_queued;
           if (stageIndex === 1) return labels.gen_status_step_1;
@@ -2976,7 +3050,11 @@
             runStatus.classList.add('error');
             runStatus.textContent = `${labels.error_prefix}: ${message || labels.gen_failed_basic}`;
           }
-          trackUiEvent('generation_fail', { message: String(message || labels.gen_failed_basic) });
+          trackUiEvent('generation_fail', {
+            error_code: sanitizeGenerationFailCode(message),
+            provider: 'kie',
+            model: modelKey || (currentModel ? currentModel.key : ''),
+          });
         }
 
         function callBackendCancel() {
@@ -4652,7 +4730,14 @@
           if (data.paid || status === 'paid' || status === 'overpaid') {
             const creditsAdded = Number(data.credits_added || cryptoInvoiceCredits || 0);
             setCryptoStatus(fmt(labels.crypto_paid, { credits: creditsAdded }), 'success');
-            trackUiEvent('purchase_success', { provider: 'cryptopay', credits: creditsAdded });
+            const dedupeKey = data.invoice_id || data.charge_id || cryptoInvoiceUuid;
+            if (shouldEmitPurchaseSuccess(dedupeKey)) {
+              trackUiEvent('purchase_success', {
+                provider: 'cryptopay',
+                credits: creditsAdded,
+                invoice_id: String(data.invoice_id || cryptoInvoiceUuid || ''),
+              });
+            }
             await loadMe();
             stopCryptoPolling();
             return;
@@ -5289,7 +5374,7 @@
         return false;
       }
 
-      initMiniAppAnalytics();
+      void initMiniAppAnalytics();
 
       (async () => {
         const reloading = await maybeAutoMiniAppAuth();
