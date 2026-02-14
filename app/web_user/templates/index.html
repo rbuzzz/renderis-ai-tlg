@@ -492,14 +492,22 @@
         justify-content: space-between;
         gap: 10px;
         margin-bottom: 6px;
+        min-width: 0;
+        overflow: hidden;
       }
       .prompt-label-row label {
         margin-bottom: 0;
+        flex: 0 0 auto;
       }
       .prompt-label-actions {
         display: inline-flex;
         align-items: center;
+        justify-content: flex-end;
+        flex-wrap: wrap;
         gap: 8px;
+        min-width: 0;
+        max-width: 100%;
+        overflow: hidden;
       }
       .prompt-helper-btn,
       .prompt-history-btn,
@@ -515,8 +523,14 @@
         cursor: pointer;
         line-height: 1.2;
         white-space: nowrap;
+        min-width: 0;
+        max-width: 100%;
+        flex: 0 1 auto;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       #brainPackBuyBtn {
+        flex: 1 1 260px;
         max-width: 360px;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -2149,7 +2163,7 @@
           height: 40px;
         }
       }
-      @media (min-width: 900px) and (max-width: 1199px) {
+      @media (min-width: 901px) and (max-width: 1199px) {
         .grid {
           gap: 14px;
         }
@@ -2161,18 +2175,33 @@
           flex: 1 1 clamp(340px, 52vw, 720px);
           min-width: 320px;
         }
+        .prompt-label-actions {
+          width: 100%;
+        }
+        #brainPackBuyBtn {
+          max-width: 100%;
+        }
       }
       @media (max-width: 900px) {
         .grid {
           flex-direction: column;
           flex-wrap: nowrap;
           gap: 14px;
+          align-items: stretch;
+          width: 100%;
         }
         .grid > .panel {
           width: 100%;
           max-width: none;
           min-width: 0;
-          flex: 1 1 auto;
+          flex: 0 0 auto;
+        }
+        .grid > .panel:first-child,
+        .grid > .panel:last-child {
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+          flex: 0 0 auto;
         }
         .grid > .panel:first-child { order: 1; }
         .grid > .panel:last-child { order: 2; }
