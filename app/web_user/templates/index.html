@@ -822,7 +822,8 @@
         transform: scaleX(0);
         transform-origin: left center;
         border-radius: inherit;
-        background: linear-gradient(90deg, #6ba2d8 0%, #8fc8f5 55%, #78b3e7 100%);
+        background: linear-gradient(90deg, #e7ad3c 0%, #f5c35f 55%, #f0b249 100%);
+        box-shadow: 0 0 8px rgba(245, 185, 79, 0.38);
         transition: transform 0.22s ease;
         will-change: transform;
       }
@@ -1034,6 +1035,17 @@
         object-fit: contain;
         display: block;
       }
+      .gallery img.gallery-main-image {
+        position: relative;
+        z-index: 2;
+        opacity: 0;
+        transform: scale(0.99);
+        transition: opacity 0.32s ease, transform 0.32s ease;
+      }
+      .gallery img.gallery-main-image.ready {
+        opacity: 1;
+        transform: scale(1);
+      }
       .gallery img.gallery-image-enter {
         animation: gallery-fade-in 0.32s ease;
       }
@@ -1053,6 +1065,31 @@
         text-align: center;
         white-space: pre-line;
       }
+      .gallery-placeholder {
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: linear-gradient(135deg, #13253c 0%, #1a2f4a 50%, #13253c 100%);
+        overflow: hidden;
+        pointer-events: none;
+        z-index: 3;
+      }
+      .gallery-placeholder::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(110deg, rgba(255, 255, 255, 0) 16%, rgba(188, 214, 243, 0.15) 46%, rgba(255, 255, 255, 0) 74%);
+        transform: translateX(-120%);
+        animation: gallery-placeholder-sheen 1.5s ease-in-out infinite;
+      }
+      .gallery-placeholder.fade-out {
+        opacity: 0;
+        transition: opacity 0.28s ease;
+      }
+      @keyframes gallery-placeholder-sheen {
+        0% { transform: translateX(-120%); }
+        100% { transform: translateX(120%); }
+      }
       .gallery-badge {
         position: absolute;
         top: 12px;
@@ -1064,6 +1101,7 @@
         border-radius: 999px;
         font-size: 12px;
         font-weight: 600;
+        z-index: 4;
       }
       .gallery-count {
         position: absolute;
@@ -1076,6 +1114,7 @@
         border-radius: 999px;
         font-size: 12px;
         font-weight: 600;
+        z-index: 4;
       }
       .gallery-nav {
         position: absolute;
@@ -1091,6 +1130,7 @@
         align-items: center;
         justify-content: center;
         cursor: pointer;
+        z-index: 4;
       }
       .gallery-nav.prev { left: 12px; }
       .gallery-nav.next { right: 12px; }
@@ -1310,6 +1350,23 @@
       .thumbs-wrap {
         position: relative;
         padding: 0 34px;
+      }
+      .output-preview.generating .thumbs-wrap {
+        opacity: 0.68;
+        cursor: default;
+      }
+      .output-preview.generating .thumbs-wrap,
+      .output-preview.generating .thumbs,
+      .output-preview.generating .thumb,
+      .output-preview.generating .thumb-menu-btn,
+      .output-preview.generating .thumbs-nav {
+        pointer-events: none;
+      }
+      .output-preview.generating .thumb img {
+        filter: blur(1.7px);
+      }
+      .output-preview.generating .thumb.active img {
+        filter: blur(0.8px);
       }
       .thumbs {
         display: grid;
@@ -4594,26 +4651,30 @@
         const thumbsWrap = document.getElementById('thumbsWrap');
         const pages = document.getElementById('thumbsPages');
         const resultMeta = document.getElementById('resultMeta');
+        const previewWrap = document.getElementById('outputPreview');
         if (!gallery || !grid || !actions || !thumbsWrap || !pages) return;
+        if (previewWrap) {
+          previewWrap.classList.add('generating');
+        }
         const count = Math.max(1, Number(pendingSkeletonCount || 1));
-        const cardsHtml = Array.from({ length: count }).map(() => (
-          `<div class="result-skeleton">` +
-            `<div class="result-skeleton-img"></div>` +
-            `<div class="result-skeleton-line"></div>` +
-            `<div class="result-skeleton-line short"></div>` +
-          `</div>`
-        )).join('');
-        grid.innerHTML = cardsHtml;
-        grid.style.display = 'grid';
-        gallery.style.display = 'none';
+        const validItems = getValidGalleryItems();
+        const activeIdx = firstValidIndex(galleryIndex);
+        const activeItem = activeIdx >= 0 ? galleryItems[activeIdx] : null;
+        gallery.innerHTML = `<div class="gallery-placeholder" aria-hidden="true"></div>`;
+        gallery.style.display = 'block';
+        grid.style.display = 'none';
+        grid.innerHTML = '';
         actions.style.display = 'none';
-        thumbsWrap.style.display = 'none';
+        thumbsWrap.style.display = validItems.length > 1 ? 'block' : 'none';
         pages.style.display = 'none';
+        if (validItems.length > 1) {
+          renderThumbs(activeItem, false);
+        }
         if (resultMeta) {
           resultMeta.style.display = 'none';
           resultMeta.textContent = '';
         }
-        renderOutputViewToggle(count > 1);
+        renderOutputViewToggle(Math.max(validItems.length, count) > 1);
       }
 
       function getItemCostCredits(item) {
@@ -4858,12 +4919,16 @@
         const thumbsWrap = document.getElementById('thumbsWrap');
         const pages = document.getElementById('thumbsPages');
         const resultMeta = document.getElementById('resultMeta');
+        const previewWrap = document.getElementById('outputPreview');
         if (!gallery || !grid || !actions || !thumbsWrap || !pages) return;
 
         if (resultSkeletonActive) {
           closeThumbMenu();
           renderGallerySkeleton();
           return;
+        }
+        if (previewWrap) {
+          previewWrap.classList.remove('generating');
         }
 
         closeThumbMenu();
@@ -4934,15 +4999,37 @@
         grid.style.display = 'none';
 
         const img = document.createElement('img');
-        img.className = 'gallery-image-enter';
+        img.className = 'gallery-image-enter gallery-main-image';
         img.loading = isElementInViewport(gallery) ? 'eager' : 'lazy';
         img.decoding = 'async';
-        img.src = item.url;
+        const placeholder = document.createElement('div');
+        placeholder.className = 'gallery-placeholder';
+        placeholder.setAttribute('aria-hidden', 'true');
+        gallery.appendChild(placeholder);
+        const finishReveal = () => {
+          img.classList.add('ready');
+          placeholder.classList.add('fade-out');
+          setTimeout(() => {
+            if (placeholder.parentElement) {
+              placeholder.remove();
+            }
+          }, 320);
+        };
+        img.onload = () => {
+          requestAnimationFrame(finishReveal);
+        };
         img.onerror = () => {
+          if (placeholder.parentElement) {
+            placeholder.remove();
+          }
           item.invalid = true;
           renderGallery();
         };
         gallery.appendChild(img);
+        img.src = item.url;
+        if (img.complete) {
+          requestAnimationFrame(finishReveal);
+        }
 
         const badge = document.createElement('div');
         badge.className = 'gallery-badge';
