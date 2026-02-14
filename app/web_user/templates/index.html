@@ -5177,20 +5177,20 @@
         const finishReveal = () => {
           if (revealDone) return;
           revealDone = true;
+          if (
+            pendingFrameFlashGenerationId > 0
+            && Number(item.generation_id || 0) === pendingFrameFlashGenerationId
+          ) {
+            hapticImpactLightOnce(`gen-success-${Number(item.generation_id || 0)}`);
+            triggerResultFrameFlash(gallery);
+            pendingFrameFlashGenerationId = 0;
+          }
           if (shouldPremiumReveal) {
             img.classList.add('ready');
             const clearRevealClasses = () => {
               img.classList.remove('ready', 'result-reveal');
             };
             img.addEventListener('transitionend', clearRevealClasses, { once: true });
-            if (
-              pendingFrameFlashGenerationId > 0
-              && Number(item.generation_id || 0) === pendingFrameFlashGenerationId
-            ) {
-              hapticImpactLightOnce(`gen-success-${Number(item.generation_id || 0)}`);
-              triggerResultFrameFlash(gallery);
-              pendingFrameFlashGenerationId = 0;
-            }
           }
           placeholder.classList.add('fade-out');
           setTimeout(() => {
