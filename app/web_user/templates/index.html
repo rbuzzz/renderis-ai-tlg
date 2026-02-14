@@ -2832,6 +2832,26 @@
         });
       }
 
+      function hapticImpactSoftOnce(key) {
+        runTelegramHapticOnce(key, () => {
+          const impactOccurred = (tgWebApp && tgWebApp.HapticFeedback)
+            ? tgWebApp.HapticFeedback.impactOccurred
+            : null;
+          if (typeof impactOccurred !== 'function') return false;
+          try {
+            impactOccurred.call(tgWebApp.HapticFeedback, 'soft');
+            return true;
+          } catch (softErr) {
+            try {
+              impactOccurred.call(tgWebApp.HapticFeedback, 'light');
+              return true;
+            } catch (lightErr) {
+              return false;
+            }
+          }
+        });
+      }
+
       function hapticNotificationSuccessOnce(key) {
         runTelegramHapticOnce(key, () => {
           const notificationOccurred = (tgWebApp && tgWebApp.HapticFeedback)
@@ -5497,6 +5517,7 @@
         if (runInProgress) return;
         const payload = prebuiltPayload || buildGenerationForm();
         if (!payload || !payload.form) return;
+        const generationAttemptKey = `gen-start-local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const form = payload.form;
         const prompt = payload.prompt || '';
         runInProgress = true;
@@ -5511,6 +5532,7 @@
           const data = await res.json().catch(() => ({}));
           if (res.ok) {
             document.getElementById('runStatus').textContent = labels.request_sent;
+            hapticImpactSoftOnce(generationAttemptKey);
             addPromptToHistory(prompt);
             generationCount += 1;
             updateSkipConfirmToggleUi();
