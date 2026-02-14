@@ -14,10 +14,14 @@
         --accent: #3ccf91;
         --line: #2b3f59;
         --danger: #ff7a7a;
+        --admin-header-h: 72px;
+        --admin-page-gap: 24px;
+        --admin-container-pad-x: 24px;
+        --admin-container-max: 1400px;
         --admin-shell-pad: 28px;
-        --admin-topbar-h: 72px;
+        --admin-topbar-h: var(--admin-header-h);
         --admin-tab-h: 38px;
-        --admin-shell-top: 24px;
+        --admin-shell-top: var(--admin-page-gap);
       }
       html {
         scrollbar-gutter: stable;
@@ -28,17 +32,21 @@
         font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
         background: linear-gradient(120deg, #0f1b2b 0%, #13253b 50%, #0f1b2b 100%);
         color: var(--text);
-        padding: var(--admin-shell-pad);
+        padding: var(--admin-shell-pad) var(--admin-container-pad-x);
         min-height: 100vh;
       }
       a { color: inherit; }
+      .admin-root {
+        width: min(100%, var(--admin-container-max));
+        margin: 0 auto;
+      }
       .admin-header {
         display: grid;
         grid-template-columns: auto minmax(0, 1fr) auto;
         align-items: center;
         gap: 16px;
-        min-height: var(--admin-topbar-h);
-        height: var(--admin-topbar-h);
+        min-height: var(--admin-header-h);
+        height: var(--admin-header-h);
         margin: 0;
         padding: 0;
       }
@@ -92,15 +100,22 @@
       .admin-page {
         margin: 0;
         padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
       }
       .admin-page > :first-child {
         margin-top: 0 !important;
+      }
+      .admin-page > .section,
+      .admin-page > .grid {
+        margin: 0;
       }
       .grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: 16px;
-        margin-bottom: 24px;
+        margin-bottom: 0;
       }
       .card {
         background: var(--card);
@@ -115,7 +130,15 @@
         border-radius: 14px;
         padding: 16px;
         border: 1px solid var(--line);
-        margin-bottom: 16px;
+        margin-bottom: 0;
+      }
+      .section > h1,
+      .section > h2,
+      .section > h3 {
+        margin-top: 0;
+      }
+      .section-title {
+        margin: 0 0 10px;
       }
       table {
         width: 100%;
@@ -299,9 +322,10 @@
           --admin-shell-pad: 16px;
           --admin-topbar-h: auto;
           --admin-shell-top: 16px;
+          --admin-container-pad-x: 16px;
         }
         body {
-          padding: var(--admin-shell-pad);
+          padding: var(--admin-shell-pad) var(--admin-container-pad-x);
         }
         .admin-header {
           grid-template-columns: minmax(0, 1fr) auto;
@@ -348,9 +372,10 @@
         :root {
           --admin-shell-pad: 12px;
           --admin-shell-top: 12px;
+          --admin-container-pad-x: 12px;
         }
         body {
-          padding: var(--admin-shell-pad);
+          padding: var(--admin-shell-pad) var(--admin-container-pad-x);
         }
         .grid {
           grid-template-columns: 1fr;
@@ -367,6 +392,7 @@
     </style>
   </head>
   <body>
+    <div class="admin-root">
     <header class="admin-header">
       <div class="brand">
         Renderis Admin
@@ -397,6 +423,7 @@
         {% block content %}{% endblock %}
       </div>
     </main>
+    </div>
     <script>
       if ('scrollRestoration' in history) {
         history.scrollRestoration = 'manual';
