@@ -1596,6 +1596,26 @@
         height: 100%;
         object-fit: cover;
       }
+      .thumb.pending {
+        cursor: default;
+        border-style: dashed;
+        border-color: #2f4767;
+        background: #102036;
+      }
+      .thumb.pending:hover {
+        transform: none;
+      }
+      .thumb-pending-skeleton {
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, #132740 20%, #1a3352 50%, #132740 80%);
+        background-size: 220% 100%;
+        animation: thumb-pending-shift 1.4s ease-in-out infinite;
+      }
+      @keyframes thumb-pending-shift {
+        from { background-position: 200% 0; }
+        to { background-position: -20% 0; }
+      }
       .thumb-menu-btn {
         position: absolute;
         top: 4px;
@@ -3005,6 +3025,9 @@
       const thumbUrlValidationQueue = [];
       const THUMB_URL_VALIDATION_CONCURRENCY = 4;
       const THUMB_ROWS_PER_CHUNK = 3;
+      const THUMB_VALIDATION_PREFETCH_MARGIN = 16;
+      const THUMB_URL_STATUS_CACHE_MAX = 2000;
+      const THUMB_URL_STATUS_CACHE_TRIM_TO = 1200;
       const NEW_USER_CONFIRM_REQUIRED_COUNT = 5;
       const GENERATION_STATUS_POLL_BASE_MS = 2200;
       const GENERATION_STATUS_POLL_MAX_MS = 15000;
@@ -5143,7 +5166,17 @@
       function markThumbUrlStatus(urlValue, isActive) {
         const url = getUrlCacheKey(urlValue);
         if (!url) return;
+        if (thumbUrlStatusCache.has(url)) {
+          thumbUrlStatusCache.delete(url);
+        }
         thumbUrlStatusCache.set(url, Boolean(isActive));
+        if (thumbUrlStatusCache.size > THUMB_URL_STATUS_CACHE_MAX) {
+          while (thumbUrlStatusCache.size > THUMB_URL_STATUS_CACHE_TRIM_TO) {
+            const oldestKey = thumbUrlStatusCache.keys().next().value;
+            if (!oldestKey) break;
+            thumbUrlStatusCache.delete(oldestKey);
+          }
+        }
         if (!isActive) {
           galleryItems.forEach((item) => {
             if (String(item.url || '') === url) {
@@ -5179,9 +5212,7 @@
             thumbUrlValidationActive = Math.max(0, thumbUrlValidationActive - 1);
             thumbUrlValidationInFlight.delete(url);
             markThumbUrlStatus(url, Boolean(active));
-            if (!active) {
-              scheduleThumbsRefresh();
-            }
+            scheduleThumbsRefresh();
             pumpThumbUrlValidationQueue();
           };
           probe.onload = () => finish(true);
@@ -5845,14 +5876,28 @@
         thumbsVisibleCount = Math.max(Math.min(chunkSize, thumbItems.length), thumbsVisibleCount);
         if (thumbsVisibleCount > thumbItems.length) thumbsVisibleCount = thumbItems.length;
         const displayItems = thumbItems.slice(0, thumbsVisibleCount);
-        ensureThumbUrlsValidated(displayItems);
+        const validationWindowEnd = Math.min(
+          thumbItems.length,
+          Math.max(displayItems.length, thumbsVisibleCount) + THUMB_VALIDATION_PREFETCH_MARGIN
+        );
+        ensureThumbUrlsValidated(thumbItems.slice(0, validationWindowEnd));
 
         closeThumbMenu();
         displayItems.forEach((thumbItem) => {
+          const status = thumbUrlStatusCache.get(getUrlCacheKey(thumbItem.url));
           const wrap = document.createElement('div');
           wrap.className = 'thumb' + (currentItem && thumbItem.url === currentItem.url ? ' active' : '');
           if (pendingThumbPulseUrl && thumbItem.url === pendingThumbPulseUrl) {
             wrap.classList.add('pulse');
+          }
+          if (status !== true) {
+            wrap.classList.add('pending');
+            const pendingPlaceholder = document.createElement('div');
+            pendingPlaceholder.className = 'thumb-pending-skeleton';
+            pendingPlaceholder.setAttribute('aria-hidden', 'true');
+            wrap.appendChild(pendingPlaceholder);
+            thumbs.appendChild(wrap);
+            return;
           }
           wrap.tabIndex = 0;
           wrap.setAttribute('role', 'button');
@@ -6167,7 +6212,6 @@
         }
         galleryItems = sortedItems;
         syncFreshRevealCandidates(galleryItems);
-        ensureThumbUrlsValidated(galleryItems);
         const newIndex = galleryItems.findIndex((item) => !prevUrls.has(item.url));
         if (newIndex >= 0) {
           galleryIndex = newIndex;
