@@ -1252,19 +1252,23 @@
       }
       .thumb-menu-btn {
         position: absolute;
-        top: 2px;
-        right: 2px;
-        width: 40px;
-        height: 40px;
+        top: 7px;
+        right: 7px;
+        width: 24px;
+        height: 24px;
         border-radius: 50%;
-        border: 1px solid #355276;
-        background: rgba(15, 27, 43, 0.88);
+        border: 1px solid rgba(94, 129, 166, 0.6);
+        background: rgba(255, 255, 255, 0.08);
         color: var(--text);
         display: inline-flex;
         align-items: center;
         justify-content: center;
         line-height: 1;
-        font-size: 16px;
+        font-size: 13px;
+        font-weight: 700;
+        z-index: 8;
+        pointer-events: auto;
+        touch-action: manipulation;
         cursor: pointer;
         opacity: 0;
         transform: scale(0.96);
@@ -1278,7 +1282,8 @@
       }
       .thumb-menu-btn:hover,
       .thumb-menu-btn:focus-visible {
-        border-color: #4f6f96;
+        border-color: #6f93be;
+        background: rgba(255, 255, 255, 0.14);
         outline: none;
       }
       .thumb-favorite-badge {
@@ -1296,13 +1301,14 @@
         color: #ffd276;
         font-size: 12px;
         pointer-events: none;
+        z-index: 7;
       }
       .thumb.menu-open .thumb-favorite-badge {
         opacity: 0;
       }
       .thumb-popover {
         position: fixed;
-        z-index: 120;
+        z-index: 9999;
         min-width: 156px;
         padding: 6px;
         border-radius: 10px;
@@ -4273,7 +4279,7 @@
       }
 
       function closeThumbMenu() {
-        const popover = document.getElementById('thumbPopover');
+        const popover = ensureThumbPopoverRoot();
         if (popover) {
           popover.classList.remove('open');
           popover.setAttribute('aria-hidden', 'true');
@@ -4288,8 +4294,17 @@
         thumbMenuAnchorEl = null;
       }
 
-      function positionThumbMenu() {
+      function ensureThumbPopoverRoot() {
         const popover = document.getElementById('thumbPopover');
+        if (!popover) return null;
+        if (popover.parentElement !== document.body) {
+          document.body.appendChild(popover);
+        }
+        return popover;
+      }
+
+      function positionThumbMenu() {
+        const popover = ensureThumbPopoverRoot();
         if (!popover || !thumbMenuAnchorEl) return;
         const rect = thumbMenuAnchorEl.getBoundingClientRect();
         popover.classList.add('open');
@@ -4329,7 +4344,7 @@
         if (tile) {
           tile.classList.add('menu-open');
         }
-        positionThumbMenu();
+        requestAnimationFrame(positionThumbMenu);
       }
 
       function applyResultPrompt(item) {
@@ -4666,11 +4681,21 @@
           menuBtn.type = 'button';
           menuBtn.textContent = '⋯';
           menuBtn.setAttribute('aria-label', 'More actions');
-          menuBtn.onclick = (event) => {
+          const openMenuHandler = (event) => {
             event.preventDefault();
             event.stopPropagation();
             openThumbMenu(menuBtn, thumbItem);
           };
+          menuBtn.addEventListener('pointerdown', openMenuHandler);
+          menuBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          });
+          menuBtn.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              openMenuHandler(event);
+            }
+          });
           wrap.appendChild(menuBtn);
           thumbs.appendChild(wrap);
         });
@@ -5544,7 +5569,7 @@
       document.addEventListener('click', (event) => {
         if (!thumbMenuOpenUrl) return;
         const target = event.target;
-        if (target instanceof Element && (target.closest('.thumb') || target.closest('#thumbPopover'))) return;
+        if (target instanceof Element && (target.closest('.thumb-menu-btn') || target.closest('#thumbPopover'))) return;
         closeThumbMenu();
       });
       document.getElementById('thumbsPrev').onclick = (e) => {
