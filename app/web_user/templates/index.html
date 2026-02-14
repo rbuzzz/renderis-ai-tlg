@@ -2790,11 +2790,31 @@
         sessionId: '',
       };
       let miniAppAnalyticsSdkPromise = null;
+      let lastTelegramHapticSuccessKey = '';
 
       function hasStrictTelegramWebAppContext() {
         if (!tgWebApp) return false;
         const initData = typeof tgWebApp.initData === 'string' ? tgWebApp.initData.trim() : '';
         return Boolean(initData || tgWebApp.initDataUnsafe);
+      }
+
+      function triggerTelegramHapticLightOnce(key) {
+        const dedupeKey = String(key || '').trim();
+        if (!dedupeKey) return;
+        if (lastTelegramHapticSuccessKey === dedupeKey) return;
+        if (!hasStrictTelegramWebAppContext()) return;
+        try {
+          const impactOccurred = tgWebApp
+            && tgWebApp.HapticFeedback
+            && typeof tgWebApp.HapticFeedback.impactOccurred === 'function'
+            ? tgWebApp.HapticFeedback.impactOccurred
+            : null;
+          if (!impactOccurred) return;
+          impactOccurred.call(tgWebApp.HapticFeedback, 'light');
+          lastTelegramHapticSuccessKey = dedupeKey;
+        } catch (e) {
+          // Best effort only.
+        }
       }
 
       function miniAppAnalyticsEnabled() {
@@ -5130,6 +5150,7 @@
               pendingFrameFlashGenerationId > 0
               && Number(item.generation_id || 0) === pendingFrameFlashGenerationId
             ) {
+              triggerTelegramHapticLightOnce(`gen_success_${Number(item.generation_id || 0)}`);
               triggerResultFrameFlash(gallery);
               pendingFrameFlashGenerationId = 0;
             }
