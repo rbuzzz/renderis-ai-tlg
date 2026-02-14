@@ -1039,6 +1039,26 @@
         min-height: 360px;
         aspect-ratio: 1 / 1;
       }
+      .gallery.resultFrame--flash {
+        animation: result-frame-flash 0.48s cubic-bezier(0.22, 1, 0.36, 1) 1;
+      }
+      @keyframes result-frame-flash {
+        0% {
+          outline: 1px solid rgba(245, 185, 79, 0);
+          outline-offset: -1px;
+          box-shadow: 0 0 0 0 rgba(245, 185, 79, 0);
+        }
+        42% {
+          outline: 1px solid rgba(245, 185, 79, 0.35);
+          outline-offset: -1px;
+          box-shadow: 0 0 0 1px rgba(245, 185, 79, 0.22), 0 0 18px rgba(245, 185, 79, 0.18);
+        }
+        100% {
+          outline: 1px solid rgba(245, 185, 79, 0);
+          outline-offset: -1px;
+          box-shadow: 0 0 0 0 rgba(245, 185, 79, 0);
+        }
+      }
       .gallery img {
         width: 100%;
         height: 100%;
@@ -2659,6 +2679,7 @@
       let thumbMenuAnchorEl = null;
       let freshRevealGenerationId = 0;
       let pendingActionPulseGenerationId = 0;
+      let pendingFrameFlashGenerationId = 0;
       const freshRevealPendingUrls = new Set();
       const freshRevealSeenUrls = new Set();
       const THUMB_ROWS = 3;
@@ -3646,6 +3667,7 @@
           await animateProgressToComplete();
           markFreshRevealGeneration(generationId);
           pendingActionPulseGenerationId = Number(generationId || 0);
+          pendingFrameFlashGenerationId = Number(generationId || 0);
           generationInFlight = false;
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
@@ -3676,6 +3698,7 @@
           softProgress = 0;
           setSoftProgressUi(0, { instant: true });
           pendingActionPulseGenerationId = 0;
+          pendingFrameFlashGenerationId = 0;
           generationInFlight = false;
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
@@ -3715,6 +3738,7 @@
           softProgress = 0;
           setSoftProgressUi(0, { instant: true });
           pendingActionPulseGenerationId = 0;
+          pendingFrameFlashGenerationId = 0;
           generationInFlight = false;
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
@@ -3745,6 +3769,7 @@
           softProgress = 0;
           setSoftProgressUi(0, { instant: true });
           pendingActionPulseGenerationId = 0;
+          pendingFrameFlashGenerationId = 0;
           generationInFlight = false;
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
@@ -4899,6 +4924,18 @@
         actions.classList.toggle('is-generating', !!isGenerating);
       }
 
+      function triggerResultFrameFlash(frameEl) {
+        if (!frameEl) return;
+        frameEl.classList.remove('resultFrame--flash');
+        // Restart single-run keyframes reliably.
+        void frameEl.offsetWidth;
+        frameEl.classList.add('resultFrame--flash');
+        const cleanup = () => {
+          frameEl.classList.remove('resultFrame--flash');
+        };
+        frameEl.addEventListener('animationend', cleanup, { once: true });
+      }
+
       function pulseResultActionsActivation() {
         const actions = document.getElementById('galleryActions');
         if (!actions) return;
@@ -5089,6 +5126,13 @@
               img.classList.remove('ready', 'result-reveal');
             };
             img.addEventListener('transitionend', clearRevealClasses, { once: true });
+            if (
+              pendingFrameFlashGenerationId > 0
+              && Number(item.generation_id || 0) === pendingFrameFlashGenerationId
+            ) {
+              triggerResultFrameFlash(gallery);
+              pendingFrameFlashGenerationId = 0;
+            }
           }
           placeholder.classList.add('fade-out');
           setTimeout(() => {
