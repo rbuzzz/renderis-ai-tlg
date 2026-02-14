@@ -19,12 +19,13 @@
         --admin-container-pad-x: 24px;
         --admin-container-max: 1400px;
         --admin-shell-pad: 28px;
+        --admin-shell-pad-y: 28px;
         --admin-topbar-h: var(--admin-header-h);
         --admin-tab-h: 38px;
         --admin-shell-top: var(--admin-page-gap);
       }
       html {
-        scrollbar-gutter: stable;
+        scrollbar-gutter: stable both-edges;
       }
       * { box-sizing: border-box; }
       body {
@@ -32,8 +33,10 @@
         font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
         background: linear-gradient(120deg, #0f1b2b 0%, #13253b 50%, #0f1b2b 100%);
         color: var(--text);
-        padding: var(--admin-shell-pad) var(--admin-container-pad-x);
+        padding: var(--admin-shell-pad-y) var(--admin-container-pad-x);
         min-height: 100vh;
+        overflow-y: scroll;
+        scrollbar-gutter: stable both-edges;
       }
       a { color: inherit; }
       .admin-root {
@@ -62,9 +65,17 @@
         flex-wrap: nowrap;
         gap: 12px;
         justify-content: center;
+        min-height: var(--admin-tab-h);
+        height: var(--admin-tab-h);
         min-width: 0;
         margin: 0;
         padding: 0;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      .admin-nav::-webkit-scrollbar {
+        width: 0;
+        height: 0;
       }
       .admin-nav__item {
         text-decoration: none;
@@ -319,19 +330,16 @@
 
       @media (max-width: 980px) {
         :root {
-          --admin-shell-pad: 16px;
           --admin-topbar-h: auto;
-          --admin-shell-top: 16px;
           --admin-container-pad-x: 16px;
-        }
-        body {
-          padding: var(--admin-shell-pad) var(--admin-container-pad-x);
         }
         .admin-header {
           grid-template-columns: minmax(0, 1fr) auto;
-          row-gap: 10px;
-          height: auto;
-          min-height: 0;
+          grid-template-rows: minmax(0, 1fr) var(--admin-tab-h);
+          row-gap: 6px;
+          height: var(--admin-header-h);
+          min-height: var(--admin-header-h);
+          align-content: center;
         }
         .brand {
           font-size: 18px;
@@ -341,15 +349,17 @@
         }
         .admin-nav {
           grid-column: 1 / -1;
+          grid-row: 2;
           justify-content: flex-start;
           overflow-x: auto;
-          padding-bottom: 2px;
+          overflow-y: hidden;
+          padding-bottom: 0;
           gap: 8px;
         }
         .admin-nav__item {
           flex: 0 0 auto;
-          min-height: 34px;
-          height: 34px;
+          min-height: var(--admin-tab-h);
+          height: var(--admin-tab-h);
           padding: 0 10px;
         }
         .grid {
@@ -370,12 +380,7 @@
 
       @media (max-width: 640px) {
         :root {
-          --admin-shell-pad: 12px;
-          --admin-shell-top: 12px;
           --admin-container-pad-x: 12px;
-        }
-        body {
-          padding: var(--admin-shell-pad) var(--admin-container-pad-x);
         }
         .grid {
           grid-template-columns: 1fr;
