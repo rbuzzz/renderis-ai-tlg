@@ -834,6 +834,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Renderis Admin")
     app.add_middleware(SessionMiddleware, secret_key=settings.admin_web_secret)
     app.state.templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+    app.state.templates.env.globals["admin_layout_debug"] = settings.log_level.upper() == "DEBUG"
     app.state.sessionmaker = create_sessionmaker()
 
     @app.get("/", response_class=HTMLResponse)

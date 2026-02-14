@@ -16,7 +16,8 @@
         --danger: #ff7a7a;
         --admin-shell-pad: 28px;
         --admin-topbar-h: 72px;
-        --admin-tab-h: 36px;
+        --admin-tab-h: 38px;
+        --admin-shell-top: 24px;
       }
       html {
         scrollbar-gutter: stable;
@@ -31,7 +32,7 @@
         min-height: 100vh;
       }
       a { color: inherit; }
-      .topbar {
+      .admin-header {
         display: grid;
         grid-template-columns: auto minmax(0, 1fr) auto;
         align-items: center;
@@ -39,7 +40,6 @@
         min-height: var(--admin-topbar-h);
         height: var(--admin-topbar-h);
         margin: 0;
-        margin-bottom: 24px;
         padding: 0;
       }
       .brand {
@@ -48,7 +48,7 @@
         white-space: nowrap;
         line-height: 1;
       }
-      .topbar__nav {
+      .admin-nav {
         display: flex;
         align-items: center;
         flex-wrap: nowrap;
@@ -58,12 +58,12 @@
         margin: 0;
         padding: 0;
       }
-      .topbar__nav a {
+      .admin-nav__item {
         text-decoration: none;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-height: var(--admin-tab-h);
+        height: var(--admin-tab-h);
         padding: 0 10px;
         border-radius: 8px;
         color: var(--muted);
@@ -73,7 +73,7 @@
         font-size: 14px;
         font-weight: 500;
       }
-      .topbar__nav a.active {
+      .admin-nav__item.active {
         color: var(--text);
         border-color: var(--line);
         background: #122135;
@@ -84,11 +84,16 @@
         font-size: 14px;
         line-height: 1;
       }
-      .admin-main {
+      .admin-shell {
+        margin: 0;
+        padding: 0;
+        padding-top: var(--admin-shell-top);
+      }
+      .admin-page {
         margin: 0;
         padding: 0;
       }
-      .admin-main > :first-child {
+      .admin-page > :first-child {
         margin-top: 0 !important;
       }
       .grid {
@@ -188,14 +193,14 @@
         :root {
           --admin-shell-pad: 16px;
           --admin-topbar-h: auto;
+          --admin-shell-top: 16px;
         }
         body {
           padding: var(--admin-shell-pad);
         }
-        .topbar {
+        .admin-header {
           grid-template-columns: minmax(0, 1fr) auto;
           row-gap: 10px;
-          margin-bottom: 16px;
           height: auto;
           min-height: 0;
         }
@@ -205,16 +210,17 @@
         .logout {
           justify-self: end;
         }
-        .topbar__nav {
+        .admin-nav {
           grid-column: 1 / -1;
           justify-content: flex-start;
           overflow-x: auto;
           padding-bottom: 2px;
           gap: 8px;
         }
-        .topbar__nav a {
+        .admin-nav__item {
           flex: 0 0 auto;
           min-height: 34px;
+          height: 34px;
           padding: 0 10px;
         }
         .grid {
@@ -232,6 +238,7 @@
       @media (max-width: 640px) {
         :root {
           --admin-shell-pad: 12px;
+          --admin-shell-top: 12px;
         }
         body {
           padding: var(--admin-shell-pad);
@@ -247,7 +254,7 @@
     </style>
   </head>
   <body>
-    <div class="topbar">
+    <header class="admin-header">
       <div class="brand">
         Renderis Admin
         {% if is_subadmin %}
@@ -256,28 +263,50 @@
           <span class="badge ok">Админ</span>
         {% endif %}
       </div>
-      <nav class="topbar__nav">
-        <a href="/admin" class="{{ 'active' if active_tab == 'dashboard' else '' }}">Дашборд</a>
-        <a href="/admin/users" class="{{ 'active' if active_tab == 'users' else '' }}">Пользователи</a>
-        <a href="/admin/change-requests" class="{{ 'active' if active_tab == 'change_requests' else '' }}">Предложения</a>
+      <nav class="admin-nav">
+        <a href="/admin" class="admin-nav__item {{ 'active' if active_tab == 'dashboard' else '' }}">Дашборд</a>
+        <a href="/admin/users" class="admin-nav__item {{ 'active' if active_tab == 'users' else '' }}">Пользователи</a>
+        <a href="/admin/change-requests" class="admin-nav__item {{ 'active' if active_tab == 'change_requests' else '' }}">Предложения</a>
         {% if can_manage %}
-        <a href="/admin/products" class="{{ 'active' if active_tab == 'products' else '' }}">Товары</a>
+        <a href="/admin/products" class="admin-nav__item {{ 'active' if active_tab == 'products' else '' }}">Товары</a>
         {% endif %}
-        <a href="/admin/promos" class="{{ 'active' if active_tab == 'promos' else '' }}">Промо-коды</a>
-        <a href="/admin/chats" class="{{ 'active' if active_tab == 'chats' else '' }}">Чаты</a>
+        <a href="/admin/promos" class="admin-nav__item {{ 'active' if active_tab == 'promos' else '' }}">Промо-коды</a>
+        <a href="/admin/chats" class="admin-nav__item {{ 'active' if active_tab == 'chats' else '' }}">Чаты</a>
         {% if can_manage %}
-        <a href="/admin/settings" class="{{ 'active' if active_tab == 'settings' else '' }}">Настройки</a>
+        <a href="/admin/settings" class="admin-nav__item {{ 'active' if active_tab == 'settings' else '' }}">Настройки</a>
         {% endif %}
       </nav>
       <a class="logout" href="/logout">Выйти</a>
-    </div>
+    </header>
 
-    <main class="admin-main">
-      {% block content %}{% endblock %}
+    <main class="admin-shell">
+      <div class="admin-page">
+        {% block content %}{% endblock %}
+      </div>
     </main>
     <script>
       if ('scrollRestoration' in history) {
         history.scrollRestoration = 'manual';
+      }
+      if ({{ 'true' if admin_layout_debug else 'false' }}) {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            const headerEl = document.querySelector('.admin-header');
+            const pageEl = document.querySelector('.admin-page');
+            if (!headerEl || !pageEl) return;
+            const firstContentEl = pageEl.firstElementChild;
+            const headerRect = headerEl.getBoundingClientRect();
+            const firstRect = firstContentEl ? firstContentEl.getBoundingClientRect() : pageEl.getBoundingClientRect();
+            console.debug('[admin-layout-metrics]', {
+              path: window.location.pathname,
+              headerHeight: Math.round(headerRect.height),
+              headerTop: Math.round(headerRect.top),
+              headerBottom: Math.round(headerRect.bottom),
+              firstContentTop: Math.round(firstRect.top),
+              shellOffset: Math.round(firstRect.top - headerRect.bottom),
+            });
+          });
+        });
       }
     </script>
   </body>
