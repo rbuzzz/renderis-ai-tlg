@@ -796,10 +796,6 @@
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      .gen-live-eta {
-        font-size: 12px;
-        color: #93abc7;
-      }
       .gen-live-sub {
         margin-top: 6px;
         font-size: 12px;
@@ -807,9 +803,14 @@
       }
       .genProgress {
         margin-top: 8px;
+        opacity: 1;
+        transition: opacity 320ms ease;
       }
       .genProgress.hidden {
         display: none;
+      }
+      .genProgress.is-fading {
+        opacity: 0;
       }
       .genProgress__track {
         position: relative;
@@ -827,8 +828,11 @@
         border-radius: 999px;
         background: var(--accent);
         box-shadow: 0 0 10px rgba(245, 185, 79, 0.35);
-        transition: transform 260ms ease;
+        transition: transform 260ms ease, box-shadow 280ms ease;
         will-change: transform;
+      }
+      .genProgress.is-finishing .genProgress__fill {
+        box-shadow: 0 0 18px rgba(245, 185, 79, 0.55);
       }
       .gen-live.error {
         border-color: rgba(255, 118, 118, 0.5);
@@ -2449,7 +2453,6 @@
             <div class="gen-live-line">
               <span class="gen-live-spinner" id="genLiveSpinner" aria-hidden="true"></span>
               <span class="gen-live-text" id="genLiveText"></span>
-              <span class="gen-live-eta" id="genLiveEta"></span>
             </div>
             <button class="gen-cancel-btn hidden" id="genCancelBtn" type="button">{{ labels['gen_cancel'] }}</button>
           </div>
@@ -3333,7 +3336,6 @@
       function setGenerationLiveState({
         visible = false,
         text = '',
-        eta = '',
         sub = '',
         tone = '',
         showSpinner = true,
@@ -3341,13 +3343,12 @@
       }) {
         const wrap = document.getElementById('genLive');
         const textEl = document.getElementById('genLiveText');
-        const etaEl = document.getElementById('genLiveEta');
         const subEl = document.getElementById('genLiveSub');
         const spinner = document.getElementById('genLiveSpinner');
         const cancelBtn = document.getElementById('genCancelBtn');
         const progressWrap = document.getElementById('genLiveProgress');
         const progressFill = document.getElementById('genLiveProgressFill');
-        if (!wrap || !textEl || !etaEl || !subEl || !spinner || !cancelBtn) return;
+        if (!wrap || !textEl || !subEl || !spinner || !cancelBtn) return;
 
         wrap.classList.remove('error', 'warning');
         wrap.classList.remove('complete');
@@ -3356,13 +3357,17 @@
         }
         wrap.classList.toggle('visible', !!visible);
         textEl.textContent = text || '';
-        etaEl.textContent = eta || '';
         subEl.textContent = sub || '';
         spinner.classList.toggle('hidden', !showSpinner);
         cancelBtn.classList.toggle('hidden', !showCancel);
         if (progressWrap) {
           const showProgress = !!visible && !!showSpinner;
-          progressWrap.classList.toggle('hidden', !showProgress);
+          if (showProgress) {
+            progressWrap.classList.remove('hidden', 'is-fading');
+          } else {
+            progressWrap.classList.add('hidden');
+            progressWrap.classList.remove('is-finishing', 'is-fading');
+          }
           if (!showProgress && progressFill) {
             progressFill.style.transform = 'scaleX(0)';
           }
@@ -3371,28 +3376,6 @@
 
       function createGenerationWaitController() {
         const stageAdvanceRangeMs = [3000, 5000];
-        const etaProfiles = {
-          default: {
-            queued: [10, 30],
-            generating: [10, 20],
-            finalizing: [5, 10],
-          },
-          nano_banana: {
-            queued: [8, 22],
-            generating: [8, 18],
-            finalizing: [4, 9],
-          },
-          nano_banana_pro: {
-            queued: [15, 35],
-            generating: [14, 28],
-            finalizing: [7, 14],
-          },
-          nano_banana_edit: {
-            queued: [12, 30],
-            generating: [12, 24],
-            finalizing: [6, 12],
-          },
-        };
         const localeCode = String(document.documentElement.lang || 'en').toLowerCase();
         const isRuLocale = localeCode.startsWith('ru');
         const stageMessages = isRuLocale
@@ -3456,21 +3439,6 @@
           return stageMessages[idx] || stageMessages[stageMessages.length - 1];
         }
 
-        function etaRange(stageIndex) {
-          const profile = etaProfiles[modelKey] || etaProfiles.default;
-          if (stageIndex <= 0) return profile.queued;
-          if (stageIndex >= 3) return profile.finalizing;
-          return profile.generating;
-        }
-
-        function etaText(stageIndex) {
-          const [minSec, maxSec] = etaRange(stageIndex);
-          const estimated = Math.max(1, Math.round((Number(minSec || 0) + Number(maxSec || 0)) / 2));
-          return isRuLocale
-            ? `Осталось около ${estimated} сек.`
-            : `About ${estimated} seconds remaining`;
-        }
-
         function setSoftProgressUi(value, { complete = false, instant = false } = {}) {
           const wrap = document.getElementById('genLive');
           const fill = document.getElementById('genLiveProgressFill');
@@ -3519,11 +3487,18 @@
 
         async function animateProgressToComplete() {
           const wrap = document.getElementById('genLive');
+          const progressWrap = document.getElementById('genLiveProgress');
           const fill = document.getElementById('genLiveProgressFill');
-          if (!wrap || !fill) return;
+          if (!wrap || !fill || !progressWrap) return;
+          progressWrap.classList.remove('hidden', 'is-fading');
+          progressWrap.classList.add('is-finishing');
           softProgress = 1;
           setSoftProgressUi(1, { complete: true });
+          await new Promise((resolve) => setTimeout(resolve, 260));
           await new Promise((resolve) => setTimeout(resolve, 280));
+          progressWrap.classList.add('is-fading');
+          await new Promise((resolve) => setTimeout(resolve, 320));
+          progressWrap.classList.remove('is-finishing', 'is-fading');
         }
 
         function inferStageFromServer(snapshot) {
@@ -3563,7 +3538,6 @@
           setGenerationLiveState({
             visible: true,
             text: stageLabel(stage),
-            eta: etaText(stage),
             sub,
             tone,
             showSpinner: true,
@@ -3654,7 +3628,6 @@
           setGenerationLiveState({
             visible: false,
             text: '',
-            eta: '',
             sub: '',
             showSpinner: false,
             showCancel: false,
@@ -3683,7 +3656,6 @@
           setGenerationLiveState({
             visible: true,
             text: labels.gen_failed_basic,
-            eta: '',
             sub: message || '',
             tone: 'error',
             showSpinner: false,
@@ -3722,7 +3694,6 @@
           setGenerationLiveState({
             visible: true,
             text: labels.gen_canceled_local,
-            eta: '',
             sub: '',
             tone: 'warning',
             showSpinner: false,
@@ -3750,7 +3721,6 @@
           setGenerationLiveState({
             visible: false,
             text: '',
-            eta: '',
             sub: '',
             showSpinner: false,
             showCancel: false,
@@ -5338,7 +5308,6 @@
               setGenerationLiveState({
                 visible: true,
                 text: labels.gen_status_queued,
-                eta: fmt(labels.gen_eta_format, { min: 10, max: 30 }),
                 sub: labels.gen_taking_long,
                 tone: 'warning',
                 showSpinner: false,
