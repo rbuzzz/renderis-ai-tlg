@@ -1979,9 +1979,11 @@
           background: rgba(11, 18, 32, 0.92);
           backdrop-filter: blur(8px);
           gap: 8px;
+          min-height: 54px;
         }
         .brand-wrap {
-          flex: 1 1 auto;
+          flex: 0 0 auto;
+          flex-shrink: 0;
           gap: 8px;
         }
         .site-logo {
@@ -2000,10 +2002,12 @@
         .top-actions {
           width: auto;
           flex: 0 0 auto;
+          flex-shrink: 0;
           display: flex;
           align-items: center;
           gap: 6px;
           flex-wrap: nowrap;
+          margin-left: auto;
         }
         .lang-menu,
         .topup-menu,
@@ -2098,6 +2102,17 @@
           min-width: 200px;
           width: max-content;
           max-width: 90vw;
+        }
+        body.is-miniapp .brand-text {
+          display: none;
+        }
+        body.is-miniapp .brand-wrap {
+          gap: 0;
+          min-width: 32px;
+        }
+        body.is-miniapp .topbar {
+          padding-left: 10px;
+          padding-right: 8px;
         }
       }
     </style>
@@ -2504,6 +2519,9 @@
         ? tgWebApp.initData.trim()
         : '';
       const isMiniApp = Boolean(miniAppInitData);
+      if (isMiniApp && document.body) {
+        document.body.classList.add('is-miniapp');
+      }
       const loginWidget = document.getElementById('loginWidget');
       const miniAppAuthNotice = document.getElementById('miniAppAuthNotice');
 
