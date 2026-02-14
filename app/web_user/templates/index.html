@@ -404,9 +404,21 @@
         margin-bottom: 18px;
       }
       .grid {
-        display: grid;
-        grid-template-columns: 1.15fr 1fr;
+        display: flex;
+        align-items: stretch;
         gap: 20px;
+        flex-wrap: nowrap;
+      }
+      .grid > .panel {
+        min-width: 0;
+      }
+      .grid > .panel:first-child {
+        flex: 1 1 560px;
+        max-width: 740px;
+      }
+      .grid > .panel:last-child {
+        flex: 1 1 520px;
+        min-width: 360px;
       }
       .panel {
         background: var(--panel);
@@ -1979,7 +1991,6 @@
           padding: 14px;
         }
         .grid {
-          grid-template-columns: 1fr;
           gap: 14px;
         }
         .topbar {
@@ -2137,6 +2148,34 @@
           width: 40px;
           height: 40px;
         }
+      }
+      @media (min-width: 900px) and (max-width: 1199px) {
+        .grid {
+          gap: 14px;
+        }
+        .grid > .panel:first-child {
+          flex: 1 1 clamp(420px, 48vw, 620px);
+          max-width: none;
+        }
+        .grid > .panel:last-child {
+          flex: 1 1 clamp(340px, 52vw, 720px);
+          min-width: 320px;
+        }
+      }
+      @media (max-width: 900px) {
+        .grid {
+          flex-direction: column;
+          flex-wrap: nowrap;
+          gap: 14px;
+        }
+        .grid > .panel {
+          width: 100%;
+          max-width: none;
+          min-width: 0;
+          flex: 1 1 auto;
+        }
+        .grid > .panel:first-child { order: 1; }
+        .grid > .panel:last-child { order: 2; }
       }
       @media (min-width: 900px) and (max-width: 1199px) {
         .topbar {
