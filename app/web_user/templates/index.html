@@ -56,7 +56,11 @@
         font-family: "Fraunces", serif;
         font-size: 26px;
       }
-      .subtitle { color: var(--muted); font-size: 14px; margin-top: 4px; }
+      .subtitle {
+        color: rgba(159, 179, 204, 0.74);
+        font-size: 13px;
+        margin-top: 3px;
+      }
       .top-actions {
         display: flex;
         align-items: stretch;
@@ -317,6 +321,52 @@
         align-items: center;
         justify-content: center;
         line-height: 1;
+      }
+      @media (min-width: 769px) {
+        .top-actions.top-actions-logged {
+          gap: 7px;
+          padding: 4px;
+          border-radius: 999px;
+          border: 1px solid rgba(63, 89, 121, 0.55);
+          background: rgba(14, 24, 38, 0.68);
+          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
+        }
+        .top-actions.top-actions-logged .lang-button,
+        .top-actions.top-actions-logged .balance,
+        .top-actions.top-actions-logged .topup-button,
+        .top-actions.top-actions-logged .user-button {
+          min-height: 47px;
+          height: 47px;
+          padding: 0 14px;
+          border-radius: 999px;
+          font-size: 14px;
+          border-width: 1px;
+          border-color: rgba(57, 82, 113, 0.62);
+        }
+        .top-actions.top-actions-logged .lang-button,
+        .top-actions.top-actions-logged .balance,
+        .top-actions.top-actions-logged .user-button {
+          background: rgba(17, 30, 47, 0.95);
+        }
+        .top-actions.top-actions-logged .topup-button {
+          background: linear-gradient(135deg, rgba(32, 54, 82, 0.96) 0%, rgba(23, 40, 63, 0.96) 100%);
+        }
+        .top-actions.top-actions-logged .balance {
+          padding: 0 15px;
+        }
+        .top-actions.top-actions-logged .user-avatar {
+          width: 34px;
+          height: 34px;
+          font-size: 13px;
+        }
+        .top-actions.top-actions-logged .user-name {
+          color: rgba(238, 243, 251, 0.76);
+          transition: color 0.16s ease;
+        }
+        .top-actions.top-actions-logged .user-button:hover .user-name,
+        .top-actions.top-actions-logged .user-button:focus-visible .user-name {
+          color: rgba(238, 243, 251, 0.93);
+        }
       }
       .logout {
         color: var(--muted);
@@ -2131,12 +2181,12 @@
           <div class="subtitle">{{ labels['site_tagline'] }}</div>
         </div>
       </div>
-      <div class="top-actions">
+      <div class="top-actions{% if logged_in %} top-actions-logged{% endif %}">
         <div class="lang-menu" id="langMenu">
           <button class="lang-button" id="langButton" type="button" aria-haspopup="true" aria-expanded="false">
             <span class="lang-icon">🌐</span>
             <span class="lang-short" id="langShort">{{ (lang or 'en')|upper }}</span>
-            <span class="lang-name">{{ labels['language'] }}: {{ current_lang_label }}</span>
+            <span class="lang-name">{{ (lang or 'en')|upper }}</span>
             <span class="user-caret">▾</span>
           </button>
           <div class="lang-dropdown" id="langDropdown">
@@ -3545,7 +3595,7 @@
       function setBalance(balance) {
         currentBalance = Number.isFinite(Number(balance)) ? Number(balance) : 0;
         const value = Number.isFinite(Number(balance)) ? Number(balance) : 0;
-        const fullLabel = `${labels.balance}: ${value} ${labels.credits}`;
+        const fullLabel = `${value} cr`;
         const shortLabel = `${value} cr`;
         const fullEl = document.getElementById('balanceFull');
         const shortEl = document.getElementById('balanceShort');
