@@ -4922,12 +4922,36 @@
         openConfirmModal(total);
       }
 
+      function isSameGalleryData(prevItems, nextItems) {
+        if (!Array.isArray(prevItems) || !Array.isArray(nextItems)) return false;
+        if (prevItems.length !== nextItems.length) return false;
+        for (let i = 0; i < prevItems.length; i += 1) {
+          const a = prevItems[i] || {};
+          const b = nextItems[i] || {};
+          if (String(a.url || '') !== String(b.url || '')) return false;
+          if (Number(a.generation_id || 0) !== Number(b.generation_id || 0)) return false;
+          if (String(a.model || '') !== String(b.model || '')) return false;
+          if (String(a.created_at || '') !== String(b.created_at || '')) return false;
+          if (String(a.prompt || '') !== String(b.prompt || '')) return false;
+          if (Number(a.total_cost_credits || 0) !== Number(b.total_cost_credits || 0)) return false;
+          if (Number(a.final_cost_credits || 0) !== Number(b.final_cost_credits || 0)) return false;
+          if (Number(a.cost_credits || 0) !== Number(b.cost_credits || 0)) return false;
+          if (Number(a.credits_spent || 0) !== Number(b.credits_spent || 0)) return false;
+          if (Number(a.duration_seconds || 0) !== Number(b.duration_seconds || 0)) return false;
+          if (Number(a.duration_sec || 0) !== Number(b.duration_sec || 0)) return false;
+          if (Number(a.elapsed_seconds || 0) !== Number(b.elapsed_seconds || 0)) return false;
+          if (Number(a.processing_seconds || 0) !== Number(b.processing_seconds || 0)) return false;
+        }
+        return true;
+      }
+
       async function loadHistory() {
         const prevUrls = new Set(galleryItems.map((item) => item.url));
         const res = await fetch('/api/history');
         if (!res.ok) return;
         const data = await res.json();
         if (!data.history || data.history.length === 0) {
+          if (!galleryItems.length) return;
           galleryItems = [];
           renderGallery();
           return;
@@ -4954,6 +4978,9 @@
             });
           });
         });
+        if (isSameGalleryData(galleryItems, items)) {
+          return;
+        }
         galleryItems = items;
         const newIndex = galleryItems.findIndex((item) => !prevUrls.has(item.url));
         if (newIndex >= 0) {
