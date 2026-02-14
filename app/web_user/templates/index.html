@@ -2623,6 +2623,21 @@
         }
       }
     </style>
+    <script>
+      window.__renderisInitAnalyticsQueued = false;
+      window.initAnalytics = function initAnalytics() {
+        window.__renderisInitAnalyticsQueued = true;
+        if (typeof window.__renderisScheduleMiniAppAnalyticsInitEarly === 'function') {
+          window.__renderisScheduleMiniAppAnalyticsInitEarly();
+        }
+      };
+    </script>
+    <script
+      async
+      src="https://tganalytics.xyz/index.js"
+      onload="initAnalytics()"
+      type="text/javascript"
+    ></script>
   </head>
   <body>
     <div class="topbar">
@@ -3096,6 +3111,7 @@
         sessionId: '',
       };
       let miniAppAnalyticsSdkPromise = null;
+      let miniAppAnalyticsInitInProgress = false;
       const telegramHapticTriggeredKeys = new Set();
 
       function hasStrictTelegramWebAppContext() {
@@ -3216,31 +3232,50 @@
         return value;
       }
 
+      function wait(ms) {
+        return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms || 0))));
+      }
+
+      async function waitForTelegramAnalytics(maxAttempts = 10, delayMs = 100) {
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+          if (window.telegramAnalytics) return true;
+          if (attempt < maxAttempts - 1) {
+            await wait(delayMs);
+          }
+        }
+        return Boolean(window.telegramAnalytics);
+      }
+
       function loadMiniAppAnalyticsSdk() {
         if (!hasStrictTelegramWebAppContext()) return Promise.resolve(false);
         if (window.telegramAnalytics) return Promise.resolve(true);
         if (miniAppAnalyticsSdkPromise) return miniAppAnalyticsSdkPromise;
 
-        miniAppAnalyticsSdkPromise = new Promise((resolve) => {
+        miniAppAnalyticsSdkPromise = (async () => {
           try {
-            const existing = document.querySelector('script[data-tg-analytics-sdk="1"]');
-            if (existing) {
-              existing.addEventListener('load', () => resolve(true), { once: true });
-              existing.addEventListener('error', () => resolve(false), { once: true });
-              return;
-            }
+            const hasStaticScript = Boolean(
+              document.querySelector('script[src*="tganalytics.xyz/index.js"]')
+            );
+            let ready = await waitForTelegramAnalytics(hasStaticScript ? 14 : 8, 100);
+            if (ready) return true;
 
-            const script = document.createElement('script');
-            script.async = true;
-            script.src = MINIAPP_ANALYTICS_SDK_URL;
-            script.dataset.tgAnalyticsSdk = '1';
-            script.addEventListener('load', () => resolve(true), { once: true });
-            script.addEventListener('error', () => resolve(false), { once: true });
-            document.head.appendChild(script);
+            // Last fallback for non-standard environments with no static tag.
+            if (!hasStaticScript) {
+              const existing = document.querySelector('script[data-tg-analytics-sdk="1"]');
+              if (!existing) {
+                const script = document.createElement('script');
+                script.async = true;
+                script.src = MINIAPP_ANALYTICS_SDK_URL;
+                script.dataset.tgAnalyticsSdk = '1';
+                document.head.appendChild(script);
+              }
+              ready = await waitForTelegramAnalytics(12, 100);
+            }
+            return ready;
           } catch (e) {
-            resolve(false);
+            return false;
           }
-        });
+        })();
 
         return miniAppAnalyticsSdkPromise;
       }
@@ -3318,46 +3353,62 @@
       }
 
       async function initMiniAppAnalytics() {
+        if (miniAppAnalyticsInitInProgress) return;
         const userId = miniAppAnalyticsUserId();
         if (!hasStrictTelegramWebAppContext() || !miniAppAnalyticsToken || !miniAppAnalyticsAppName || !userId) return;
 
-        miniAppAnalyticsState.enabled = true;
+        miniAppAnalyticsInitInProgress = true;
+        miniAppAnalyticsState.enabled = false;
         miniAppAnalyticsState.userId = userId;
         miniAppAnalyticsState.sessionId = ensureMiniAppAnalyticsSessionId();
 
         try {
           const sdkReady = await loadMiniAppAnalyticsSdk();
-          if (sdkReady && window.telegramAnalytics && typeof window.telegramAnalytics.init === 'function') {
-            window.telegramAnalytics.init({
-              token: miniAppAnalyticsToken,
-              appName: miniAppAnalyticsAppName,
-            });
+          if (!sdkReady || !window.telegramAnalytics || typeof window.telegramAnalytics.init !== 'function') {
+            return;
           }
+          window.telegramAnalytics.init({
+            token: miniAppAnalyticsToken,
+            appName: miniAppAnalyticsAppName,
+          });
+          miniAppAnalyticsState.enabled = true;
         } catch (e) {
-          // SDK init is optional; custom events still go through direct endpoint call.
+          miniAppAnalyticsState.enabled = false;
+        } finally {
+          miniAppAnalyticsInitInProgress = false;
         }
 
-        if (markAppOpenSentOnce()) {
+        if (miniAppAnalyticsState.enabled && markAppOpenSentOnce()) {
           sendMiniAppAnalyticsEvent('app_open', { source: 'miniapp' });
         }
       }
 
-      function scheduleMiniAppAnalyticsInit() {
+      function scheduleMiniAppAnalyticsInitEarly() {
         const run = () => {
           void initMiniAppAnalytics();
         };
-        const defer = () => {
-          if (typeof window.requestIdleCallback === 'function') {
-            window.requestIdleCallback(run, { timeout: 1200 });
-          } else {
-            setTimeout(run, 50);
+        run();
+        setTimeout(run, 220);
+        if (tgWebApp && typeof tgWebApp.ready === 'function') {
+          try {
+            tgWebApp.ready();
+          } catch (e) {
+            // no-op
           }
-        };
-        if (typeof window.requestAnimationFrame === 'function') {
-          window.requestAnimationFrame(defer);
-        } else {
-          defer();
+          setTimeout(run, 340);
         }
+      }
+
+      function scheduleMiniAppAnalyticsInit() {
+        scheduleMiniAppAnalyticsInitEarly();
+      }
+
+      window.__renderisScheduleMiniAppAnalyticsInitEarly = scheduleMiniAppAnalyticsInitEarly;
+      window.initAnalytics = function initAnalytics() {
+        scheduleMiniAppAnalyticsInitEarly();
+      };
+      if (window.__renderisInitAnalyticsQueued) {
+        scheduleMiniAppAnalyticsInitEarly();
       }
 
       function fmt(template, params = {}) {
