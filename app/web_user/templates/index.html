@@ -2790,7 +2790,7 @@
         sessionId: '',
       };
       let miniAppAnalyticsSdkPromise = null;
-      let lastTelegramHapticSuccessKey = '';
+      const telegramHapticTriggeredKeys = new Set();
 
       function hasStrictTelegramWebAppContext() {
         if (!tgWebApp) return false;
@@ -2798,23 +2798,60 @@
         return Boolean(initData || tgWebApp.initDataUnsafe);
       }
 
-      function triggerTelegramHapticLightOnce(key) {
+      function canUseTelegramHaptics() {
+        return Boolean(
+          hasStrictTelegramWebAppContext()
+          && tgWebApp
+          && tgWebApp.HapticFeedback
+        );
+      }
+
+      function runTelegramHapticOnce(key, invoke) {
         const dedupeKey = String(key || '').trim();
         if (!dedupeKey) return;
-        if (lastTelegramHapticSuccessKey === dedupeKey) return;
-        if (!hasStrictTelegramWebAppContext()) return;
+        if (telegramHapticTriggeredKeys.has(dedupeKey)) return;
+        if (!canUseTelegramHaptics()) return;
         try {
-          const impactOccurred = tgWebApp
-            && tgWebApp.HapticFeedback
-            && typeof tgWebApp.HapticFeedback.impactOccurred === 'function'
-            ? tgWebApp.HapticFeedback.impactOccurred
-            : null;
-          if (!impactOccurred) return;
-          impactOccurred.call(tgWebApp.HapticFeedback, 'light');
-          lastTelegramHapticSuccessKey = dedupeKey;
+          const done = Boolean(invoke && invoke());
+          if (done) {
+            telegramHapticTriggeredKeys.add(dedupeKey);
+          }
         } catch (e) {
           // Best effort only.
         }
+      }
+
+      function hapticImpactLightOnce(key) {
+        runTelegramHapticOnce(key, () => {
+          const impactOccurred = (tgWebApp && tgWebApp.HapticFeedback)
+            ? tgWebApp.HapticFeedback.impactOccurred
+            : null;
+          if (typeof impactOccurred !== 'function') return false;
+          impactOccurred.call(tgWebApp.HapticFeedback, 'light');
+          return true;
+        });
+      }
+
+      function hapticNotificationSuccessOnce(key) {
+        runTelegramHapticOnce(key, () => {
+          const notificationOccurred = (tgWebApp && tgWebApp.HapticFeedback)
+            ? tgWebApp.HapticFeedback.notificationOccurred
+            : null;
+          if (typeof notificationOccurred !== 'function') return false;
+          notificationOccurred.call(tgWebApp.HapticFeedback, 'success');
+          return true;
+        });
+      }
+
+      function hapticNotificationErrorOnce(key) {
+        runTelegramHapticOnce(key, () => {
+          const notificationOccurred = (tgWebApp && tgWebApp.HapticFeedback)
+            ? tgWebApp.HapticFeedback.notificationOccurred
+            : null;
+          if (typeof notificationOccurred !== 'function') return false;
+          notificationOccurred.call(tgWebApp.HapticFeedback, 'error');
+          return true;
+        });
       }
 
       function miniAppAnalyticsEnabled() {
@@ -5150,7 +5187,7 @@
               pendingFrameFlashGenerationId > 0
               && Number(item.generation_id || 0) === pendingFrameFlashGenerationId
             ) {
-              triggerTelegramHapticLightOnce(`gen_success_${Number(item.generation_id || 0)}`);
+              hapticImpactLightOnce(`gen-success-${Number(item.generation_id || 0)}`);
               triggerResultFrameFlash(gallery);
               pendingFrameFlashGenerationId = 0;
             }
@@ -5916,6 +5953,7 @@
             const creditsAdded = Number(data.credits_added || cryptoInvoiceCredits || 0);
             setCryptoStatus(fmt(labels.crypto_paid, { credits: creditsAdded }), 'success');
             const dedupeKey = data.invoice_id || data.charge_id || cryptoInvoiceUuid;
+            hapticNotificationSuccessOnce(`payment-success-${String(dedupeKey || '')}`);
             if (shouldEmitPurchaseSuccess(dedupeKey)) {
               trackUiEvent('purchase_success', {
                 provider: 'cryptopay',
@@ -5929,8 +5967,10 @@
           }
           if (status === 'partial') {
             setCryptoStatus(labels.crypto_partial_payment);
-          } else if (status === 'canceled' || status === 'cancelled' || status === 'expired') {
+          } else if (status === 'canceled' || status === 'cancelled' || status === 'expired' || status === 'failed') {
             setCryptoStatus(labels.crypto_canceled, 'error');
+            const errKey = data.invoice_id || data.charge_id || cryptoInvoiceUuid;
+            hapticNotificationErrorOnce(`payment-error-${String(errKey || '')}`);
             stopCryptoPolling();
           } else if (showWaiting || status === 'created') {
             setCryptoStatus(labels.crypto_waiting_payment);
