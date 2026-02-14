@@ -412,6 +412,12 @@
         font-size: 12px;
         cursor: pointer;
         line-height: 1.2;
+        white-space: nowrap;
+      }
+      #brainPackBuyBtn {
+        max-width: 360px;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .prompt-helper-btn:hover,
       .prompt-helper-btn:focus-visible,
@@ -3232,11 +3238,9 @@
         const packSize = Math.max(1, Number(aiBrainState.pack_size_improvements || 0));
         const packPrice = Math.max(0, Number(aiBrainState.pack_price_credits || 0));
         const packRemaining = Math.max(0, Number(aiBrainState.pack_remaining || 0));
-        let buttonText = fmt(labels.brain_pack_buy_button, { size: packSize, price: packPrice });
-        if (packRemaining > 0) {
-          buttonText = `${buttonText} · ${fmt(labels.brain_pack_remaining, { count: packRemaining })}`;
-        }
+        const buttonText = fmt(labels.brain_pack_buy_button, { size: packSize, price: packPrice });
         buyBtn.textContent = `🎁 ${buttonText}`;
+        buyBtn.title = packRemaining > 0 ? fmt(labels.brain_pack_remaining, { count: packRemaining }) : '';
         buyBtn.disabled = (
           !loggedIn
           || !aiBrainState.enabled
