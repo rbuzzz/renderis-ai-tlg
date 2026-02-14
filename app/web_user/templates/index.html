@@ -208,6 +208,14 @@
       .user-avatar {
         width: 36px;
         height: 36px;
+        min-width: 36px;
+        min-height: 36px;
+        max-width: 36px;
+        max-height: 36px;
+        aspect-ratio: 1 / 1;
+        flex: 0 0 36px;
+        flex-shrink: 0;
+        overflow: hidden;
         border-radius: 50%;
         background: #1b2b45;
         border: 1px solid #2b3f59;
@@ -216,9 +224,18 @@
         justify-content: center;
         font-size: 14px;
         font-weight: 700;
+        line-height: 1;
         color: var(--accent);
+        background-repeat: no-repeat;
         background-size: cover;
         background-position: center;
+      }
+      .user-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center;
+        display: block;
       }
       .user-name {
         font-size: 15px;
@@ -357,6 +374,11 @@
         .top-actions.top-actions-logged .user-avatar {
           width: 34px;
           height: 34px;
+          min-width: 34px;
+          min-height: 34px;
+          max-width: 34px;
+          max-height: 34px;
+          flex-basis: 34px;
           font-size: 13px;
         }
         .top-actions.top-actions-logged .user-name {
@@ -2175,6 +2197,8 @@
         .user-button {
           width: 42px;
           min-width: 42px;
+          flex: 0 0 42px;
+          flex-shrink: 0;
           padding: 0;
           justify-content: center;
           gap: 0;
@@ -2195,6 +2219,11 @@
         .user-avatar {
           width: 28px;
           height: 28px;
+          min-width: 28px;
+          min-height: 28px;
+          max-width: 28px;
+          max-height: 28px;
+          flex-basis: 28px;
           font-size: 12px;
         }
         .lang-dropdown {
@@ -2373,6 +2402,8 @@
         .user-button {
           width: 40px;
           min-width: 40px;
+          flex: 0 0 40px;
+          flex-shrink: 0;
           padding: 0;
           justify-content: center;
           gap: 0;
@@ -2384,6 +2415,11 @@
         .user-avatar {
           width: 30px;
           height: 30px;
+          min-width: 30px;
+          min-height: 30px;
+          max-width: 30px;
+          max-height: 30px;
+          flex-basis: 30px;
           font-size: 12px;
         }
         .lang-dropdown {
