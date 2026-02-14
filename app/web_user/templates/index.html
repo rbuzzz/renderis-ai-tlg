@@ -2116,6 +2116,102 @@
           height: 40px;
         }
       }
+      @media (min-width: 900px) and (max-width: 1199px) {
+        .topbar {
+          flex-direction: row;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .brand-wrap {
+          gap: 10px;
+          min-width: 0;
+        }
+        .brand {
+          font-size: 23px;
+        }
+        .subtitle {
+          font-size: 12px;
+          margin-top: 2px;
+        }
+        .top-actions {
+          width: auto;
+          margin-left: auto;
+          justify-content: flex-end;
+          align-items: center;
+          gap: 6px;
+          flex-wrap: nowrap;
+          flex-shrink: 0;
+        }
+        .lang-menu,
+        .topup-menu,
+        .user-menu {
+          width: auto;
+          flex-shrink: 0;
+        }
+        .lang-button,
+        .balance,
+        .topup-button,
+        .user-button {
+          width: auto;
+          min-height: 42px;
+          height: 42px;
+          padding: 0 11px;
+          font-size: 13px;
+          border-radius: 999px;
+        }
+        .lang-button {
+          min-width: 74px;
+          gap: 6px;
+          justify-content: center;
+        }
+        .balance {
+          padding: 0 12px;
+        }
+        .topup-button {
+          gap: 6px;
+          padding: 0 12px;
+        }
+        .user-button {
+          width: 42px;
+          min-width: 42px;
+          padding: 0;
+          justify-content: center;
+          gap: 0;
+          position: relative;
+        }
+        .user-name {
+          display: none;
+        }
+        .user-button .user-caret {
+          display: inline-flex;
+          position: absolute;
+          right: -4px;
+          bottom: -1px;
+          font-size: 10px;
+          color: rgba(159, 179, 204, 0.88);
+          pointer-events: none;
+        }
+        .user-avatar {
+          width: 28px;
+          height: 28px;
+          font-size: 12px;
+        }
+        .lang-dropdown {
+          right: 0;
+          top: calc(100% + 8px);
+          min-width: 180px;
+        }
+        .topup-dropdown {
+          right: 0;
+          width: 220px;
+        }
+        .user-dropdown {
+          right: 0;
+          top: calc(100% + 8px);
+          min-width: 250px;
+        }
+      }
       @media (max-width: 600px) {
         .brand {
           font-size: 16px;
@@ -2165,7 +2261,7 @@
           top: calc(100% + 6px);
         }
       }
-      @media (max-width: 768px) {
+      @media (max-width: 899px) {
         body {
           padding: 10px;
         }
