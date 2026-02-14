@@ -754,9 +754,16 @@
         background: #0f1b2b;
         padding: 10px 12px;
         display: none;
+        opacity: 1;
+        transform: translateY(0);
+        transition: opacity 0.26s ease, transform 0.26s ease, border-color 0.2s ease;
       }
       .gen-live.visible {
         display: block;
+      }
+      .gen-live.complete {
+        opacity: 0;
+        transform: translateY(-2px);
       }
       .gen-live-main {
         display: flex;
@@ -771,12 +778,12 @@
         min-width: 0;
       }
       .gen-live-spinner {
-        width: 14px;
-        height: 14px;
+        width: 11px;
+        height: 11px;
         border-radius: 50%;
-        border: 2px solid #2f4e72;
-        border-top-color: #9fc2e6;
-        animation: gen-spin 0.9s linear infinite;
+        background: #9abce0;
+        box-shadow: 0 0 0 0 rgba(154, 188, 224, 0.42);
+        animation: gen-pulse 1.8s ease-in-out infinite;
         flex: 0 0 auto;
       }
       .gen-live-spinner.hidden {
@@ -798,6 +805,27 @@
         font-size: 12px;
         color: var(--muted);
       }
+      .gen-live-progress {
+        margin-top: 8px;
+        height: 4px;
+        border-radius: 999px;
+        border: 1px solid rgba(46, 72, 103, 0.82);
+        background: rgba(19, 36, 58, 0.92);
+        overflow: hidden;
+      }
+      .gen-live-progress.hidden {
+        display: none;
+      }
+      .gen-live-progress-fill {
+        width: 100%;
+        height: 100%;
+        transform: scaleX(0);
+        transform-origin: left center;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #6ba2d8 0%, #8fc8f5 55%, #78b3e7 100%);
+        transition: transform 0.22s ease;
+        will-change: transform;
+      }
       .gen-live.error {
         border-color: rgba(255, 118, 118, 0.5);
       }
@@ -813,9 +841,9 @@
       }
       .gen-cancel-btn {
         border-radius: 9px;
-        border: 1px solid #35506f;
-        background: #13243a;
-        color: #d3e3f5;
+        border: 1px solid rgba(64, 92, 124, 0.7);
+        background: transparent;
+        color: rgba(193, 213, 235, 0.88);
         padding: 6px 10px;
         font: inherit;
         font-size: 12px;
@@ -823,8 +851,8 @@
       }
       .gen-cancel-btn:hover,
       .gen-cancel-btn:focus-visible {
-        border-color: rgba(255, 118, 118, 0.55);
-        color: #ffc0c0;
+        border-color: rgba(111, 148, 188, 0.85);
+        color: #dcecff;
         outline: none;
       }
       .gen-cancel-btn.hidden {
@@ -864,9 +892,17 @@
         border-color: rgba(255, 118, 118, 0.5);
         color: #ffc4c4;
       }
-      @keyframes gen-spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
+      @keyframes gen-pulse {
+        0%, 100% {
+          transform: scale(0.92);
+          box-shadow: 0 0 0 0 rgba(154, 188, 224, 0.38);
+          opacity: 0.86;
+        }
+        50% {
+          transform: scale(1);
+          box-shadow: 0 0 0 6px rgba(154, 188, 224, 0);
+          opacity: 1;
+        }
       }
       .confirm-modal {
         position: fixed;
@@ -999,12 +1035,12 @@
         display: block;
       }
       .gallery img.gallery-image-enter {
-        animation: gallery-fade-in 0.22s ease;
+        animation: gallery-fade-in 0.32s ease;
       }
       @keyframes gallery-fade-in {
         from {
           opacity: 0;
-          transform: scale(0.985);
+          transform: scale(0.99);
         }
         to {
           opacity: 1;
@@ -1177,27 +1213,40 @@
       .result-skeleton {
         border-radius: 12px;
         border: 1px solid #253a54;
-        background: #0f1b2b;
+        background: #0e1a2a;
         padding: 8px;
+        position: relative;
       }
       .result-skeleton-img {
         width: 100%;
         aspect-ratio: 1 / 1;
         border-radius: 10px;
-        background: linear-gradient(90deg, #16273f 20%, #1f3350 50%, #16273f 80%);
-        background-size: 220% 100%;
-        animation: skeleton-shift 1.2s ease-in-out infinite;
+        background: linear-gradient(135deg, #14263f 0%, #1a2f4b 52%, #15273f 100%);
+        position: relative;
+        overflow: hidden;
+      }
+      .result-skeleton-img::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(110deg, rgba(255, 255, 255, 0) 18%, rgba(190, 216, 244, 0.16) 47%, rgba(255, 255, 255, 0) 76%);
+        transform: translateX(-120%);
+        animation: skeleton-sheen 1.55s ease-in-out infinite;
       }
       .result-skeleton-line {
         margin-top: 7px;
         height: 10px;
         border-radius: 8px;
-        background: linear-gradient(90deg, #16273f 20%, #1f3350 50%, #16273f 80%);
+        background: linear-gradient(90deg, #16273f 20%, #1f3350 52%, #16273f 84%);
         background-size: 220% 100%;
-        animation: skeleton-shift 1.2s ease-in-out infinite;
+        animation: skeleton-shift 1.45s ease-in-out infinite;
       }
       .result-skeleton-line.short {
         width: 60%;
+      }
+      @keyframes skeleton-sheen {
+        0% { transform: translateX(-120%); }
+        100% { transform: translateX(120%); }
       }
       @keyframes skeleton-shift {
         from { background-position: 200% 0; }
@@ -2344,6 +2393,9 @@
             </div>
             <button class="gen-cancel-btn hidden" id="genCancelBtn" type="button">{{ labels['gen_cancel'] }}</button>
           </div>
+          <div class="gen-live-progress" id="genLiveProgress" aria-hidden="true">
+            <span class="gen-live-progress-fill" id="genLiveProgressFill"></span>
+          </div>
           <div class="gen-live-sub" id="genLiveSub"></div>
         </div>
         <div class="quote-line" id="quoteLine">
@@ -3231,9 +3283,12 @@
         const subEl = document.getElementById('genLiveSub');
         const spinner = document.getElementById('genLiveSpinner');
         const cancelBtn = document.getElementById('genCancelBtn');
+        const progressWrap = document.getElementById('genLiveProgress');
+        const progressFill = document.getElementById('genLiveProgressFill');
         if (!wrap || !textEl || !etaEl || !subEl || !spinner || !cancelBtn) return;
 
         wrap.classList.remove('error', 'warning');
+        wrap.classList.remove('complete');
         if (tone === 'error' || tone === 'warning') {
           wrap.classList.add(tone);
         }
@@ -3243,15 +3298,17 @@
         subEl.textContent = sub || '';
         spinner.classList.toggle('hidden', !showSpinner);
         cancelBtn.classList.toggle('hidden', !showCancel);
+        if (progressWrap) {
+          const showProgress = !!visible && !!showSpinner;
+          progressWrap.classList.toggle('hidden', !showProgress);
+          if (!showProgress && progressFill) {
+            progressFill.style.transform = 'scaleX(0)';
+          }
+        }
       }
 
       function createGenerationWaitController() {
-        const fakeStageDurations = [
-          [1000, 3000],
-          [3000, 6000],
-          [5000, 10000],
-          [2000, 6000],
-        ];
+        const stageAdvanceRangeMs = [3000, 5000];
         const etaProfiles = {
           default: {
             queued: [10, 30],
@@ -3274,6 +3331,14 @@
             finalizing: [6, 12],
           },
         };
+        const localeCode = String(document.documentElement.lang || 'en').toLowerCase();
+        const isRuLocale = localeCode.startsWith('ru');
+        const stageMessages = isRuLocale
+          ? ['В очереди...', 'Создаю изображение...', 'Добавляю детали...', 'Финализирую...']
+          : ['Queued...', 'Creating your image...', 'Adding details...', 'Finalizing...'];
+        const calmMicrocopy = isRuLocale
+          ? 'Обычно занимает 10-20 секунд.'
+          : 'Usually takes 10-20 seconds.';
         let active = false;
         let generationId = 0;
         let modelKey = '';
@@ -3281,9 +3346,11 @@
         let fakeStage = 0;
         let fakeTimer = null;
         let pollTimer = null;
+        let progressTimer = null;
         let pollBackoffMs = GENERATION_STATUS_POLL_BASE_MS;
         let connectionIssue = false;
         let serverSnapshot = null;
+        let softProgress = 0;
 
         function randomBetween(min, max) {
           const a = Number(min || 0);
@@ -3299,6 +3366,10 @@
           if (pollTimer) {
             clearTimeout(pollTimer);
             pollTimer = null;
+          }
+          if (progressTimer) {
+            clearInterval(progressTimer);
+            progressTimer = null;
           }
         }
 
@@ -3319,10 +3390,8 @@
         }
 
         function stageLabel(stageIndex) {
-          if (stageIndex <= 0) return labels.gen_status_queued;
-          if (stageIndex === 1) return labels.gen_status_step_1;
-          if (stageIndex === 2) return labels.gen_status_step_2;
-          return labels.gen_status_finalizing;
+          const idx = Math.max(0, Math.min(3, Number(stageIndex || 0)));
+          return stageMessages[idx] || stageMessages[stageMessages.length - 1];
         }
 
         function etaRange(stageIndex) {
@@ -3334,7 +3403,65 @@
 
         function etaText(stageIndex) {
           const [minSec, maxSec] = etaRange(stageIndex);
-          return fmt(labels.gen_eta_format, { min: minSec, max: maxSec });
+          const estimated = Math.max(1, Math.round((Number(minSec || 0) + Number(maxSec || 0)) / 2));
+          return isRuLocale
+            ? `Осталось около ${estimated} сек.`
+            : `About ${estimated} seconds remaining`;
+        }
+
+        function setSoftProgressUi(value, { complete = false, instant = false } = {}) {
+          const wrap = document.getElementById('genLive');
+          const fill = document.getElementById('genLiveProgressFill');
+          if (!wrap || !fill) return;
+          const clamped = Math.max(0, Math.min(1, Number(value || 0)));
+          if (instant) {
+            fill.style.transition = 'none';
+            fill.style.transform = `scaleX(${clamped})`;
+            // Force layout so next transition is animated again.
+            void fill.offsetWidth;
+            fill.style.transition = '';
+          } else {
+            fill.style.transform = `scaleX(${clamped})`;
+          }
+          wrap.classList.toggle('complete', !!complete);
+        }
+
+        function progressTargetForElapsed(elapsedMs) {
+          const elapsed = Math.max(0, Number(elapsedMs || 0));
+          if (elapsed <= 4500) {
+            const t = elapsed / 4500;
+            return 0.65 * (1 - Math.pow(1 - t, 2));
+          }
+          if (elapsed <= 22000) {
+            const t = (elapsed - 4500) / (22000 - 4500);
+            return 0.65 + (0.24 * (1 - Math.pow(1 - t, 2)));
+          }
+          return 0.89;
+        }
+
+        function startSoftProgressTicker() {
+          if (progressTimer) {
+            clearInterval(progressTimer);
+            progressTimer = null;
+          }
+          progressTimer = setInterval(() => {
+            if (!active) return;
+            const target = Math.min(0.9, progressTargetForElapsed(Date.now() - startedAt));
+            if (softProgress < target) {
+              const delta = Math.max(0.0035, (target - softProgress) * 0.18);
+              softProgress = Math.min(target, softProgress + delta);
+              setSoftProgressUi(softProgress);
+            }
+          }, 140);
+        }
+
+        async function animateProgressToComplete() {
+          const wrap = document.getElementById('genLive');
+          const fill = document.getElementById('genLiveProgressFill');
+          if (!wrap || !fill) return;
+          softProgress = 1;
+          setSoftProgressUi(1, { complete: true });
+          await new Promise((resolve) => setTimeout(resolve, 280));
         }
 
         function inferStageFromServer(snapshot) {
@@ -3362,13 +3489,13 @@
         function render() {
           if (!active) return;
           const stage = inferStageFromServer(serverSnapshot);
-          let sub = '';
+          let sub = calmMicrocopy;
           let tone = '';
           if (connectionIssue) {
-            sub = labels.gen_connection_retrying;
+            sub = `${sub} ${labels.gen_connection_retrying}`;
           }
           if (Date.now() - startedAt >= GENERATION_LONG_WAIT_MS) {
-            sub = sub ? `${sub} ${labels.gen_taking_long}` : labels.gen_taking_long;
+            sub = `${sub} ${labels.gen_taking_long}`;
             tone = tone || 'warning';
           }
           setGenerationLiveState({
@@ -3385,7 +3512,7 @@
         function scheduleFakeStage() {
           if (!active) return;
           if (fakeStage >= 3) return;
-          const [minMs, maxMs] = fakeStageDurations[fakeStage] || [3000, 5000];
+          const [minMs, maxMs] = stageAdvanceRangeMs;
           fakeTimer = setTimeout(() => {
             if (!active) return;
             fakeStage = Math.min(3, fakeStage + 1);
@@ -3455,6 +3582,7 @@
         async function finishSuccess(isPartial = false) {
           active = false;
           clearTimers();
+          await animateProgressToComplete();
           generationInFlight = false;
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
@@ -3482,6 +3610,8 @@
         function finishFail(message) {
           active = false;
           clearTimers();
+          softProgress = 0;
+          setSoftProgressUi(0, { instant: true });
           generationInFlight = false;
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
@@ -3518,6 +3648,8 @@
           if (!active) return false;
           active = false;
           clearTimers();
+          softProgress = 0;
+          setSoftProgressUi(0, { instant: true });
           generationInFlight = false;
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
@@ -3545,6 +3677,8 @@
         function stopAndHide() {
           active = false;
           clearTimers();
+          softProgress = 0;
+          setSoftProgressUi(0, { instant: true });
           generationInFlight = false;
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
@@ -3569,6 +3703,7 @@
           resultSkeletonActive = true;
           startedAt = Date.now();
           fakeStage = 0;
+          softProgress = 0;
           pollBackoffMs = GENERATION_STATUS_POLL_BASE_MS;
           connectionIssue = false;
           serverSnapshot = null;
@@ -3577,7 +3712,9 @@
           renderGallery();
           setGenerationControlsLocked(true);
           setRunButtonState();
+          setSoftProgressUi(0, { instant: true });
           render();
+          startSoftProgressTicker();
           scheduleFakeStage();
           schedulePoll(900);
         }
