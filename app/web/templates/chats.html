@@ -358,11 +358,53 @@
 
 <div class="section chat-page">
   <h3>Чаты поддержки</h3>
+  <form id="chatFilters" class="filter-bar" style="margin-bottom: 10px;">
+    <div>
+      <label>Search (user id / telegram / username)</label>
+      <input id="chatFilterQ" type="text" placeholder="e.g. 493780829 or stepanenko" />
+    </div>
+    <div>
+      <label>Status</label>
+      <select id="chatFilterStatus" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #2b3f59;background:#0f1b2b;color:var(--text);">
+        <option value="all">All</option>
+        <option value="open">Open</option>
+        <option value="closed">Closed</option>
+      </select>
+    </div>
+    <div>
+      <label>Sort</label>
+      <select id="chatFilterSort" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #2b3f59;background:#0f1b2b;color:var(--text);">
+        <option value="updated_at">Updated</option>
+        <option value="status">Status</option>
+      </select>
+    </div>
+    <div>
+      <label>Direction</label>
+      <select id="chatFilterDir" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #2b3f59;background:#0f1b2b;color:var(--text);">
+        <option value="desc">Desc</option>
+        <option value="asc">Asc</option>
+      </select>
+    </div>
+    <div>
+      <label>Per page</label>
+      <select id="chatFilterLimit" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #2b3f59;background:#0f1b2b;color:var(--text);">
+        <option value="25">25</option>
+        <option value="40" selected>40</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+    </div>
+    <div class="filter-bar__actions">
+      <button id="chatFilterApply" type="submit">Apply</button>
+      <button id="chatFilterReset" class="dirty-btn-secondary" type="button">Reset</button>
+    </div>
+  </form>
   <div id="chatStatus" class="subtle" style="margin-bottom: 10px;"></div>
   <div class="chat-grid">
     <div class="chat-list">
       <header>Диалоги</header>
       <div class="chat-items" id="chatItems"></div>
+      <div id="chatPager" class="subtle" style="padding:8px 12px; border-top:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:8px;"></div>
     </div>
     <div class="chat-pane" id="chatPane">
       <header id="chatHeader">Выберите чат</header>
@@ -411,6 +453,14 @@
   const chatFileName = document.getElementById('chatFileName');
   const chatSend = document.getElementById('chatSend');
   const chatStatus = document.getElementById('chatStatus');
+  const chatFilters = document.getElementById('chatFilters');
+  const chatFilterQ = document.getElementById('chatFilterQ');
+  const chatFilterStatus = document.getElementById('chatFilterStatus');
+  const chatFilterSort = document.getElementById('chatFilterSort');
+  const chatFilterDir = document.getElementById('chatFilterDir');
+  const chatFilterLimit = document.getElementById('chatFilterLimit');
+  const chatFilterReset = document.getElementById('chatFilterReset');
+  const chatPager = document.getElementById('chatPager');
   const imagePreviewModal = document.getElementById('imagePreviewModal');
   const imagePreviewImg = document.getElementById('imagePreviewImg');
   const imagePreviewClose = document.getElementById('imagePreviewClose');
@@ -421,10 +471,147 @@
   let pendingImageUrl = '';
   let dragCounter = 0;
   const adminUi = window.adminUi || null;
+  const chatViewScope = 'chats';
+  const defaultChatView = {
+    q: '',
+    status: 'all',
+    sort: 'updated_at',
+    dir: 'desc',
+    page: 1,
+    limit: 40,
+  };
+  let chatView = { ...defaultChatView };
 
   function uiErrorMessage(error, fallback = 'Operation failed. Please try again.') {
     if (adminUi?.errors?.toMessage) return adminUi.errors.toMessage(error, fallback);
     return fallback;
+  }
+
+  async function copyText(value) {
+    const text = String(value || '').trim();
+    if (!text) return false;
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (_err) {
+      try {
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.setAttribute('readonly', '');
+        area.style.position = 'absolute';
+        area.style.left = '-9999px';
+        document.body.appendChild(area);
+        area.select();
+        const copied = document.execCommand('copy');
+        area.remove();
+        return copied;
+      } catch (_fallbackErr) {
+        return false;
+      }
+    }
+  }
+
+  function saveChatViewState() {
+    if (!adminUi?.viewState) return;
+    adminUi.viewState.save(chatViewScope, {
+      q: chatView.q || '',
+      status: chatView.status || 'all',
+      sort: chatView.sort || 'updated_at',
+      dir: chatView.dir || 'desc',
+      page: Number(chatView.page || 1),
+      limit: Number(chatView.limit || 40),
+    });
+  }
+
+  function restoreChatViewState() {
+    const saved = adminUi?.viewState?.load ? adminUi.viewState.load(chatViewScope) : null;
+    chatView = { ...defaultChatView, ...(saved || {}) };
+    chatView.page = Number(chatView.page || 1);
+    chatView.limit = Number(chatView.limit || defaultChatView.limit);
+    if (chatFilterQ) chatFilterQ.value = chatView.q || '';
+    if (chatFilterStatus) chatFilterStatus.value = chatView.status || 'all';
+    if (chatFilterSort) chatFilterSort.value = chatView.sort || 'updated_at';
+    if (chatFilterDir) chatFilterDir.value = chatView.dir || 'desc';
+    if (chatFilterLimit) chatFilterLimit.value = String(chatView.limit || defaultChatView.limit);
+  }
+
+  function renderChatPager(meta = {}) {
+    if (!chatPager) return;
+    const page = Number(meta.page || chatView.page || 1);
+    const perPage = Number(meta.per_page || chatView.limit || defaultChatView.limit);
+    const total = Number(meta.total || 0);
+    const hasPrev = Boolean(meta.has_prev);
+    const hasNext = Boolean(meta.has_next);
+    const from = total > 0 ? (page - 1) * perPage + 1 : 0;
+    const to = total > 0 ? Math.min(page * perPage, total) : 0;
+    chatPager.innerHTML = '';
+
+    const summary = document.createElement('span');
+    summary.textContent = total ? `${from}-${to} of ${total}` : 'No chats';
+    chatPager.appendChild(summary);
+
+    const controls = document.createElement('div');
+    controls.style.display = 'inline-flex';
+    controls.style.gap = '8px';
+
+    const prev = document.createElement('button');
+    prev.type = 'button';
+    prev.className = 'dirty-btn-secondary';
+    prev.textContent = 'Prev';
+    prev.disabled = !hasPrev;
+    prev.onclick = async () => {
+      if (!hasPrev) return;
+      chatView.page = Math.max(1, page - 1);
+      await loadThreads();
+    };
+
+    const next = document.createElement('button');
+    next.type = 'button';
+    next.className = 'dirty-btn-secondary';
+    next.textContent = 'Next';
+    next.disabled = !hasNext;
+    next.onclick = async () => {
+      if (!hasNext) return;
+      chatView.page = page + 1;
+      await loadThreads();
+    };
+
+    controls.appendChild(prev);
+    controls.appendChild(next);
+    chatPager.appendChild(controls);
+  }
+
+  function bindChatFilterForm() {
+    if (!chatFilters) return;
+    chatFilters.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      chatView.q = (chatFilterQ?.value || '').trim();
+      chatView.status = chatFilterStatus?.value || 'all';
+      chatView.sort = chatFilterSort?.value || 'updated_at';
+      chatView.dir = chatFilterDir?.value || 'desc';
+      chatView.limit = Number(chatFilterLimit?.value || defaultChatView.limit);
+      chatView.page = 1;
+      await loadThreads();
+    });
+    if (chatFilterLimit) {
+      chatFilterLimit.addEventListener('change', async () => {
+        chatView.limit = Number(chatFilterLimit.value || defaultChatView.limit);
+        chatView.page = 1;
+        await loadThreads();
+      });
+    }
+    if (chatFilterReset) {
+      chatFilterReset.addEventListener('click', async () => {
+        chatView = { ...defaultChatView };
+        if (chatFilterQ) chatFilterQ.value = '';
+        if (chatFilterStatus) chatFilterStatus.value = 'all';
+        if (chatFilterSort) chatFilterSort.value = 'updated_at';
+        if (chatFilterDir) chatFilterDir.value = 'desc';
+        if (chatFilterLimit) chatFilterLimit.value = String(defaultChatView.limit);
+        if (adminUi?.viewState) adminUi.viewState.clear(chatViewScope);
+        await loadThreads();
+      });
+    }
   }
 
   function openImagePreview(src, alt) {
@@ -769,9 +956,16 @@
   }
 
   async function loadThreads() {
+    const query = new URLSearchParams();
+    if (chatView.q) query.set('q', chatView.q);
+    if (chatView.status && chatView.status !== 'all') query.set('status', chatView.status);
+    query.set('sort', chatView.sort || 'updated_at');
+    query.set('dir', chatView.dir || 'desc');
+    query.set('page', String(chatView.page || 1));
+    query.set('limit', String(chatView.limit || 40));
     let res;
     try {
-      res = await fetch('/admin/api/chats');
+      res = await fetch(`/admin/api/chats?${query.toString()}`);
     } catch (err) {
       setStatus('Не удалось загрузить диалоги.', true);
       return;
@@ -781,6 +975,18 @@
       return;
     }
     const data = await res.json();
+    chatView.q = String(data.q ?? chatView.q ?? '');
+    chatView.status = String(data.status ?? chatView.status ?? 'all');
+    chatView.sort = String(data.sort ?? chatView.sort ?? 'updated_at');
+    chatView.dir = String(data.dir ?? chatView.dir ?? 'desc');
+    chatView.page = Number(data.page || chatView.page || 1);
+    chatView.limit = Number(data.per_page || chatView.limit || defaultChatView.limit);
+    if (chatFilterQ) chatFilterQ.value = chatView.q;
+    if (chatFilterStatus) chatFilterStatus.value = chatView.status || 'all';
+    if (chatFilterSort) chatFilterSort.value = chatView.sort || 'updated_at';
+    if (chatFilterDir) chatFilterDir.value = chatView.dir || 'desc';
+    if (chatFilterLimit) chatFilterLimit.value = String(chatView.limit || defaultChatView.limit);
+    renderChatPager(data);
     chatItems.innerHTML = '';
     const threads = data.threads || [];
     if (!data.support_enabled) {
@@ -799,6 +1005,26 @@
       time.textContent = fmtTime(t.last_message_at);
       div.appendChild(title);
       div.appendChild(time);
+      const metaLine = document.createElement('small');
+      metaLine.className = 'subtle';
+      const threadId = String(t.id);
+      const tgId = t.telegram_id ? String(t.telegram_id) : '';
+      metaLine.textContent = `Thread ${threadId}${tgId ? ` · TG ${tgId}` : ''}`;
+      const copyThread = document.createElement('button');
+      copyThread.type = 'button';
+      copyThread.className = 'copy-btn';
+      copyThread.setAttribute('data-copy-text', threadId);
+      copyThread.textContent = 'Copy';
+      copyThread.title = 'Copy thread id';
+      copyThread.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const copied = await copyText(threadId);
+        if (copied) adminUi?.toast?.success('Copied');
+        else adminUi?.toast?.error('Could not copy');
+      });
+      metaLine.appendChild(copyThread);
+      div.appendChild(metaLine);
       if (t.user_id) {
         const profileLine = document.createElement('small');
         const profileLink = document.createElement('a');
@@ -834,6 +1060,7 @@
       const pick = requested ? threads.find((t) => String(t.id) === String(requested)) : threads[0];
       if (pick) selectThread(pick.id, pick.user_label, pick.user_id);
     }
+    saveChatViewState();
   }
 
   async function loadMessages(forceScrollToBottom = false) {
@@ -990,6 +1217,8 @@
     }
   });
 
+  restoreChatViewState();
+  bindChatFilterForm();
   loadThreads();
   setInterval(loadThreads, 5000);
   setInterval(loadMessages, 2000);

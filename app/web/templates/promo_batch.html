@@ -33,7 +33,10 @@
         <tbody>
           {% for row in rows %}
           <tr>
-            <td class="cell-mono"><span class="truncate" title="{{ row.code }}">{{ row.code }}</span></td>
+            <td class="cell-mono">
+              <span class="truncate" title="{{ row.code }}">{{ row.code }}</span>
+              <button type="button" class="copy-btn" data-copy-text="{{ row.code }}" title="Copy promo code">Copy</button>
+            </td>
             <td>
               {% if row.status == 'redeemed' %}
                 <span class="badge ok">Активирован</span>
@@ -77,6 +80,9 @@
       el.select();
       el.setSelectionRange(0, 999999);
       document.execCommand('copy');
+      if (window.adminUi?.toast) {
+        window.adminUi.toast.success('Copied');
+      }
     }
   </script>
 {% endblock %}

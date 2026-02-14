@@ -2,7 +2,20 @@
 {% block content %}
   <div class="section">
     <h3>Пользователи</h3>
-    <form method="get" action="/admin/users" class="form-row" style="margin-bottom: 12px;" data-ui-async="true" data-ui-loading="true" data-toast-error="Не удалось выполнить поиск пользователей. Попробуйте ещё раз.">
+
+    {% set next_dir_created = 'asc' if sort == 'created_at' and dir == 'desc' else 'desc' %}
+    {% set next_dir_balance = 'asc' if sort == 'balance' and dir == 'desc' else 'desc' %}
+    {% set next_dir_last = 'asc' if sort == 'last_seen' and dir == 'desc' else 'desc' %}
+
+    <form
+      id="usersFilterForm"
+      method="get"
+      action="/admin/users"
+      class="filter-bar"
+      data-ui-async="true"
+      data-ui-loading="true"
+      data-toast-error="Не удалось выполнить поиск пользователей. Попробуйте ещё раз."
+    >
       <div>
         <label>Поиск (Telegram ID или username)</label>
         <input name="q" value="{{ search }}" placeholder="Например: 493780829 или stepanenko" />
@@ -16,8 +29,25 @@
         </select>
       </div>
       <div>
-        <label>&nbsp;</label>
-        <button type="submit">Найти</button>
+        <label>На странице</label>
+        <select name="limit" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #2b3f59;background:#0f1b2b;color:var(--text);">
+          <option value="25" {% if per_page == 25 %}selected{% endif %}>25</option>
+          <option value="40" {% if per_page == 40 %}selected{% endif %}>40</option>
+          <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+          <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+        </select>
+      </div>
+      <div class="filter-bar__actions">
+        <input type="hidden" name="sort" value="{{ sort }}" />
+        <input type="hidden" name="dir" value="{{ dir }}" />
+        <input type="hidden" name="page" value="1" />
+        <button type="submit">Apply</button>
+        <a
+          class="filter-bar__reset"
+          href="/admin/users"
+          id="usersFilterReset"
+          data-view-reset="users"
+        >Reset</a>
       </div>
     </form>
 
@@ -31,18 +61,45 @@
             <th>ID</th>
             <th>Telegram ID</th>
             <th>Username</th>
-            <th>Баланс</th>
+            <th>
+              <a class="sort-link" href="/admin/users?q={{ search }}&status={{ status }}&sort=balance&dir={{ next_dir_balance }}&limit={{ per_page }}&page=1">
+                Баланс
+                {% if sort == 'balance' %}
+                <span class="sort-link__caret">{{ '↑' if dir == 'asc' else '↓' }}</span>
+                {% endif %}
+              </a>
+            </th>
             <th>Статус</th>
-            <th>Первый вход (МСК)</th>
-            <th>Последняя активность (МСК)</th>
+            <th>
+              <a class="sort-link" href="/admin/users?q={{ search }}&status={{ status }}&sort=created_at&dir={{ next_dir_created }}&limit={{ per_page }}&page=1">
+                Первый вход (МСК)
+                {% if sort == 'created_at' %}
+                <span class="sort-link__caret">{{ '↑' if dir == 'asc' else '↓' }}</span>
+                {% endif %}
+              </a>
+            </th>
+            <th>
+              <a class="sort-link" href="/admin/users?q={{ search }}&status={{ status }}&sort=last_seen&dir={{ next_dir_last }}&limit={{ per_page }}&page=1">
+                Последняя активность (МСК)
+                {% if sort == 'last_seen' %}
+                <span class="sort-link__caret">{{ '↑' if dir == 'asc' else '↓' }}</span>
+                {% endif %}
+              </a>
+            </th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           {% for u in users %}
           <tr>
-            <td>{{ u.id }}</td>
-            <td>{{ u.telegram_id }}</td>
+            <td class="cell-mono">
+              <span class="truncate" title="{{ u.id }}">{{ u.id }}</span>
+              <button type="button" class="copy-btn" data-copy-text="{{ u.id }}" title="Copy user id">Copy</button>
+            </td>
+            <td class="cell-mono">
+              <span class="truncate" title="{{ u.telegram_id }}">{{ u.telegram_id }}</span>
+              <button type="button" class="copy-btn" data-copy-text="{{ u.telegram_id }}" title="Copy telegram id">Copy</button>
+            </td>
             <td class="muted">{{ u.username }}</td>
             <td>{{ u.balance_credits }}</td>
             <td>
@@ -73,12 +130,46 @@
 
     <div style="display:flex; gap:10px; margin-top: 12px; align-items:center;">
       {% if has_prev %}
-        <a class="row-link" href="/admin/users?q={{ search }}&status={{ status }}&page={{ prev_page }}">← Предыдущая</a>
+        <a class="row-link" href="/admin/users?q={{ search }}&status={{ status }}&sort={{ sort }}&dir={{ dir }}&limit={{ per_page }}&page={{ prev_page }}">← Предыдущая</a>
       {% endif %}
       <span class="subtle">Страница {{ page }}</span>
       {% if has_next %}
-        <a class="row-link" href="/admin/users?q={{ search }}&status={{ status }}&page={{ next_page }}">Следующая →</a>
+        <a class="row-link" href="/admin/users?q={{ search }}&status={{ status }}&sort={{ sort }}&dir={{ dir }}&limit={{ per_page }}&page={{ next_page }}">Следующая →</a>
       {% endif %}
     </div>
   </div>
+
+  <script>
+    (() => {
+      const form = document.getElementById('usersFilterForm');
+      const reset = document.getElementById('usersFilterReset');
+      const view = window.adminUi?.viewState;
+      if (!form || !view) return;
+
+      const scope = 'users';
+      if (!window.location.search) {
+        const stored = view.load(scope);
+        if (stored && typeof stored === 'object') {
+          Object.entries(stored).forEach(([key, value]) => {
+            const field = form.elements.namedItem(key);
+            if (!field) return;
+            if (field instanceof RadioNodeList) return;
+            field.value = String(value ?? '');
+          });
+        }
+      }
+
+      form.addEventListener('submit', () => {
+        const payload = {};
+        new FormData(form).forEach((value, key) => {
+          payload[key] = String(value ?? '');
+        });
+        view.save(scope, payload);
+      });
+
+      if (reset) {
+        reset.addEventListener('click', () => view.clear(scope));
+      }
+    })();
+  </script>
 {% endblock %}

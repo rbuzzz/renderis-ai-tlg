@@ -1006,7 +1006,10 @@ def create_app() -> FastAPI:
         request: Request,
         q: str | None = None,
         status: str = "all",
+        sort: str = "last_seen",
+        dir: str = "desc",
         page: int = 1,
+        limit: int | None = None,
     ):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
@@ -1015,8 +1018,15 @@ def create_app() -> FastAPI:
         status = (status or "all").strip().lower()
         if status not in {"all", "banned", "active"}:
             status = "all"
+        sort = (sort or "last_seen").strip().lower()
+        if sort not in {"last_seen", "created_at", "balance"}:
+            sort = "last_seen"
+        dir = (dir or "desc").strip().lower()
+        if dir not in {"asc", "desc"}:
+            dir = "desc"
         page = max(1, int(page or 1))
-        per_page = 40
+        per_page = int(limit or 40)
+        per_page = max(25, min(100, per_page))
 
         filters = []
         if search:
@@ -1040,9 +1050,15 @@ def create_app() -> FastAPI:
             total_pages = max(1, (total + per_page - 1) // per_page)
             page = min(page, total_pages)
             offset = (page - 1) * per_page
-            rows = await session.execute(
-                list_query.order_by(User.last_seen_at.desc(), User.id.desc()).offset(offset).limit(per_page)
-            )
+            sort_col = User.last_seen_at
+            if sort == "created_at":
+                sort_col = User.first_seen_at
+            elif sort == "balance":
+                sort_col = User.balance_credits
+            sort_expr = sort_col.asc() if dir == "asc" else sort_col.desc()
+            id_expr = User.id.asc() if dir == "asc" else User.id.desc()
+
+            rows = await session.execute(list_query.order_by(sort_expr, id_expr).offset(offset).limit(per_page))
             users = []
             for user in rows.scalars().all():
                 users.append(
@@ -1066,6 +1082,8 @@ def create_app() -> FastAPI:
                 "users": users,
                 "search": search,
                 "status": status,
+                "sort": sort,
+                "dir": dir,
                 "page": page,
                 "total": total,
                 "per_page": per_page,
@@ -2604,15 +2622,63 @@ def create_app() -> FastAPI:
         )
 
     @app.get("/admin/api/chats")
-    async def admin_chats_list(request: Request):
+    async def admin_chats_list(
+        request: Request,
+        q: str | None = None,
+        status: str = "all",
+        sort: str = "updated_at",
+        dir: str = "desc",
+        page: int = 1,
+        limit: int | None = None,
+    ):
         if not _is_logged_in(request):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         settings = get_settings()
+        search = (q or "").strip()
+        status = (status or "all").strip().lower()
+        if status not in {"all", "open", "closed"}:
+            status = "all"
+        sort = (sort or "updated_at").strip().lower()
+        if sort not in {"updated_at", "status"}:
+            sort = "updated_at"
+        dir = (dir or "desc").strip().lower()
+        if dir not in {"asc", "desc"}:
+            dir = "desc"
+        page = max(1, int(page or 1))
+        per_page = int(limit or 40)
+        per_page = max(25, min(100, per_page))
+
+        filters = []
+        if search:
+            search_filters = [func.coalesce(User.username, "").ilike(f"%{search}%")]
+            if search.isdigit():
+                parsed_id = int(search)
+                search_filters.append(User.telegram_id == parsed_id)
+                search_filters.append(User.id == parsed_id)
+            filters.append(or_(*search_filters))
+        if status in {"open", "closed"}:
+            filters.append(SupportThread.status == status)
+
         async with app.state.sessionmaker() as session:
+            count_query = select(func.count(SupportThread.id)).join(User, SupportThread.user_id == User.id)
+            list_query = select(SupportThread, User).join(User, SupportThread.user_id == User.id)
+            for condition in filters:
+                count_query = count_query.where(condition)
+                list_query = list_query.where(condition)
+
+            total = int((await session.scalar(count_query)) or 0)
+            total_pages = max(1, (total + per_page - 1) // per_page)
+            page = min(page, total_pages)
+            offset = (page - 1) * per_page
+
+            sort_col = SupportThread.last_message_at
+            if sort == "status":
+                sort_col = SupportThread.status
+            sort_expr = sort_col.asc() if dir == "asc" else sort_col.desc()
+            id_expr = SupportThread.id.asc() if dir == "asc" else SupportThread.id.desc()
+
             rows = await session.execute(
-                select(SupportThread, User)
-                .join(User, SupportThread.user_id == User.id)
-                .order_by(SupportThread.last_message_at.desc())
+                list_query.order_by(sort_expr, id_expr).offset(offset).limit(per_page)
             )
             threads = []
             for thread, user in rows.all():
@@ -2628,7 +2694,21 @@ def create_app() -> FastAPI:
                         "status": thread.status,
                     }
                 )
-        return {"threads": threads, "support_enabled": bool(settings.support_bot_token)}
+        return {
+            "threads": threads,
+            "support_enabled": bool(settings.support_bot_token),
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "has_prev": page > 1,
+            "has_next": page < total_pages,
+            "prev_page": page - 1,
+            "next_page": page + 1,
+            "sort": sort,
+            "dir": dir,
+            "status": status,
+            "q": search,
+        }
 
     @app.get("/admin/api/chats/{thread_id}/summary")
     async def admin_chats_summary(request: Request, thread_id: int):
@@ -2847,22 +2927,72 @@ def create_app() -> FastAPI:
         return {"ok": True}
 
     @app.get("/admin/promos", response_class=HTMLResponse)
-    async def admin_promos(request: Request, code: str | None = None, saved: int | None = None):
+    async def admin_promos(
+        request: Request,
+        code: str | None = None,
+        batch: str | None = None,
+        promo_state: str = "all",
+        sort: str = "created_at",
+        dir: str = "desc",
+        page: int = 1,
+        limit: int | None = None,
+        saved: int | None = None,
+    ):
         if not _is_logged_in(request):
             return RedirectResponse(url="/login", status_code=302)
 
         search_code = (code or "").strip().upper()
+        batch_search = (batch or "").strip()
+        promo_state = (promo_state or "all").strip().lower()
+        if promo_state not in {"all", "active", "inactive"}:
+            promo_state = "all"
+        sort = (sort or "created_at").strip().lower()
+        if sort not in {"created_at", "status", "credits"}:
+            sort = "created_at"
+        dir = (dir or "desc").strip().lower()
+        if dir not in {"asc", "desc"}:
+            dir = "desc"
+        page = max(1, int(page or 1))
+        per_page = int(limit or 40)
+        per_page = max(25, min(100, per_page))
+
         async with app.state.sessionmaker() as session:
-            batch_rows = await session.execute(
+            active_count_expr = func.sum(case((PromoCode.active.is_(True), 1), else_=0))
+            grouped_query = (
                 select(
-                    PromoCode.batch_id,
+                    PromoCode.batch_id.label("batch_id"),
                     func.min(PromoCode.created_at).label("created_at"),
                     func.count(PromoCode.code).label("count"),
                     func.max(PromoCode.credits_amount).label("credits_amount"),
+                    active_count_expr.label("active_count"),
                 )
                 .where(PromoCode.batch_id.is_not(None))
                 .group_by(PromoCode.batch_id)
-                .order_by(func.min(PromoCode.created_at).desc())
+            )
+            if batch_search:
+                grouped_query = grouped_query.where(PromoCode.batch_id.ilike(f"%{batch_search}%"))
+            if promo_state == "active":
+                grouped_query = grouped_query.having(active_count_expr > 0)
+            elif promo_state == "inactive":
+                grouped_query = grouped_query.having(active_count_expr == 0)
+
+            grouped_subq = grouped_query.subquery()
+            count_query = select(func.count()).select_from(grouped_subq)
+            total = int((await session.scalar(count_query)) or 0)
+            total_pages = max(1, (total + per_page - 1) // per_page)
+            page = min(page, total_pages)
+            offset = (page - 1) * per_page
+
+            sort_col = grouped_subq.c.created_at
+            if sort == "status":
+                sort_col = grouped_subq.c.active_count
+            elif sort == "credits":
+                sort_col = grouped_subq.c.credits_amount
+            sort_expr = sort_col.asc() if dir == "asc" else sort_col.desc()
+            id_expr = grouped_subq.c.batch_id.asc() if dir == "asc" else grouped_subq.c.batch_id.desc()
+
+            batch_rows = await session.execute(
+                select(grouped_subq).order_by(sort_expr, id_expr).offset(offset).limit(per_page)
             )
             batches = [
                 {
@@ -2870,6 +3000,8 @@ def create_app() -> FastAPI:
                     "created_at": row.created_at,
                     "count": row.count,
                     "credits_amount": row.credits_amount,
+                    "active_count": int(row.active_count or 0),
+                    "status": "active" if int(row.active_count or 0) > 0 else "inactive",
                 }
                 for row in batch_rows.all()
             ]
@@ -2915,6 +3047,17 @@ def create_app() -> FastAPI:
                 "batches": batches,
                 "promo": promo,
                 "search_code": search_code,
+                "batch_search": batch_search,
+                "promo_state": promo_state,
+                "sort": sort,
+                "dir": dir,
+                "page": page,
+                "total": total,
+                "per_page": per_page,
+                "has_prev": page > 1,
+                "has_next": page < total_pages,
+                "prev_page": page - 1,
+                "next_page": page + 1,
                 "saved": bool(saved),
                 "can_manage": _can_manage(request),
                 "is_subadmin": _is_subadmin(request),

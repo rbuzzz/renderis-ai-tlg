@@ -302,6 +302,69 @@
         text-decoration: none;
         background: #152940;
       }
+      .filter-bar {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px;
+        align-items: end;
+        margin-bottom: 12px;
+      }
+      .filter-bar__actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .filter-bar__reset {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 34px;
+        padding: 7px 11px;
+        border-radius: 8px;
+        border: 1px solid rgba(154, 176, 200, 0.3);
+        background: transparent;
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .filter-bar__reset:hover {
+        color: var(--text);
+        border-color: rgba(154, 176, 200, 0.5);
+      }
+      .sort-link {
+        color: inherit;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-weight: 600;
+      }
+      .sort-link:hover {
+        text-decoration: underline;
+      }
+      .sort-link__caret {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1;
+      }
+      .copy-btn {
+        margin-left: 6px;
+        border: 1px solid rgba(154, 176, 200, 0.32);
+        background: rgba(15, 27, 43, 0.75);
+        color: var(--muted);
+        border-radius: 7px;
+        padding: 2px 6px;
+        min-height: 22px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .copy-btn:hover {
+        color: var(--text);
+        border-color: rgba(154, 176, 200, 0.5);
+        transform: translateY(-1px);
+      }
       .cell-mono {
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
       }
@@ -664,7 +727,7 @@
       }
     </style>
   </head>
-  <body>
+  <body data-admin-id="{{ request.session.get('admin_login') or request.session.get('admin_role') or 'anon' }}">
     <div class="admin-root">
     <header class="admin-header">
       <div class="brand">
@@ -973,7 +1036,68 @@
           loading,
           confirmModal,
           errors: { toMessage },
+          viewState: {
+            key(scope = 'default') {
+              const route = window.location.pathname.replace(/[^a-z0-9/_-]/gi, '_');
+              const adminId = document.body?.dataset?.adminId || 'anon';
+              return `adminView:${route}:${adminId}:${scope}`;
+            },
+            load(scope = 'default') {
+              try {
+                const raw = localStorage.getItem(this.key(scope));
+                return raw ? JSON.parse(raw) : null;
+              } catch (_err) {
+                return null;
+              }
+            },
+            save(scope = 'default', value = {}) {
+              try {
+                localStorage.setItem(this.key(scope), JSON.stringify(value || {}));
+              } catch (_err) {
+                // ignore quota/storage errors
+              }
+            },
+            clear(scope = 'default') {
+              try {
+                localStorage.removeItem(this.key(scope));
+              } catch (_err) {
+                // ignore
+              }
+            },
+          },
         };
+
+        document.addEventListener('click', async (event) => {
+          const trigger = event.target.closest('[data-copy-text]');
+          if (!trigger) return;
+          event.preventDefault();
+          const text = String(trigger.getAttribute('data-copy-text') || '').trim();
+          if (!text) return;
+          let copied = false;
+          try {
+            await navigator.clipboard.writeText(text);
+            copied = true;
+          } catch (_err) {
+            try {
+              const textarea = document.createElement('textarea');
+              textarea.value = text;
+              textarea.setAttribute('readonly', '');
+              textarea.style.position = 'absolute';
+              textarea.style.left = '-9999px';
+              document.body.appendChild(textarea);
+              textarea.select();
+              copied = document.execCommand('copy');
+              textarea.remove();
+            } catch (_fallbackErr) {
+              copied = false;
+            }
+          }
+          if (copied) {
+            toast.success('Copied');
+          } else {
+            toast.error('Could not copy');
+          }
+        });
 
         const params = new URLSearchParams(window.location.search);
         const hasFeedbackQuery = ['saved', 'error', 'avg_reset', 'brain_error'].some((key) => params.has(key));

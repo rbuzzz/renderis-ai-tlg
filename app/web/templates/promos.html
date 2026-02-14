@@ -1,4 +1,4 @@
-﻿{% extends "layout.html" %}
+{% extends "layout.html" %}
 {% block content %}
   <div class="section">
     <h3>Промо-коды</h3>
@@ -27,23 +27,50 @@
     </div>
     {% endif %}
 
-    <form method="get" action="/admin/promos" class="form-row" style="margin-bottom: 16px;" data-ui-async="true" data-ui-loading="true" data-toast-error="Не удалось выполнить поиск. Попробуйте ещё раз.">
+    <form method="get" action="/admin/promos" class="filter-bar" data-ui-async="true" data-ui-loading="true" id="promosFilterForm">
       <div>
-        <label>Поиск промо-кода</label>
-        <input name="code" value="{{ search_code }}" placeholder="Введите промо-код" />
+        <label>Поиск кода</label>
+        <input name="code" value="{{ search_code }}" placeholder="Введите promo code" />
       </div>
       <div>
-        <label>&nbsp;</label>
-        <button type="submit">Найти</button>
+        <label>Поиск батча</label>
+        <input name="batch" value="{{ batch_search }}" placeholder="Часть batch id" />
+      </div>
+      <div>
+        <label>Статус батча</label>
+        <select name="promo_state" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #2b3f59;background:#0f1b2b;color:var(--text);">
+          <option value="all" {% if promo_state == 'all' %}selected{% endif %}>Все</option>
+          <option value="active" {% if promo_state == 'active' %}selected{% endif %}>Есть активные</option>
+          <option value="inactive" {% if promo_state == 'inactive' %}selected{% endif %}>Только неактивные</option>
+        </select>
+      </div>
+      <div>
+        <label>На странице</label>
+        <select name="limit" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #2b3f59;background:#0f1b2b;color:var(--text);">
+          <option value="25" {% if per_page == 25 %}selected{% endif %}>25</option>
+          <option value="40" {% if per_page == 40 %}selected{% endif %}>40</option>
+          <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+          <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+        </select>
+      </div>
+      <div class="filter-bar__actions">
+        <input type="hidden" name="sort" value="{{ sort }}" />
+        <input type="hidden" name="dir" value="{{ dir }}" />
+        <input type="hidden" name="page" value="1" />
+        <button type="submit">Apply</button>
+        <a class="filter-bar__reset" href="/admin/promos" id="promosFilterReset" data-view-reset="promos">Reset</a>
       </div>
     </form>
 
     {% if promo is not none %}
       <div class="card" style="margin-bottom: 16px;">
-        <div style="display:flex; justify-content: space-between; align-items:center;">
+        <div style="display:flex; justify-content: space-between; align-items:center; gap: 12px; flex-wrap: wrap;">
           <div>
-            <div style="font-weight:700;">Код: {{ promo.code }}</div>
-            <div class="subtle">Батч: {{ promo.batch_id or '—' }}</div>
+            <div style="font-weight:700;" class="cell-mono">
+              Код: {{ promo.code }}
+              <button type="button" class="copy-btn" data-copy-text="{{ promo.code }}" title="Copy promo code">Copy</button>
+            </div>
+            <div class="subtle cell-mono">Батч: {{ promo.batch_id or '—' }}</div>
             <div class="subtle">Кредиты: {{ promo.credits_amount }}</div>
             <div class="subtle">Статус: {{ promo.status }}</div>
             <div class="subtle">Активирован: {{ promo.redeemed_user or '—' }}</div>
@@ -60,30 +87,66 @@
       </div>
     {% endif %}
 
+    {% set next_dir_created = 'asc' if sort == 'created_at' and dir == 'desc' else 'desc' %}
+    {% set next_dir_status = 'asc' if sort == 'status' and dir == 'desc' else 'desc' %}
+    {% set next_dir_credits = 'asc' if sort == 'credits' and dir == 'desc' else 'desc' %}
+
     <div class="table-shell">
       <div class="table-scroll table-scroll--bounded">
       <table class="admin-table">
         <thead>
           <tr>
             <th>Батч</th>
-            <th>Дата</th>
+            <th>
+              <a class="sort-link" href="/admin/promos?code={{ search_code }}&batch={{ batch_search }}&promo_state={{ promo_state }}&sort=created_at&dir={{ next_dir_created }}&limit={{ per_page }}&page=1">
+                Дата
+                {% if sort == 'created_at' %}
+                <span class="sort-link__caret">{{ '↑' if dir == 'asc' else '↓' }}</span>
+                {% endif %}
+              </a>
+            </th>
             <th>Кодов</th>
-            <th>Кредитов за код</th>
+            <th>
+              <a class="sort-link" href="/admin/promos?code={{ search_code }}&batch={{ batch_search }}&promo_state={{ promo_state }}&sort=credits&dir={{ next_dir_credits }}&limit={{ per_page }}&page=1">
+                Кредитов за код
+                {% if sort == 'credits' %}
+                <span class="sort-link__caret">{{ '↑' if dir == 'asc' else '↓' }}</span>
+                {% endif %}
+              </a>
+            </th>
+            <th>
+              <a class="sort-link" href="/admin/promos?code={{ search_code }}&batch={{ batch_search }}&promo_state={{ promo_state }}&sort=status&dir={{ next_dir_status }}&limit={{ per_page }}&page=1">
+                Статус
+                {% if sort == 'status' %}
+                <span class="sort-link__caret">{{ '↑' if dir == 'asc' else '↓' }}</span>
+                {% endif %}
+              </a>
+            </th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           {% for b in batches %}
           <tr>
-            <td><a class="row-link cell-mono truncate" title="{{ b.batch_id }}" href="/admin/promos/batch/{{ b.batch_id }}">{{ b.batch_id }}</a></td>
+            <td class="cell-mono">
+              <a class="row-link truncate" title="{{ b.batch_id }}" href="/admin/promos/batch/{{ b.batch_id }}">{{ b.batch_id }}</a>
+              <button type="button" class="copy-btn" data-copy-text="{{ b.batch_id }}" title="Copy batch id">Copy</button>
+            </td>
             <td class="muted">{{ b.created_at }}</td>
             <td>{{ b.count }}</td>
             <td>{{ b.credits_amount }}</td>
+            <td>
+              {% if b.status == 'active' %}
+              <span class="badge ok">Активные: {{ b.active_count }}</span>
+              {% else %}
+              <span class="badge">Неактивен</span>
+              {% endif %}
+            </td>
             <td><a class="row-link table-action-link" href="/admin/promos/batch/{{ b.batch_id }}">Открыть</a></td>
           </tr>
           {% else %}
           <tr>
-            <td colspan="5">
+            <td colspan="6">
               <div class="empty-state">
                 <div class="empty-state__title">Нет записей</div>
                 <div class="empty-state__subtitle">Попробуйте изменить фильтры или обновить страницу</div>
@@ -95,5 +158,48 @@
       </table>
       </div>
     </div>
+
+    <div style="display:flex; gap:10px; margin-top: 12px; align-items:center;">
+      {% if has_prev %}
+        <a class="row-link" href="/admin/promos?code={{ search_code }}&batch={{ batch_search }}&promo_state={{ promo_state }}&sort={{ sort }}&dir={{ dir }}&limit={{ per_page }}&page={{ prev_page }}">← Предыдущая</a>
+      {% endif %}
+      <span class="subtle">Страница {{ page }}</span>
+      {% if has_next %}
+        <a class="row-link" href="/admin/promos?code={{ search_code }}&batch={{ batch_search }}&promo_state={{ promo_state }}&sort={{ sort }}&dir={{ dir }}&limit={{ per_page }}&page={{ next_page }}">Следующая →</a>
+      {% endif %}
+    </div>
   </div>
+
+  <script>
+    (() => {
+      const form = document.getElementById('promosFilterForm');
+      const reset = document.getElementById('promosFilterReset');
+      const view = window.adminUi?.viewState;
+      if (!form || !view) return;
+
+      const scope = 'promos';
+      if (!window.location.search) {
+        const stored = view.load(scope);
+        if (stored && typeof stored === 'object') {
+          Object.entries(stored).forEach(([key, value]) => {
+            const field = form.elements.namedItem(key);
+            if (!field || field instanceof RadioNodeList) return;
+            field.value = String(value ?? '');
+          });
+        }
+      }
+
+      form.addEventListener('submit', () => {
+        const payload = {};
+        new FormData(form).forEach((value, key) => {
+          payload[key] = String(value ?? '');
+        });
+        view.save(scope, payload);
+      });
+
+      if (reset) {
+        reset.addEventListener('click', () => view.clear(scope));
+      }
+    })();
+  </script>
 {% endblock %}
