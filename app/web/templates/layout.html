@@ -450,6 +450,32 @@
         flex-wrap: wrap;
         gap: 8px;
       }
+      .dirty-toast {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 1350;
+        max-width: min(420px, calc(100vw - 24px));
+        border-radius: 10px;
+        border: 1px solid rgba(154, 176, 200, 0.32);
+        background: rgba(11, 24, 38, 0.95);
+        color: var(--text);
+        padding: 9px 12px;
+        font-size: 13px;
+        box-shadow: 0 14px 32px rgba(0, 0, 0, 0.36);
+        opacity: 0;
+        transform: translateY(8px);
+        pointer-events: none;
+        transition: opacity 0.18s ease, transform 0.18s ease;
+      }
+      .dirty-toast.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      .dirty-toast.error {
+        border-color: rgba(255, 122, 122, 0.45);
+        color: #ffdede;
+      }
 
       @media (max-width: 980px) {
         :root {
@@ -520,6 +546,11 @@
           width: calc(100vw - 24px);
           bottom: 12px;
         }
+        .dirty-toast {
+          right: 12px;
+          bottom: 12px;
+          max-width: calc(100vw - 24px);
+        }
       }
     </style>
   </head>
@@ -583,6 +614,7 @@
         </div>
       </div>
     </div>
+    <div class="dirty-toast" id="dirtyToast" hidden></div>
     <script>
       if ('scrollRestoration' in history) {
         history.scrollRestoration = 'manual';
@@ -625,6 +657,8 @@
         const dirtyGuardSaveBtn = document.getElementById('dirtyGuardSaveBtn');
         const dirtyGuardDiscardBtn = document.getElementById('dirtyGuardDiscardBtn');
         const dirtyGuardCancelBtn = document.getElementById('dirtyGuardCancelBtn');
+        const dirtyToast = document.getElementById('dirtyToast');
+        const dirtyDebug = {{ 'true' if admin_layout_debug else 'false' }};
 
         const formState = new Map();
         let hasDirty = false;
@@ -778,25 +812,180 @@
 
         trackedForms.forEach(bindForm);
 
-        function firstDirtyForm() {
+        function getDirtyForms() {
+          const forms = [];
           const focusedOwner = fieldOwnerForm(document.activeElement);
           if (focusedOwner && trackedFormsSet.has(focusedOwner)) {
             const focusedState = formState.get(focusedOwner);
-            if (focusedState && focusedState.dirty.size > 0) return focusedOwner;
+            if (focusedState && focusedState.dirty.size > 0) forms.push(focusedOwner);
           }
-          for (const form of trackedForms) {
+          trackedForms.forEach((form) => {
+            if (forms.includes(form)) return;
             const state = formState.get(form);
-            if (state && state.dirty.size > 0) return form;
-          }
-          return null;
+            if (state && state.dirty.size > 0) forms.push(form);
+          });
+          return forms;
         }
 
-        function submitDirtyForm() {
-          const form = firstDirtyForm();
-          if (!form) return;
+        function dirtyFieldKey(form, field) {
+          const formKey = form.id || form.getAttribute('action') || 'form';
+          const fieldKey = field.name || field.id || 'field';
+          return `${formKey}:${fieldKey}`;
+        }
+
+        function debugPayloadPreview(formData) {
+          const payload = {};
+          formData.forEach((value, key) => {
+            const normalized = value instanceof File ? (value.name ? `[file:${value.name}]` : '[file]') : String(value);
+            if (payload[key] === undefined) {
+              payload[key] = normalized;
+            } else if (Array.isArray(payload[key])) {
+              payload[key].push(normalized);
+            } else {
+              payload[key] = [payload[key], normalized];
+            }
+          });
+          return payload;
+        }
+
+        function setFormSaved(form) {
+          const state = formState.get(form);
+          if (!state) return;
+          state.order.forEach((el) => {
+            state.initial.set(el, fieldSnapshot(el));
+            state.dirty.delete(el);
+            el.classList.remove('is-dirty-field');
+          });
+        }
+
+        function setSavingUi(flag) {
+          if (dirtySaveBtn) {
+            dirtySaveBtn.disabled = flag;
+            dirtySaveBtn.textContent = flag ? 'Saving...' : 'Save';
+          }
+          if (dirtyDiscardBtn) dirtyDiscardBtn.disabled = flag;
+          if (dirtyGuardSaveBtn) {
+            dirtyGuardSaveBtn.disabled = flag;
+            dirtyGuardSaveBtn.textContent = flag ? 'Saving...' : 'Save';
+          }
+          if (dirtyGuardDiscardBtn) dirtyGuardDiscardBtn.disabled = flag;
+          if (dirtyGuardCancelBtn) dirtyGuardCancelBtn.disabled = flag;
+        }
+
+        let dirtyToastTimer = null;
+        function showToast(message, isError = false) {
+          if (!dirtyToast) return;
+          dirtyToast.textContent = message;
+          dirtyToast.classList.toggle('error', Boolean(isError));
+          dirtyToast.hidden = false;
+          requestAnimationFrame(() => dirtyToast.classList.add('visible'));
+          if (dirtyToastTimer) clearTimeout(dirtyToastTimer);
+          dirtyToastTimer = window.setTimeout(() => {
+            dirtyToast.classList.remove('visible');
+            window.setTimeout(() => {
+              dirtyToast.hidden = true;
+            }, 200);
+          }, isError ? 3200 : 2200);
+        }
+
+        async function saveSingleForm(form) {
+          const method = (form.getAttribute('method') || form.method || 'POST').toUpperCase();
+          if (method === 'GET') {
+            throw new Error('unsupported_get_form');
+          }
+          const action = form.getAttribute('action') || window.location.href;
+          const body = new FormData(form);
+          if (dirtyDebug) {
+            console.debug('[dirty-save] payload', {
+              action,
+              method,
+              payload: debugPayloadPreview(body),
+            });
+          }
+          const response = await fetch(action, {
+            method,
+            body,
+            credentials: 'same-origin',
+            redirect: 'follow',
+          });
+          if (!response.ok) {
+            throw new Error(`http_${response.status}`);
+          }
+          return response;
+        }
+
+        async function saveAllDirtyForms() {
+          const dirtyForms = getDirtyForms();
+          if (!dirtyForms.length) return { total: 0, saved: 0, failed: 0 };
+          const totalDirtyFields = dirtyForms.reduce((acc, form) => {
+            const state = formState.get(form);
+            return acc + (state ? state.dirty.size : 0);
+          }, 0);
+          if (dirtyDebug) {
+            const fieldKeys = [];
+            dirtyForms.forEach((form) => {
+              const state = formState.get(form);
+              if (!state) return;
+              state.dirty.forEach((field) => {
+                fieldKeys.push(dirtyFieldKey(form, field));
+              });
+            });
+            console.debug('[dirty-save] start', {
+              dirtyFieldsCount: totalDirtyFields,
+              dirtyFormsCount: dirtyForms.length,
+              fieldKeys,
+            });
+          }
+
           isSubmitting = true;
+          setSavingUi(true);
           window.removeEventListener('beforeunload', beforeUnloadHandler);
-          form.submit();
+
+          let savedFields = 0;
+          const failedForms = [];
+          for (const form of dirtyForms) {
+            const state = formState.get(form);
+            const dirtyFieldsInForm = state ? state.dirty.size : 0;
+            try {
+              await saveSingleForm(form);
+              setFormSaved(form);
+              savedFields += dirtyFieldsInForm;
+            } catch (error) {
+              failedForms.push({
+                form,
+                error: error instanceof Error ? error.message : String(error),
+                fields: dirtyFieldsInForm,
+              });
+            }
+          }
+
+          updateGlobalState();
+          isSubmitting = false;
+          setSavingUi(false);
+
+          if (dirtyDebug) {
+            console.debug('[dirty-save] done', {
+              totalDirtyFields,
+              savedFields,
+              failedForms: failedForms.length,
+              saveCallsExecuted: dirtyForms.length,
+            });
+          }
+
+          if (!failedForms.length) {
+            showToast('Saved');
+          } else if (savedFields > 0) {
+            showToast(`Saved ${savedFields}/${totalDirtyFields} changes. ${failedForms.length} failed — retry.`, true);
+          } else {
+            showToast('Could not save changes. Please retry.', true);
+          }
+
+          return {
+            total: totalDirtyFields,
+            saved: savedFields,
+            failed: failedForms.reduce((acc, item) => acc + item.fields, 0),
+            failedForms,
+          };
         }
 
         function discardAllChanges() {
@@ -823,11 +1012,11 @@
           updateGlobalState();
         }
 
-        function closeGuardModal() {
+        function closeGuardModal(clearPending = true) {
           if (!dirtyGuardModal) return;
           dirtyGuardModal.classList.remove('visible');
           dirtyGuardModal.setAttribute('aria-hidden', 'true');
-          pendingHref = null;
+          if (clearPending) pendingHref = null;
         }
 
         function openGuardModal(href) {
@@ -854,9 +1043,9 @@
         }
 
         if (dirtySaveBtn) {
-          dirtySaveBtn.addEventListener('click', () => {
+          dirtySaveBtn.addEventListener('click', async () => {
             if (!hasDirty) return;
-            submitDirtyForm();
+            await saveAllDirtyForms();
           });
         }
 
@@ -872,9 +1061,20 @@
           });
         }
         if (dirtyGuardSaveBtn) {
-          dirtyGuardSaveBtn.addEventListener('click', () => {
-            closeGuardModal();
-            submitDirtyForm();
+          dirtyGuardSaveBtn.addEventListener('click', async () => {
+            if (!hasDirty) {
+              const href = pendingHref;
+              closeGuardModal();
+              if (href) window.location.href = href;
+              return;
+            }
+            const href = pendingHref;
+            closeGuardModal(false);
+            const result = await saveAllDirtyForms();
+            pendingHref = null;
+            if (href && result.failed === 0) {
+              window.location.href = href;
+            }
           });
         }
         if (dirtyGuardModal) {
