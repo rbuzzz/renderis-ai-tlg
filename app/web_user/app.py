@@ -1803,7 +1803,6 @@ def create_app() -> FastAPI:
                 select(Generation)
                 .where(Generation.user_id == user.id)
                 .order_by(Generation.created_at.desc())
-                .limit(20)
             )
             generations = rows.scalars().all()
             history = []

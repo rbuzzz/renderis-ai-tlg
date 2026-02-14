@@ -1709,10 +1709,31 @@
         }
       }
       .thumbs-pages {
-        margin-top: 6px;
-        text-align: right;
+        margin-top: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
         color: var(--muted);
         font-size: 12px;
+      }
+      .thumbs-pages-info {
+        white-space: nowrap;
+      }
+      .thumbs-load-more {
+        min-height: 30px;
+        padding: 6px 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        background: rgba(16, 27, 44, 0.82);
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .thumbs-load-more:hover,
+      .thumbs-load-more:focus-visible {
+        border-color: rgba(255, 255, 255, 0.34);
+        background: rgba(20, 33, 54, 0.92);
       }
       @media (hover: none) {
         .thumb-menu-btn {
@@ -2918,7 +2939,8 @@
       let galleryMode = 'carousel';
       let pendingSkeletonCount = 0;
       let resultSkeletonActive = false;
-      let thumbsPage = 0;
+      let thumbsVisibleCount = 0;
+      let thumbsLastColumns = 0;
       let modelNames = {};
       let selectedFiles = [];
       let refPreviews = [];
@@ -2963,8 +2985,11 @@
       let pendingFrameFlashGenerationId = 0;
       const freshRevealPendingUrls = new Set();
       const freshRevealSeenUrls = new Set();
-      const THUMB_ROWS = 3;
-      const INITIAL_THUMBS_RENDER_LIMIT = 10;
+      const thumbUrlStatusCache = new Map();
+      const thumbUrlValidationInFlight = new Set();
+      const thumbUrlValidationQueue = [];
+      const THUMB_URL_VALIDATION_CONCURRENCY = 4;
+      const THUMB_ROWS_PER_CHUNK = 3;
       const NEW_USER_CONFIRM_REQUIRED_COUNT = 5;
       const GENERATION_STATUS_POLL_BASE_MS = 2200;
       const GENERATION_STATUS_POLL_MAX_MS = 15000;
@@ -2972,8 +2997,8 @@
       const SKIP_CONFIRM_STORAGE_KEY = 'renderis.skip_confirm_generation';
       const FAVORITES_STORAGE_KEY = 'renderis.favorites.v1';
       const FAVORITES_MAX_ITEMS = 20;
-      let thumbsInitialHydrated = false;
-      let thumbsIdleHydrateScheduled = false;
+      let thumbsRefreshScheduled = false;
+      let thumbUrlValidationActive = 0;
       const PROMPT_HISTORY_STORAGE_KEY = 'renderis.prompt_history.v1';
       const PROMPT_HISTORY_LIMIT = 10;
       const PROMPT_TEMPLATES = [
@@ -4999,7 +5024,9 @@
         if (!galleryItems.length) return -1;
         for (let i = 0; i < galleryItems.length; i++) {
           const idx = (start + i) % galleryItems.length;
-          if (!galleryItems[idx].invalid) return idx;
+          const item = galleryItems[idx];
+          const status = thumbUrlStatusCache.get(getUrlCacheKey(item && item.url));
+          if (item && !item.invalid && status !== false) return idx;
         }
         return -1;
       }
@@ -5058,8 +5085,112 @@
         }
       }
 
+      function getUrlCacheKey(value) {
+        return String(value || '').trim();
+      }
+
+      function markThumbUrlStatus(urlValue, isActive) {
+        const url = getUrlCacheKey(urlValue);
+        if (!url) return;
+        thumbUrlStatusCache.set(url, Boolean(isActive));
+        if (!isActive) {
+          galleryItems.forEach((item) => {
+            if (String(item.url || '') === url) {
+              item.invalid = true;
+            }
+          });
+        }
+      }
+
+      function scheduleThumbsRefresh() {
+        if (thumbsRefreshScheduled) return;
+        thumbsRefreshScheduled = true;
+        setTimeout(() => {
+          thumbsRefreshScheduled = false;
+          if (!galleryItems.length || galleryMode !== 'carousel' || resultSkeletonActive) return;
+          renderGallery();
+        }, 0);
+      }
+
+      function pumpThumbUrlValidationQueue() {
+        while (
+          thumbUrlValidationActive < THUMB_URL_VALIDATION_CONCURRENCY
+          && thumbUrlValidationQueue.length
+        ) {
+          const url = thumbUrlValidationQueue.shift();
+          if (!url) continue;
+          thumbUrlValidationActive += 1;
+          const probe = new Image();
+          let done = false;
+          const finish = (active) => {
+            if (done) return;
+            done = true;
+            thumbUrlValidationActive = Math.max(0, thumbUrlValidationActive - 1);
+            thumbUrlValidationInFlight.delete(url);
+            markThumbUrlStatus(url, Boolean(active));
+            if (!active) {
+              scheduleThumbsRefresh();
+            }
+            pumpThumbUrlValidationQueue();
+          };
+          probe.onload = () => finish(true);
+          probe.onerror = () => finish(false);
+          probe.src = url;
+          setTimeout(() => finish(false), 12000);
+        }
+      }
+
+      function validateThumbUrl(urlValue) {
+        const url = getUrlCacheKey(urlValue);
+        if (!url) return;
+        if (thumbUrlStatusCache.has(url) || thumbUrlValidationInFlight.has(url)) return;
+        thumbUrlValidationInFlight.add(url);
+        thumbUrlValidationQueue.push(url);
+        pumpThumbUrlValidationQueue();
+      }
+
+      function ensureThumbUrlsValidated(items) {
+        if (!Array.isArray(items) || !items.length) return;
+        const uniqueUrls = new Set();
+        items.forEach((item) => {
+          const url = getUrlCacheKey(item && item.url);
+          if (!url || uniqueUrls.has(url)) return;
+          uniqueUrls.add(url);
+          validateThumbUrl(url);
+        });
+      }
+
       function getValidGalleryItems() {
-        return galleryItems.filter((item) => !item.invalid);
+        return galleryItems.filter((item) => {
+          if (!item || item.invalid) return false;
+          const status = thumbUrlStatusCache.get(getUrlCacheKey(item.url));
+          return status !== false;
+        });
+      }
+
+      function sortGalleryItemsNewestFirst(items) {
+        if (!Array.isArray(items)) return [];
+        const withIndex = items.map((item, idx) => ({ ...item, __idx: idx }));
+        withIndex.sort((a, b) => {
+          const aTs = Date.parse(String(a.created_at || '')) || 0;
+          const bTs = Date.parse(String(b.created_at || '')) || 0;
+          if (aTs !== bTs) return bTs - aTs;
+          const aGen = Number(a.generation_id || 0);
+          const bGen = Number(b.generation_id || 0);
+          if (aGen !== bGen) return bGen - aGen;
+          const aOut = Number(a._output_index || 0);
+          const bOut = Number(b._output_index || 0);
+          if (aOut !== bOut) return aOut - bOut;
+          const aHist = Number(a._history_index || 0);
+          const bHist = Number(b._history_index || 0);
+          if (aHist !== bHist) return aHist - bHist;
+          return a.__idx - b.__idx;
+        });
+        return withIndex.map((item) => {
+          const out = { ...item };
+          delete out.__idx;
+          return out;
+        });
       }
 
       function renderGallerySkeleton() {
@@ -5437,8 +5568,11 @@
             img.src = cardItem.url;
             img.loading = 'lazy';
             img.decoding = 'async';
+            img.onload = () => {
+              markThumbUrlStatus(cardItem.url, true);
+            };
             img.onerror = () => {
-              cardItem.invalid = true;
+              markThumbUrlStatus(cardItem.url, false);
               renderGallery();
             };
             main.appendChild(img);
@@ -5501,13 +5635,14 @@
           }, 320);
         };
         img.onload = () => {
+          markThumbUrlStatus(item.url, true);
           requestAnimationFrame(finishReveal);
         };
         img.onerror = () => {
           if (placeholder.parentElement) {
             placeholder.remove();
           }
-          item.invalid = true;
+          markThumbUrlStatus(item.url, false);
           renderGallery();
         };
         gallery.appendChild(img);
@@ -5565,6 +5700,7 @@
 
       function thumbColumns() {
         const thumbs = document.getElementById('thumbs');
+        if (!thumbs) return 1;
         const fixedDesktopCols = 8;
         if (window.innerWidth >= 1100) {
           return fixedDesktopCols;
@@ -5575,34 +5711,24 @@
         return Math.max(1, Math.floor((width + gap) / (minThumb + gap)));
       }
 
-      function snakeRows(items, cols) {
-        const out = [];
-        for (let i = 0; i < items.length; i += cols) {
-          const rowIndex = Math.floor(i / cols);
-          const row = items.slice(i, i + cols);
-          if (rowIndex % 2 === 1) {
-            row.reverse();
-          }
-          out.push(...row);
-        }
-        return out;
+      function thumbChunkSize(cols) {
+        const safeCols = Math.max(1, Number(cols || 1));
+        return Math.max(safeCols, safeCols * THUMB_ROWS_PER_CHUNK);
       }
 
-      function scheduleThumbsIdleHydration() {
-        if (thumbsInitialHydrated || thumbsIdleHydrateScheduled) return;
-        thumbsIdleHydrateScheduled = true;
-        const hydrate = () => {
-          thumbsIdleHydrateScheduled = false;
-          if (thumbsInitialHydrated) return;
-          thumbsInitialHydrated = true;
-          if (!galleryItems.length || galleryMode !== 'carousel' || resultSkeletonActive) return;
-          renderThumbs(galleryItems[galleryIndex] || null, false);
-        };
-        if (typeof window.requestIdleCallback === 'function') {
-          window.requestIdleCallback(hydrate, { timeout: 1200 });
-        } else {
-          setTimeout(hydrate, 80);
-        }
+      function alignCountToColumns(value, cols) {
+        const safeCols = Math.max(1, Number(cols || 1));
+        const count = Math.max(0, Number(value || 0));
+        return Math.ceil(count / safeCols) * safeCols;
+      }
+
+      function effectiveThumbColumns(thumbs, fallbackCols) {
+        if (!thumbs) return Math.max(1, Number(fallbackCols || 1));
+        const cssCols = String(getComputedStyle(thumbs).gridTemplateColumns || '')
+          .split(' ')
+          .filter(Boolean)
+          .length;
+        return Math.max(1, Number(cssCols || fallbackCols || 1));
       }
 
       function isElementInViewport(element) {
@@ -5616,42 +5742,39 @@
         const prevBtn = document.getElementById('thumbsPrev');
         const nextBtn = document.getElementById('thumbsNext');
         const pages = document.getElementById('thumbsPages');
+        if (!thumbs || !prevBtn || !nextBtn || !pages) return;
         thumbs.innerHTML = '';
 
-        const thumbItems = galleryItems.filter((x) => !x.invalid);
+        const thumbItems = getValidGalleryItems();
         if (!thumbItems.length) {
           prevBtn.style.display = 'none';
           nextBtn.style.display = 'none';
           pages.style.display = 'none';
+          pages.innerHTML = '';
           return;
         }
 
-        const cols = thumbColumns();
-        thumbs.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
-        const pageSize = Math.max(1, cols * THUMB_ROWS);
-        const totalPages = Math.max(1, Math.ceil(thumbItems.length / pageSize));
+        const requestedCols = thumbColumns();
+        thumbs.style.gridTemplateColumns = `repeat(${requestedCols}, minmax(0, 1fr))`;
+        const cols = effectiveThumbColumns(thumbs, requestedCols);
+        if (thumbsLastColumns !== cols && thumbsVisibleCount > 0) {
+          thumbsVisibleCount = alignCountToColumns(thumbsVisibleCount, cols);
+        }
+        thumbsLastColumns = cols;
+        const chunkSize = thumbChunkSize(cols);
         const currentIdx = currentItem ? thumbItems.findIndex((x) => x.url === currentItem.url) : -1;
 
-        if (focusCurrent && currentIdx >= 0) {
-          thumbsPage = Math.floor(currentIdx / pageSize);
+        if (thumbsVisibleCount <= 0) {
+          thumbsVisibleCount = chunkSize;
         }
-        if (thumbsPage >= totalPages) thumbsPage = totalPages - 1;
-        if (thumbsPage < 0) thumbsPage = 0;
-
-        const start = thumbsPage * pageSize;
-        const pageItems = thumbItems.slice(start, start + pageSize);
-        const shouldDeferPageHydration = (
-          !thumbsInitialHydrated
-          && thumbsPage === 0
-          && pageItems.length > INITIAL_THUMBS_RENDER_LIMIT
-        );
-        const displaySource = shouldDeferPageHydration
-          ? pageItems.slice(0, INITIAL_THUMBS_RENDER_LIMIT)
-          : pageItems;
-        const displayItems = snakeRows(displaySource, cols);
-        if (shouldDeferPageHydration) {
-          scheduleThumbsIdleHydration();
+        if (focusCurrent && currentIdx >= 0 && currentIdx + 1 > thumbsVisibleCount) {
+          thumbsVisibleCount = alignCountToColumns(currentIdx + 1, cols);
         }
+        thumbsVisibleCount = alignCountToColumns(thumbsVisibleCount, cols);
+        thumbsVisibleCount = Math.max(Math.min(chunkSize, thumbItems.length), thumbsVisibleCount);
+        if (thumbsVisibleCount > thumbItems.length) thumbsVisibleCount = thumbItems.length;
+        const displayItems = thumbItems.slice(0, thumbsVisibleCount);
+        ensureThumbUrlsValidated(displayItems);
 
         closeThumbMenu();
         displayItems.forEach((thumbItem) => {
@@ -5667,9 +5790,13 @@
           timg.src = thumbItem.url;
           timg.loading = 'lazy';
           timg.decoding = 'async';
+          timg.onload = () => {
+            markThumbUrlStatus(thumbItem.url, true);
+          };
           timg.onerror = () => {
-            thumbItem.invalid = true;
+            markThumbUrlStatus(thumbItem.url, false);
             wrap.remove();
+            scheduleThumbsRefresh();
           };
           const setAsMain = (e) => {
             e.preventDefault();
@@ -5725,13 +5852,39 @@
           }, 360);
         }
 
-        const manyPages = totalPages > 1;
-        prevBtn.style.display = manyPages ? 'flex' : 'none';
-        nextBtn.style.display = manyPages ? 'flex' : 'none';
-        prevBtn.disabled = thumbsPage === 0;
-        nextBtn.disabled = thumbsPage >= totalPages - 1;
-        pages.style.display = manyPages ? 'block' : 'none';
-        pages.textContent = `${thumbsPage + 1} / ${totalPages}`;
+        prevBtn.style.display = 'none';
+        nextBtn.style.display = 'none';
+        prevBtn.disabled = true;
+        nextBtn.disabled = true;
+
+        const visible = displayItems.length;
+        const total = thumbItems.length;
+        pages.innerHTML = '';
+        pages.style.display = total > 1 ? 'flex' : 'none';
+        if (total <= 1) return;
+
+        const info = document.createElement('span');
+        info.className = 'thumbs-pages-info';
+        info.textContent = `Showing ${visible} of ${total}`;
+        pages.appendChild(info);
+
+        if (visible < total) {
+          const loadMoreBtn = document.createElement('button');
+          loadMoreBtn.type = 'button';
+          loadMoreBtn.className = 'thumbs-load-more btn btn--secondaryLift';
+          loadMoreBtn.textContent = 'Load more';
+          loadMoreBtn.onclick = (event) => {
+            event.preventDefault();
+            const currentScrollY = window.scrollY;
+            thumbsVisibleCount = Math.min(
+              total,
+              alignCountToColumns(thumbsVisibleCount + chunkSize, cols)
+            );
+            renderThumbs(galleryItems[galleryIndex] || currentItem || null, false);
+            window.requestAnimationFrame(() => window.scrollTo({ top: currentScrollY, left: 0 }));
+          };
+          pages.appendChild(loadMoreBtn);
+        }
       }
 
       async function resolveActiveGenerationId(createdAtIso = '') {
@@ -5909,14 +6062,15 @@
         if (!data.history || data.history.length === 0) {
           if (!galleryItems.length) return;
           galleryItems = [];
+          thumbsVisibleCount = 0;
           renderGallery();
           return;
         }
         const prevItem = galleryItems[galleryIndex];
         const prevUrl = prevItem ? prevItem.url : null;
         const items = [];
-        data.history.forEach((item) => {
-          (item.urls || []).forEach((url) => {
+        data.history.forEach((item, historyIndex) => {
+          (item.urls || []).forEach((url, outputIndex) => {
             items.push({
               generation_id: item.id,
               model: item.model,
@@ -5931,14 +6085,18 @@
               elapsed_seconds: item.elapsed_seconds,
               processing_seconds: item.processing_seconds,
               url: url,
+              _history_index: historyIndex,
+              _output_index: outputIndex,
             });
           });
         });
-        if (isSameGalleryData(galleryItems, items)) {
+        const sortedItems = sortGalleryItemsNewestFirst(items);
+        if (isSameGalleryData(galleryItems, sortedItems)) {
           return;
         }
-        galleryItems = items;
+        galleryItems = sortedItems;
         syncFreshRevealCandidates(galleryItems);
+        ensureThumbUrlsValidated(galleryItems);
         const newIndex = galleryItems.findIndex((item) => !prevUrls.has(item.url));
         if (newIndex >= 0) {
           galleryIndex = newIndex;
@@ -6639,21 +6797,18 @@
         if (target instanceof Element && (target.closest('.thumb-menu-btn') || target.closest('#thumbPopover'))) return;
         closeThumbMenu();
       });
-      document.getElementById('thumbsPrev').onclick = (e) => {
-        e.preventDefault();
-        if (thumbsPage <= 0) return;
-        const currentScrollY = window.scrollY;
-        thumbsPage -= 1;
-        renderThumbs(galleryItems[galleryIndex] || null, false);
-        window.requestAnimationFrame(() => window.scrollTo({ top: currentScrollY, left: 0 }));
-      };
-      document.getElementById('thumbsNext').onclick = (e) => {
-        e.preventDefault();
-        const currentScrollY = window.scrollY;
-        thumbsPage += 1;
-        renderThumbs(galleryItems[galleryIndex] || null, false);
-        window.requestAnimationFrame(() => window.scrollTo({ top: currentScrollY, left: 0 }));
-      };
+      const thumbsPrevEl = document.getElementById('thumbsPrev');
+      if (thumbsPrevEl) {
+        thumbsPrevEl.onclick = (e) => {
+          e.preventDefault();
+        };
+      }
+      const thumbsNextEl = document.getElementById('thumbsNext');
+      if (thumbsNextEl) {
+        thumbsNextEl.onclick = (e) => {
+          e.preventDefault();
+        };
+      }
       const promoInputEl = document.getElementById('promoInput');
       if (promoInputEl) {
         promoInputEl.addEventListener('keydown', (e) => {
