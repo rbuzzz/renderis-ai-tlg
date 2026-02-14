@@ -448,12 +448,6 @@
         justify-content: space-between;
         gap: 10px;
       }
-      .prompt-meta {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 2px;
-      }
       .prompt-brain-row {
         margin-top: 8px;
         display: flex;
@@ -1893,10 +1887,7 @@
             >
               ↓ {{ labels['prompt_history_button'] }}
             </button>
-            <div class="prompt-meta">
-              <div class="prompt-limit" id="brainPackRemainingHint" aria-live="polite"></div>
-              <div class="prompt-limit" id="promptLimitHint" aria-live="polite"></div>
-            </div>
+            <div class="prompt-limit" id="promptLimitHint" aria-live="polite"></div>
           </div>
           <div class="prompt-brain-row">
             <button
@@ -2463,14 +2454,18 @@
         const hintEl = document.getElementById('promptLimitHint');
         const promptEl = getPromptInput();
         if (!hintEl || !promptEl) return;
-        if (!maxPromptLength || maxPromptLength <= 0) {
-          hintEl.textContent = '';
-          hintEl.classList.remove('warn');
-          return;
+        const parts = [];
+        if (loggedIn && aiBrainState.enabled) {
+          const packRemaining = Math.max(0, Number(aiBrainState.pack_remaining || 0));
+          parts.push(`Improvements left: ${packRemaining}`);
         }
-        const count = promptEl.value.length;
-        const exceeds = count > maxPromptLength;
-        hintEl.textContent = fmt(labels.prompt_length_hint, { count, max: maxPromptLength });
+        let exceeds = false;
+        if (maxPromptLength && maxPromptLength > 0) {
+          const count = promptEl.value.length;
+          exceeds = count > maxPromptLength;
+          parts.push(fmt(labels.prompt_length_hint, { count, max: maxPromptLength }));
+        }
+        hintEl.textContent = parts.join(' · ');
         hintEl.classList.toggle('warn', exceeds);
       }
 
@@ -3218,17 +3213,6 @@
         if (tone === 'success') statusEl.classList.add('success');
       }
 
-      function updateBrainPackRemainingHint() {
-        const hintEl = document.getElementById('brainPackRemainingHint');
-        if (!hintEl) return;
-        if (!loggedIn || !aiBrainState.enabled) {
-          hintEl.textContent = '';
-          return;
-        }
-        const packRemaining = Math.max(0, Number(aiBrainState.pack_remaining || 0));
-        hintEl.textContent = fmt(labels.brain_pack_remaining, { count: packRemaining });
-      }
-
       function updateRestorePromptButton() {
         const restoreBtn = document.getElementById('restorePromptBtn');
         if (!restoreBtn) return;
@@ -3260,7 +3244,7 @@
         const packRemaining = Math.max(0, Number(aiBrainState.pack_remaining || 0));
         const buttonText = fmt(labels.brain_pack_buy_button, { size: packSize, price: packPrice });
         buyBtn.textContent = `🎁 ${buttonText}`;
-        buyBtn.title = packRemaining > 0 ? fmt(labels.brain_pack_remaining, { count: packRemaining }) : '';
+        buyBtn.title = packRemaining > 0 ? `Improvements left: ${packRemaining}` : '';
         buyBtn.disabled = (
           !loggedIn
           || !aiBrainState.enabled
@@ -3279,7 +3263,7 @@
         runBtn.disabled = runInProgress || confirmModalOpen || generationInFlight;
         updateImprovePromptButton();
         updateBrainPackBuyButton();
-        updateBrainPackRemainingHint();
+        updatePromptLengthHint();
         updateRestorePromptButton();
       }
 
