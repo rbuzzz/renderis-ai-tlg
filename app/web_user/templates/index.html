@@ -1048,26 +1048,19 @@
       .gallery img.gallery-main-image {
         position: relative;
         z-index: 2;
-        opacity: 0;
-        transform: scale(0.99);
-        transition: opacity 0.32s ease, transform 0.32s ease;
-      }
-      .gallery img.gallery-main-image.ready {
         opacity: 1;
         transform: scale(1);
       }
-      .gallery img.gallery-image-enter {
-        animation: gallery-fade-in 0.32s ease;
+      .gallery img.gallery-main-image.result-reveal {
+        opacity: 0;
+        transform: scale(1.01);
+        filter: saturate(0.98);
+        transition: opacity 0.4s cubic-bezier(0.22, 1, 0.36, 1), transform 0.4s cubic-bezier(0.22, 1, 0.36, 1), filter 0.4s cubic-bezier(0.22, 1, 0.36, 1);
       }
-      @keyframes gallery-fade-in {
-        from {
-          opacity: 0;
-          transform: scale(0.99);
-        }
-        to {
-          opacity: 1;
-          transform: scale(1);
-        }
+      .gallery img.gallery-main-image.result-reveal.ready {
+        opacity: 1;
+        transform: scale(1);
+        filter: saturate(1);
       }
       .gallery-empty {
         padding: 24px;
@@ -2664,6 +2657,10 @@
       let thumbMenuOpenUrl = '';
       let thumbMenuItem = null;
       let thumbMenuAnchorEl = null;
+      let freshRevealGenerationId = 0;
+      let pendingActionPulseGenerationId = 0;
+      const freshRevealPendingUrls = new Set();
+      const freshRevealSeenUrls = new Set();
       const THUMB_ROWS = 3;
       const INITIAL_THUMBS_RENDER_LIMIT = 10;
       const NEW_USER_CONFIRM_REQUIRED_COUNT = 5;
@@ -3647,12 +3644,13 @@
           active = false;
           clearTimers();
           await animateProgressToComplete();
+          markFreshRevealGeneration(generationId);
+          pendingActionPulseGenerationId = Number(generationId || 0);
           generationInFlight = false;
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
           renderGallery();
           setResultActionsGenerating(false);
-          pulseResultActionsActivation();
           setGenerationControlsLocked(false);
           setRunButtonState();
           setGenerationLiveState({
@@ -3677,6 +3675,7 @@
           clearTimers();
           softProgress = 0;
           setSoftProgressUi(0, { instant: true });
+          pendingActionPulseGenerationId = 0;
           generationInFlight = false;
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
@@ -3715,6 +3714,7 @@
           clearTimers();
           softProgress = 0;
           setSoftProgressUi(0, { instant: true });
+          pendingActionPulseGenerationId = 0;
           generationInFlight = false;
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
@@ -3744,6 +3744,7 @@
           clearTimers();
           softProgress = 0;
           setSoftProgressUi(0, { instant: true });
+          pendingActionPulseGenerationId = 0;
           generationInFlight = false;
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
@@ -4620,6 +4621,32 @@
         return -1;
       }
 
+      function markFreshRevealGeneration(generationId) {
+        const parsed = Number(generationId || 0);
+        freshRevealGenerationId = parsed > 0 ? parsed : 0;
+        freshRevealPendingUrls.clear();
+        freshRevealSeenUrls.clear();
+      }
+
+      function syncFreshRevealCandidates(items) {
+        if (!(freshRevealGenerationId > 0) || !Array.isArray(items) || !items.length) return;
+        items.forEach((item) => {
+          if (Number(item.generation_id || 0) !== freshRevealGenerationId) return;
+          const url = String(item.url || '');
+          if (!url || freshRevealSeenUrls.has(url)) return;
+          freshRevealPendingUrls.add(url);
+        });
+      }
+
+      function consumeFreshRevealForItem(item) {
+        if (!item || Number(item.generation_id || 0) !== freshRevealGenerationId) return false;
+        const url = String(item.url || '');
+        if (!url || !freshRevealPendingUrls.has(url)) return false;
+        freshRevealPendingUrls.delete(url);
+        freshRevealSeenUrls.add(url);
+        return true;
+      }
+
       function setGalleryMode(mode) {
         const nextMode = mode === 'grid' ? 'grid' : 'carousel';
         galleryMode = nextMode;
@@ -5040,16 +5067,29 @@
         gallery.style.display = 'block';
         grid.style.display = 'none';
 
+        const shouldPremiumReveal = consumeFreshRevealForItem(item);
         const img = document.createElement('img');
-        img.className = 'gallery-image-enter gallery-main-image';
+        img.className = 'gallery-main-image';
+        if (shouldPremiumReveal) {
+          img.classList.add('result-reveal');
+        }
         img.loading = isElementInViewport(gallery) ? 'eager' : 'lazy';
         img.decoding = 'async';
         const placeholder = document.createElement('div');
         placeholder.className = 'gallery-placeholder';
         placeholder.setAttribute('aria-hidden', 'true');
         gallery.appendChild(placeholder);
+        let revealDone = false;
         const finishReveal = () => {
-          img.classList.add('ready');
+          if (revealDone) return;
+          revealDone = true;
+          if (shouldPremiumReveal) {
+            img.classList.add('ready');
+            const clearRevealClasses = () => {
+              img.classList.remove('ready', 'result-reveal');
+            };
+            img.addEventListener('transitionend', clearRevealClasses, { once: true });
+          }
           placeholder.classList.add('fade-out');
           setTimeout(() => {
             if (placeholder.parentElement) {
@@ -5107,6 +5147,14 @@
         actions.appendChild(renderGalleryCardActions(item, false));
         actions.style.display = 'flex';
         setResultActionsGenerating(!!generationInFlight);
+        if (
+          !generationInFlight
+          && pendingActionPulseGenerationId > 0
+          && Number(item.generation_id || 0) === pendingActionPulseGenerationId
+        ) {
+          pulseResultActionsActivation();
+          pendingActionPulseGenerationId = 0;
+        }
         thumbsWrap.style.display = validItems.length > 1 ? 'block' : 'none';
         pages.style.display = 'none';
         renderThumbs(item, true);
@@ -5485,6 +5533,7 @@
           return;
         }
         galleryItems = items;
+        syncFreshRevealCandidates(galleryItems);
         const newIndex = galleryItems.findIndex((item) => !prevUrls.has(item.url));
         if (newIndex >= 0) {
           galleryIndex = newIndex;
