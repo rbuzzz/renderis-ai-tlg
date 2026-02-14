@@ -1268,6 +1268,87 @@
         border-color: rgba(255, 138, 138, 0.68);
         color: #ffd3d3;
       }
+      .btn {
+        position: relative;
+      }
+      .btn--primaryShimmer,
+      .btn--secondaryLift {
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+      }
+      .btn--primaryShimmer:hover,
+      .btn--primaryShimmer:focus-visible,
+      .btn--secondaryLift:hover,
+      .btn--secondaryLift:focus-visible {
+        transform: translateY(-1px);
+      }
+      .btn--primaryShimmer:active,
+      .btn--secondaryLift:active {
+        transform: translateY(0);
+      }
+      .btn--primaryShimmer {
+        overflow: hidden;
+        isolation: isolate;
+      }
+      .btn--primaryShimmer::before {
+        content: "";
+        position: absolute;
+        inset: -2px;
+        border-radius: inherit;
+        pointer-events: none;
+        z-index: 0;
+        opacity: 0;
+        transform: translateX(-120%);
+        background: linear-gradient(120deg, transparent 0%, rgba(245, 185, 79, 0.33) 50%, transparent 100%);
+      }
+      .btn--primaryShimmer > * {
+        position: relative;
+        z-index: 1;
+      }
+      .btn--primaryShimmer.btn-shimmer-active::before {
+        animation: btn-shimmer-sweep 460ms ease-out 1;
+      }
+      @keyframes btn-shimmer-sweep {
+        0% { opacity: 0; transform: translateX(-120%); }
+        12% { opacity: 1; }
+        100% { opacity: 0; transform: translateX(120%); }
+      }
+      .btn--danger:hover,
+      .btn--danger:focus-visible {
+        transform: none !important;
+      }
+      .btn--danger:active {
+        transform: none !important;
+      }
+      .btn:disabled,
+      .btn[disabled],
+      .btn[aria-disabled="true"],
+      .btn.disabled {
+        transform: none !important;
+        box-shadow: none !important;
+      }
+      .btn:disabled::before,
+      .btn[disabled]::before,
+      .btn[aria-disabled="true"]::before,
+      .btn.disabled::before {
+        display: none !important;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .btn--primaryShimmer,
+        .btn--secondaryLift {
+          transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+        }
+        .btn--primaryShimmer:hover,
+        .btn--primaryShimmer:focus-visible,
+        .btn--secondaryLift:hover,
+        .btn--secondaryLift:focus-visible,
+        .btn--primaryShimmer:active,
+        .btn--secondaryLift:active {
+          transform: none;
+        }
+        .btn--primaryShimmer::before {
+          display: none;
+        }
+      }
       .result-actions .result-action-activate {
         transition: opacity 0.28s ease, box-shadow 0.26s ease, transform 0.26s ease;
       }
@@ -2560,7 +2641,7 @@
             <span class="balance-short" id="balanceShort">--</span>
           </div>
           <div class="topup-menu" id="topupMenu">
-            <button class="topup-button" id="topupButton" type="button" aria-haspopup="true" aria-expanded="false">
+            <button class="topup-button btn btn--primaryShimmer" id="topupButton" type="button" aria-haspopup="true" aria-expanded="false">
               <span class="topup-icon">💳</span>
               <span class="topup-label">{{ labels['topup_button'] }}</span>
               <span class="user-caret">▾</span>
@@ -2613,7 +2694,7 @@
             <label for="prompt">{{ labels['prompt_label'] }}</label>
             <div class="prompt-label-actions">
               <button
-                class="prompt-helper-btn"
+                class="prompt-helper-btn btn btn--secondaryLift"
                 id="promptHelperBtn"
                 type="button"
                 aria-haspopup="dialog"
@@ -2622,14 +2703,14 @@
                 ✨ {{ labels['prompt_helper_button'] }}
               </button>
               <button
-                class="prompt-improve-btn"
+                class="prompt-improve-btn btn btn--secondaryLift"
                 id="improvePromptBtn"
                 type="button"
               >
                 ✨ {{ labels['brain_improve_button'] }}
               </button>
               <button
-                class="prompt-improve-btn"
+                class="prompt-improve-btn btn btn--primaryShimmer"
                 id="brainPackBuyBtn"
                 type="button"
               >
@@ -2687,7 +2768,7 @@
         </div>
 
         <div class="run-row">
-          <button class="run-btn" id="runBtn">{{ labels['run'] }}</button>
+          <button class="run-btn btn btn--primaryShimmer" id="runBtn">{{ labels['run'] }}</button>
           <div class="status" id="runStatus"></div>
         </div>
         <div class="gen-live" id="genLive" aria-live="polite">
@@ -2728,8 +2809,8 @@
           <div class="panel-note">{{ labels['site_notice'] }}</div>
         </div>
         <div class="output-view-toggle" id="outputViewToggle" style="display:none;">
-          <button id="viewCarouselBtn" class="view-toggle-btn active" type="button">{{ labels['result_view_carousel'] }}</button>
-          <button id="viewGridBtn" class="view-toggle-btn" type="button">{{ labels['result_view_grid'] }}</button>
+          <button id="viewCarouselBtn" class="view-toggle-btn btn btn--secondaryLift active" type="button">{{ labels['result_view_carousel'] }}</button>
+          <button id="viewGridBtn" class="view-toggle-btn btn btn--secondaryLift" type="button">{{ labels['result_view_grid'] }}</button>
         </div>
         <div class="result-meta" id="resultMeta" style="display:none;"></div>
         <div class="output-preview" id="outputPreview">
@@ -2738,13 +2819,13 @@
           </div>
           <div class="gallery-grid" id="galleryGrid" style="display:none;"></div>
           <div class="gallery-actions result-actions" id="galleryActions" style="display:none;">
-            <a class="action-btn btn-primary" id="downloadBtn" href="#" download>
+            <a class="action-btn btn btn-primary btn--primaryShimmer" id="downloadBtn" href="#" download>
               ⬇ {{ labels['result_download'] }}
             </a>
-            <button class="action-btn btn-secondary" id="regenerateBtn">🔁 {{ labels['result_regenerate'] }}</button>
-            <button class="action-btn btn-ghost" id="editPromptBtn">✏ {{ labels['result_edit_prompt'] }}</button>
-            <button class="action-btn btn-secondary" id="editWithAiBtn">🧩 {{ labels['result_edit_ai'] }}</button>
-            <button class="action-btn btn-ghost" id="favoriteBtn">⭐ {{ labels['result_favorite_add'] }}</button>
+            <button class="action-btn btn btn-secondary btn--secondaryLift" id="regenerateBtn">🔁 {{ labels['result_regenerate'] }}</button>
+            <button class="action-btn btn btn-ghost btn--secondaryLift" id="editPromptBtn">✏ {{ labels['result_edit_prompt'] }}</button>
+            <button class="action-btn btn btn-secondary btn--secondaryLift" id="editWithAiBtn">🧩 {{ labels['result_edit_ai'] }}</button>
+            <button class="action-btn btn btn-ghost btn--secondaryLift" id="favoriteBtn">⭐ {{ labels['result_favorite_add'] }}</button>
           </div>
           <div class="thumbs-wrap" id="thumbsWrap">
             <button class="thumbs-nav prev" id="thumbsPrev" type="button" aria-label="Previous thumbnails">‹</button>
@@ -5239,7 +5320,7 @@
         };
 
         const download = document.createElement('a');
-        download.className = 'action-btn btn-primary';
+        download.className = 'action-btn btn btn-primary btn--primaryShimmer';
         download.classList.add('result-action-activate');
         download.href = `/api/download?url=${encodeURIComponent(item.url)}`;
         download.setAttribute('download', '');
@@ -5248,7 +5329,7 @@
         addAction(download);
 
         const regenerateBtn = document.createElement('button');
-        regenerateBtn.className = 'action-btn btn-secondary';
+        regenerateBtn.className = 'action-btn btn btn-secondary btn--secondaryLift';
         regenerateBtn.classList.add('result-action-activate');
         regenerateBtn.type = 'button';
         regenerateBtn.textContent = `🔁 ${compact ? labels.result_regenerate_this : labels.result_regenerate}`;
@@ -5258,7 +5339,7 @@
         addAction(regenerateBtn);
 
         const editPromptBtn = document.createElement('button');
-        editPromptBtn.className = 'action-btn btn-ghost';
+        editPromptBtn.className = 'action-btn btn btn-ghost btn--secondaryLift';
         editPromptBtn.classList.add('result-action-activate');
         editPromptBtn.type = 'button';
         editPromptBtn.textContent = `✏ ${labels.result_edit_prompt}`;
@@ -5266,7 +5347,7 @@
         addAction(editPromptBtn);
 
         const editAiBtn = document.createElement('button');
-        editAiBtn.className = 'action-btn btn-secondary';
+        editAiBtn.className = 'action-btn btn btn-secondary btn--secondaryLift';
         editAiBtn.classList.add('result-action-activate');
         editAiBtn.type = 'button';
         editAiBtn.textContent = `🧩 ${labels.result_edit_ai}`;
@@ -5274,7 +5355,7 @@
         addAction(editAiBtn);
 
         const favoriteBtn = document.createElement('button');
-        favoriteBtn.className = 'action-btn btn-ghost';
+        favoriteBtn.className = 'action-btn btn btn-ghost btn--secondaryLift';
         favoriteBtn.type = 'button';
         const favored = isFavoriteUrl(item.url);
         favoriteBtn.classList.toggle('favorited', favored);
@@ -5283,7 +5364,7 @@
         addAction(favoriteBtn);
 
         const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'action-btn btn-danger';
+        deleteBtn.className = 'action-btn btn btn-danger btn--danger';
         deleteBtn.type = 'button';
         deleteBtn.textContent = `🗑 ${labels.delete}`;
         deleteBtn.onclick = () => {
@@ -6403,6 +6484,25 @@
           generationWaitController.cancelLocally();
         });
       }
+
+      function setupTieredButtonMicroInteractions() {
+        document.addEventListener('click', (event) => {
+          const target = event.target instanceof Element ? event.target.closest('.btn--primaryShimmer') : null;
+          if (!target) return;
+          if (!(target instanceof HTMLElement)) return;
+          if (target.matches(':disabled, [disabled], [aria-disabled="true"], .disabled')) return;
+          if (window.getComputedStyle(target).pointerEvents === 'none') return;
+          target.classList.remove('btn-shimmer-active');
+          // Restart one-shot shimmer reliably on repeated clicks.
+          void target.offsetWidth;
+          target.classList.add('btn-shimmer-active');
+          setTimeout(() => {
+            target.classList.remove('btn-shimmer-active');
+          }, 620);
+        }, { passive: true });
+      }
+
+      setupTieredButtonMicroInteractions();
 
       document.getElementById('runBtn').onclick = runGenerationFlow;
       const promoBtn = document.getElementById('promoBtn');
