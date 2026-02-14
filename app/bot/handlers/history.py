@@ -13,6 +13,7 @@ from app.services.kie_client import KieClient
 from app.services.poller_runtime import get_poller
 from app.bot.utils import safe_cleanup_callback
 from app.bot.i18n import get_lang, t, tf
+from app.utils.credits import credits_to_display
 from app.utils.text import escape_html
 
 
@@ -78,7 +79,7 @@ async def history_list(callback: CallbackQuery, session: AsyncSession) -> None:
             f'<b>{t(lang, "history_timeline_title")}</b>\n'
             f'{tf(lang, "history_model", model=escape_html(model_label))}\n'
             f'{tf(lang, "history_status", status=gen.status)}\n'
-            f'{tf(lang, "history_cost", cost=int(gen.final_cost_credits or 0))}\n'
+            f'{tf(lang, "history_cost", cost=credits_to_display(gen.final_cost_credits))}\n'
             f'{t(lang, "prompt_label")}: {escape_html(gen.prompt[:200])}\n'
             f'{t(lang, "history_created")}: {gen.created_at:%Y-%m-%d %H:%M}'
         )

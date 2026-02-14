@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import AdminChangeComment, AdminChangeRequest, PromoCode, User
 from app.services.credits import CreditsService
+from app.utils.credits import to_credits
 from app.utils.time import utcnow
 
 
@@ -221,7 +222,7 @@ class ChangeRequestService:
             amount = int(req.credits_amount or 0)
             if amount <= 0:
                 return False, "invalid_credits_amount"
-            if user.balance_credits < amount:
+            if to_credits(user.balance_credits) < to_credits(amount):
                 return False, "insufficient_balance"
             await self.credits.add_ledger(
                 user,
@@ -237,7 +238,7 @@ class ChangeRequestService:
             target_balance = int(req.balance_value if req.balance_value is not None else -1)
             if target_balance < 0:
                 return False, "invalid_balance_value"
-            delta = target_balance - int(user.balance_credits or 0)
+            delta = to_credits(target_balance) - to_credits(user.balance_credits)
             if delta != 0:
                 await self.credits.add_ledger(
                     user,
@@ -268,7 +269,7 @@ class ChangeRequestService:
 
             promo.active = False
             credits = int(promo.credits_amount or 0)
-            if credits > 0 and user.balance_credits >= credits:
+            if credits > 0 and to_credits(user.balance_credits) >= to_credits(credits):
                 await self.credits.add_ledger(
                     user,
                     -credits,

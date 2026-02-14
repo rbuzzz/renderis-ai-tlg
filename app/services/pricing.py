@@ -1,6 +1,7 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Dict, List, Tuple
 
 from sqlalchemy import func, select, update
@@ -8,29 +9,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Price
 from app.modelspecs.base import ModelSpec
+from app.utils.credits import to_credits
 
 
 @dataclass
 class PriceBreakdown:
-    base: int
-    modifiers: List[Tuple[str, int]]
-    per_output: int
+    base: Decimal
+    modifiers: List[Tuple[str, Decimal]]
+    per_output: Decimal
     outputs: int
     discount_pct: int
-    total: int
+    total: Decimal
 
 
 class PricingService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def get_price_map(self, model_key: str) -> Dict[str, int]:
+    async def get_price_map(self, model_key: str) -> Dict[str, Decimal]:
         result = await self.session.execute(
             select(Price.option_key, Price.price_credits)
             .where(Price.model_key == model_key)
             .where(Price.active.is_(True))
         )
-        return {row[0]: int(row[1]) for row in result.all()}
+        return {row[0]: to_credits(row[1]) for row in result.all()}
 
     async def get_provider_map(self, model_key: str) -> Dict[str, int]:
         result = await self.session.execute(
@@ -78,6 +80,12 @@ class PricingService:
         per_output = base + sum(modifiers)
         return per_output * outputs
 
+    def _apply_discount(self, subtotal: Decimal, discount_pct: int) -> Decimal:
+        if discount_pct <= 0:
+            return to_credits(subtotal)
+        factor = Decimal(100 - int(discount_pct)) / Decimal(100)
+        return to_credits(subtotal * factor)
+
     async def resolve_cost(self, model: ModelSpec, options: Dict[str, str], outputs: int, discount_pct: int = 0) -> PriceBreakdown:
         price_map = await self.get_price_map(model.key)
         if model.key == "nano_banana_pro":
@@ -88,10 +96,7 @@ class PricingService:
                 if bundle_key in price_map:
                     per_output = price_map[bundle_key]
                     subtotal = per_output * outputs
-                    if discount_pct > 0:
-                        total = int((subtotal * (100 - discount_pct) + 99) // 100)
-                    else:
-                        total = subtotal
+                    total = self._apply_discount(subtotal, discount_pct)
                     return PriceBreakdown(
                         base=per_output,
                         modifiers=[],
@@ -105,10 +110,7 @@ class PricingService:
                 if bundle_key in price_map:
                     per_output = price_map[bundle_key]
                     subtotal = per_output * outputs
-                    if discount_pct > 0:
-                        total = int((subtotal * (100 - discount_pct) + 99) // 100)
-                    else:
-                        total = subtotal
+                    total = self._apply_discount(subtotal, discount_pct)
                     return PriceBreakdown(
                         base=per_output,
                         modifiers=[],
@@ -117,8 +119,8 @@ class PricingService:
                         discount_pct=discount_pct,
                         total=total,
                     )
-        base = price_map.get('base', 0)
-        modifiers: List[Tuple[str, int]] = []
+        base = price_map.get("base", to_credits(0))
+        modifiers: List[Tuple[str, Decimal]] = []
         for opt in model.options:
             val = options.get(opt.key, opt.default)
             price_key = None
@@ -134,10 +136,7 @@ class PricingService:
                 modifiers.append((price_key, price_map[price_key]))
         per_output = base + sum(x[1] for x in modifiers)
         subtotal = per_output * outputs
-        if discount_pct > 0:
-            total = int((subtotal * (100 - discount_pct) + 99) // 100)
-        else:
-            total = subtotal
+        total = self._apply_discount(subtotal, discount_pct)
         return PriceBreakdown(
             base=base,
             modifiers=modifiers,
@@ -147,20 +146,21 @@ class PricingService:
             total=total,
         )
 
-    async def set_price(self, model_key: str, option_key: str, price_credits: int, model_type: str, provider: str) -> None:
+    async def set_price(self, model_key: str, option_key: str, price_credits: Decimal | int | float | str, model_type: str, provider: str) -> None:
+        price_value = to_credits(price_credits)
         result = await self.session.execute(
             select(Price).where(Price.model_key == model_key, Price.option_key == option_key)
         )
         row = result.scalar_one_or_none()
         if row:
-            row.price_credits = price_credits
+            row.price_credits = price_value
             row.active = True
         else:
             self.session.add(
                 Price(
                     model_key=model_key,
                     option_key=option_key,
-                    price_credits=price_credits,
+                    price_credits=price_value,
                     active=True,
                     model_type=model_type,
                     provider=provider,
@@ -170,7 +170,5 @@ class PricingService:
     async def bulk_multiply(self, multiplier: float) -> int:
         result = await self.session.execute(select(func.count(Price.id)))
         count = result.scalar_one() or 0
-        await self.session.execute(
-            update(Price).values(price_credits=func.round(Price.price_credits * multiplier))
-        )
+        await self.session.execute(update(Price).values(price_credits=func.round(Price.price_credits * multiplier, 3)))
         return int(count)
