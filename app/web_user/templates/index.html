@@ -87,6 +87,9 @@
         overflow: hidden;
         text-overflow: ellipsis;
       }
+      .lang-short {
+        display: none;
+      }
       .lang-dropdown {
         position: absolute;
         right: 0;
@@ -305,6 +308,15 @@
         font-size: 15px;
         line-height: 1;
         white-space: nowrap;
+      }
+      .balance-short {
+        display: none;
+      }
+      .topup-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
       }
       .logout {
         color: var(--muted);
@@ -1901,10 +1913,10 @@
       }
       @media (max-width: 600px) {
         .brand {
-          font-size: 22px;
+          font-size: 16px;
         }
         .subtitle {
-          font-size: 13px;
+          display: none;
         }
         .model-buttons {
           display: grid;
@@ -1948,6 +1960,146 @@
           top: calc(100% + 6px);
         }
       }
+      @media (max-width: 768px) {
+        body {
+          padding: 10px;
+        }
+        .topbar {
+          display: flex;
+          flex-direction: row;
+          align-items: center;
+          justify-content: space-between;
+          position: sticky;
+          top: 0;
+          z-index: 120;
+          margin: 0 0 10px;
+          padding: 6px 8px;
+          border: 1px solid #2a3d57;
+          border-radius: 14px;
+          background: rgba(11, 18, 32, 0.92);
+          backdrop-filter: blur(8px);
+          gap: 8px;
+        }
+        .brand-wrap {
+          flex: 1 1 auto;
+          gap: 8px;
+        }
+        .site-logo {
+          width: 32px;
+          height: 32px;
+          border-radius: 10px;
+        }
+        .brand {
+          font-size: 16px;
+          line-height: 1.1;
+          white-space: nowrap;
+        }
+        .subtitle {
+          display: none;
+        }
+        .top-actions {
+          width: auto;
+          flex: 0 0 auto;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-wrap: nowrap;
+        }
+        .lang-menu,
+        .topup-menu,
+        .user-menu {
+          width: auto;
+        }
+        .lang-button,
+        .balance,
+        .topup-button,
+        .user-button {
+          width: auto;
+          min-height: 40px;
+          height: 40px;
+          padding: 0 10px;
+          font-size: 13px;
+          border-radius: 999px;
+        }
+        .lang-button {
+          min-width: 40px;
+          padding: 0 9px;
+          gap: 6px;
+          justify-content: center;
+        }
+        .lang-name {
+          display: none;
+        }
+        .lang-short {
+          display: inline;
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0.02em;
+        }
+        .lang-button .user-caret {
+          display: none;
+        }
+        .balance {
+          padding: 0 10px;
+        }
+        .balance-full {
+          display: none;
+        }
+        .balance-short {
+          display: inline;
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .topup-button {
+          min-width: 40px;
+          padding: 0 10px;
+          gap: 4px;
+          justify-content: center;
+        }
+        .topup-label {
+          display: none;
+        }
+        .topup-button .user-caret {
+          display: none;
+        }
+        .topup-icon {
+          font-size: 15px;
+        }
+        .user-button {
+          width: 40px;
+          min-width: 40px;
+          padding: 0;
+          justify-content: center;
+          gap: 0;
+        }
+        .user-name,
+        .user-button .user-caret {
+          display: none;
+        }
+        .user-avatar {
+          width: 30px;
+          height: 30px;
+          font-size: 12px;
+        }
+        .lang-dropdown {
+          right: 0;
+          min-width: 160px;
+          width: max-content;
+          max-width: 90vw;
+        }
+        .topup-dropdown {
+          right: 0;
+          width: 220px;
+          max-width: 90vw;
+        }
+        .user-dropdown {
+          right: 0;
+          top: calc(100% + 6px);
+          min-width: 200px;
+          width: max-content;
+          max-width: 90vw;
+        }
+      }
     </style>
   </head>
   <body>
@@ -1968,6 +2120,7 @@
         <div class="lang-menu" id="langMenu">
           <button class="lang-button" id="langButton" type="button" aria-haspopup="true" aria-expanded="false">
             <span class="lang-icon">🌐</span>
+            <span class="lang-short" id="langShort">{{ (lang or 'en')|upper }}</span>
             <span class="lang-name">{{ labels['language'] }}: {{ current_lang_label }}</span>
             <span class="user-caret">▾</span>
           </button>
@@ -1982,10 +2135,14 @@
           </div>
         </div>
         {% if logged_in %}
-          <div class="balance" id="balanceLabel">--</div>
+          <div class="balance" id="balanceLabel">
+            <span class="balance-full" id="balanceFull">--</span>
+            <span class="balance-short" id="balanceShort">--</span>
+          </div>
           <div class="topup-menu" id="topupMenu">
             <button class="topup-button" id="topupButton" type="button" aria-haspopup="true" aria-expanded="false">
-              <span>💳 {{ labels['topup_button'] }}</span>
+              <span class="topup-icon">💳</span>
+              <span class="topup-label">{{ labels['topup_button'] }}</span>
               <span class="user-caret">▾</span>
             </button>
             <div class="topup-dropdown" id="topupDropdown">
@@ -3369,8 +3526,20 @@
 
       function setBalance(balance) {
         currentBalance = Number.isFinite(Number(balance)) ? Number(balance) : 0;
-        const label = `${labels.balance}: ${balance} ${labels.credits}`;
-        document.getElementById('balanceLabel').textContent = label;
+        const value = Number.isFinite(Number(balance)) ? Number(balance) : 0;
+        const fullLabel = `${labels.balance}: ${value} ${labels.credits}`;
+        const shortLabel = `${value} cr`;
+        const fullEl = document.getElementById('balanceFull');
+        const shortEl = document.getElementById('balanceShort');
+        const wrapEl = document.getElementById('balanceLabel');
+        if (fullEl && shortEl) {
+          fullEl.textContent = fullLabel;
+          shortEl.textContent = shortLabel;
+          return;
+        }
+        if (wrapEl) {
+          wrapEl.textContent = fullLabel;
+        }
       }
 
       function hasEnoughCredits() {
