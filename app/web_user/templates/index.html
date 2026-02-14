@@ -3028,6 +3028,9 @@
       const THUMB_VALIDATION_PREFETCH_MARGIN = 16;
       const THUMB_URL_STATUS_CACHE_MAX = 2000;
       const THUMB_URL_STATUS_CACHE_TRIM_TO = 1200;
+      const HISTORY_POLL_ACTIVE_MS = 6000;
+      const HISTORY_POLL_IDLE_MS = 60000;
+      const HISTORY_POLL_JITTER_RATIO = 0.1;
       const NEW_USER_CONFIRM_REQUIRED_COUNT = 5;
       const GENERATION_STATUS_POLL_BASE_MS = 2200;
       const GENERATION_STATUS_POLL_MAX_MS = 15000;
@@ -3037,6 +3040,12 @@
       const FAVORITES_MAX_ITEMS = 20;
       let thumbsRefreshScheduled = false;
       let thumbUrlValidationActive = 0;
+      let historyPollTimer = null;
+      let historyPollMode = 'off';
+      let historyPollInFlight = false;
+      let historyLoadPromise = null;
+      let lastHistorySignature = '';
+      let historyPolicyRefreshRaf = 0;
       const PROMPT_HISTORY_STORAGE_KEY = 'renderis.prompt_history.v1';
       const PROMPT_HISTORY_LIMIT = 10;
       const PROMPT_TEMPLATES = [
@@ -4128,6 +4137,7 @@
           generationInFlight = false;
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
+          updateHistoryPollingPolicy('generation_success');
           renderGallery();
           setResultActionsGenerating(false);
           setGenerationControlsLocked(false);
@@ -4159,6 +4169,7 @@
           generationInFlight = false;
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
+          updateHistoryPollingPolicy('generation_fail');
           renderGallery();
           setResultActionsGenerating(false);
           setGenerationControlsLocked(false);
@@ -4199,6 +4210,7 @@
           generationInFlight = false;
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
+          updateHistoryPollingPolicy('generation_cancel');
           renderGallery();
           setResultActionsGenerating(false);
           setGenerationControlsLocked(false);
@@ -4230,6 +4242,7 @@
           generationInFlight = false;
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
+          updateHistoryPollingPolicy('generation_hide');
           renderGallery();
           setResultActionsGenerating(false);
           setGenerationControlsLocked(false);
@@ -4257,6 +4270,7 @@
           serverSnapshot = null;
           active = true;
           generationInFlight = true;
+          updateHistoryPollingPolicy('generation_start');
           renderGallery();
           setGenerationControlsLocked(true);
           setRunButtonState();
@@ -5839,6 +5853,101 @@
         return rect.bottom > 0 && rect.top < window.innerHeight;
       }
 
+      function buildHistorySignature(historyRows) {
+        if (!Array.isArray(historyRows) || !historyRows.length) return 'empty';
+        const head = historyRows.slice(0, 6).map((item) => {
+          const urlsCount = Array.isArray(item && item.urls) ? item.urls.length : 0;
+          return `${Number(item && item.id ? item.id : 0)}:${String(item && item.status ? item.status : '')}:${urlsCount}:${String(item && item.created_at ? item.created_at : '')}`;
+        }).join('|');
+        const tail = historyRows[historyRows.length - 1] || {};
+        const tailUrlsCount = Array.isArray(tail.urls) ? tail.urls.length : 0;
+        return `${historyRows.length}#${head}#${Number(tail.id || 0)}:${String(tail.status || '')}:${tailUrlsCount}`;
+      }
+
+      function isResultPanelInView() {
+        const preview = document.getElementById('outputPreview');
+        if (!preview) return true;
+        return isElementInViewport(preview);
+      }
+
+      function resolveHistoryPollMode() {
+        if (!loggedIn) return 'off';
+        if (document.visibilityState !== 'visible') return 'off';
+        if (generationInFlight || runInProgress) return 'active';
+        if (isResultPanelInView()) return 'active';
+        return 'idle';
+      }
+
+      function historyPollDelay(mode) {
+        const base = mode === 'active' ? HISTORY_POLL_ACTIVE_MS : mode === 'idle' ? HISTORY_POLL_IDLE_MS : 0;
+        if (!base) return 0;
+        const jitter = base * HISTORY_POLL_JITTER_RATIO;
+        const offset = (Math.random() * 2 - 1) * jitter;
+        return Math.max(1000, Math.round(base + offset));
+      }
+
+      function clearHistoryPollTimer() {
+        if (!historyPollTimer) return;
+        clearTimeout(historyPollTimer);
+        historyPollTimer = null;
+      }
+
+      async function runHistoryPollingTick(reason = '') {
+        if (historyPollInFlight || !loggedIn) {
+          updateHistoryPollingPolicy(`${reason}:skip`);
+          return;
+        }
+        historyPollInFlight = true;
+        try {
+          await loadHistory({ source: 'poll', reason });
+        } finally {
+          historyPollInFlight = false;
+          updateHistoryPollingPolicy(`${reason}:done`);
+        }
+      }
+
+      function scheduleHistoryPoll(reason = '') {
+        clearHistoryPollTimer();
+        if (historyPollMode === 'off') return;
+        const delay = historyPollDelay(historyPollMode);
+        historyPollTimer = setTimeout(() => {
+          void runHistoryPollingTick(reason || historyPollMode);
+        }, delay);
+      }
+
+      function stopHistoryPolling(_reason = '') {
+        historyPollMode = 'off';
+        clearHistoryPollTimer();
+      }
+
+      function startHistoryPolling(reason = '') {
+        updateHistoryPollingPolicy(reason || 'start');
+      }
+
+      function updateHistoryPollingPolicy(reason = '') {
+        const nextMode = resolveHistoryPollMode();
+        if (nextMode === 'off') {
+          stopHistoryPolling(reason || 'off');
+          return;
+        }
+        const modeChanged = historyPollMode !== nextMode;
+        historyPollMode = nextMode;
+        if (modeChanged || !historyPollTimer) {
+          scheduleHistoryPoll(reason || nextMode);
+        }
+      }
+
+      function requestHistoryPollingPolicyRefresh(reason = '') {
+        if (historyPolicyRefreshRaf) return;
+        const schedule = typeof window.requestAnimationFrame === 'function'
+          ? window.requestAnimationFrame.bind(window)
+          : (cb) => setTimeout(cb, 0);
+        historyPolicyRefreshRaf = schedule(() => {
+          historyPolicyRefreshRaf = 0;
+          updateHistoryPollingPolicy(reason || 'raf');
+        });
+      }
+
       function renderThumbs(currentItem, focusCurrent) {
         const thumbs = document.getElementById('thumbs');
         const prevBtn = document.getElementById('thumbsPrev');
@@ -6170,62 +6279,76 @@
         return true;
       }
 
-      async function loadHistory() {
-        const prevUrls = new Set(galleryItems.map((item) => item.url));
-        const res = await fetch('/api/history');
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!data.history || data.history.length === 0) {
-          if (!galleryItems.length) return;
-          galleryItems = [];
-          thumbsVisibleCount = 0;
-          renderGallery();
-          return;
-        }
-        const prevItem = galleryItems[galleryIndex];
-        const prevUrl = prevItem ? prevItem.url : null;
-        const items = [];
-        data.history.forEach((item, historyIndex) => {
-          (item.urls || []).forEach((url, outputIndex) => {
-            items.push({
-              generation_id: item.id,
-              model: item.model,
-              created_at: item.created_at,
-              prompt: item.prompt,
-              total_cost_credits: item.total_cost_credits,
-              final_cost_credits: item.final_cost_credits,
-              cost_credits: item.cost_credits,
-              credits_spent: item.credits_spent,
-              duration_seconds: item.duration_seconds,
-              duration_sec: item.duration_sec,
-              elapsed_seconds: item.elapsed_seconds,
-              processing_seconds: item.processing_seconds,
-              url: url,
-              _history_index: historyIndex,
-              _output_index: outputIndex,
+      async function loadHistory(_options = {}) {
+        if (historyLoadPromise) return historyLoadPromise;
+        historyLoadPromise = (async () => {
+          const prevUrls = new Set(galleryItems.map((item) => item.url));
+          const res = await fetch('/api/history');
+          if (!res.ok) return;
+          const data = await res.json();
+          const historyRows = Array.isArray(data.history) ? data.history : [];
+          const nextSignature = buildHistorySignature(historyRows);
+          if (nextSignature && nextSignature === lastHistorySignature) {
+            return;
+          }
+          lastHistorySignature = nextSignature;
+          if (!historyRows.length) {
+            if (!galleryItems.length) return;
+            galleryItems = [];
+            thumbsVisibleCount = 0;
+            renderGallery();
+            return;
+          }
+          const prevItem = galleryItems[galleryIndex];
+          const prevUrl = prevItem ? prevItem.url : null;
+          const items = [];
+          historyRows.forEach((item, historyIndex) => {
+            (item.urls || []).forEach((url, outputIndex) => {
+              items.push({
+                generation_id: item.id,
+                model: item.model,
+                created_at: item.created_at,
+                prompt: item.prompt,
+                total_cost_credits: item.total_cost_credits,
+                final_cost_credits: item.final_cost_credits,
+                cost_credits: item.cost_credits,
+                credits_spent: item.credits_spent,
+                duration_seconds: item.duration_seconds,
+                duration_sec: item.duration_sec,
+                elapsed_seconds: item.elapsed_seconds,
+                processing_seconds: item.processing_seconds,
+                url: url,
+                _history_index: historyIndex,
+                _output_index: outputIndex,
+              });
             });
           });
-        });
-        const sortedItems = sortGalleryItemsNewestFirst(items);
-        if (isSameGalleryData(galleryItems, sortedItems)) {
-          return;
-        }
-        galleryItems = sortedItems;
-        syncFreshRevealCandidates(galleryItems);
-        const newIndex = galleryItems.findIndex((item) => !prevUrls.has(item.url));
-        if (newIndex >= 0) {
-          galleryIndex = newIndex;
-        } else if (prevUrl) {
-          const idx = galleryItems.findIndex((x) => x.url === prevUrl);
-          if (idx >= 0) {
-            galleryIndex = idx;
+          const sortedItems = sortGalleryItemsNewestFirst(items);
+          if (isSameGalleryData(galleryItems, sortedItems)) {
+            return;
+          }
+          galleryItems = sortedItems;
+          syncFreshRevealCandidates(galleryItems);
+          const newIndex = galleryItems.findIndex((item) => !prevUrls.has(item.url));
+          if (newIndex >= 0) {
+            galleryIndex = newIndex;
+          } else if (prevUrl) {
+            const idx = galleryItems.findIndex((x) => x.url === prevUrl);
+            if (idx >= 0) {
+              galleryIndex = idx;
+            } else if (galleryIndex >= galleryItems.length) {
+              galleryIndex = 0;
+            }
           } else if (galleryIndex >= galleryItems.length) {
             galleryIndex = 0;
           }
-        } else if (galleryIndex >= galleryItems.length) {
-          galleryIndex = 0;
+          renderGallery();
+        })();
+        try {
+          return await historyLoadPromise;
+        } finally {
+          historyLoadPromise = null;
         }
-        renderGallery();
       }
 
       async function redeemPromo() {
@@ -6980,16 +7103,29 @@
       });
       window.addEventListener('resize', () => {
         closeThumbMenu();
+        requestHistoryPollingPolicyRefresh('resize');
         if (!galleryItems.length || galleryMode !== 'carousel' || resultSkeletonActive) return;
         renderThumbs(galleryItems[galleryIndex] || null, false);
       });
       window.addEventListener('scroll', () => {
+        requestHistoryPollingPolicyRefresh('scroll');
         if (!thumbMenuOpenUrl) return;
         positionThumbMenu();
       }, true);
       window.addEventListener('beforeunload', () => {
+        stopHistoryPolling('beforeunload');
         stopCryptoPolling();
         generationWaitController.stopAndHide();
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible') {
+          stopHistoryPolling('hidden');
+          return;
+        }
+        updateHistoryPollingPolicy('visible');
+        if (loggedIn) {
+          void loadHistory({ source: 'visibility' });
+        }
       });
       const refInput = document.getElementById('refFiles');
       const refReplaceInput = document.getElementById('refReplaceFile');
@@ -7264,7 +7400,7 @@
           } else {
             setTimeout(bootHistory, 0);
           }
-          setInterval(loadHistory, 15000);
+          startHistoryPolling('boot');
           return;
         }
         if (!isMiniApp) {
