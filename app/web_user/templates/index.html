@@ -448,6 +448,12 @@
         justify-content: space-between;
         gap: 10px;
       }
+      .prompt-meta {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 2px;
+      }
       .prompt-brain-row {
         margin-top: 8px;
         display: flex;
@@ -1887,7 +1893,10 @@
             >
               ↓ {{ labels['prompt_history_button'] }}
             </button>
-            <div class="prompt-limit" id="promptLimitHint" aria-live="polite"></div>
+            <div class="prompt-meta">
+              <div class="prompt-limit" id="brainPackRemainingHint" aria-live="polite"></div>
+              <div class="prompt-limit" id="promptLimitHint" aria-live="polite"></div>
+            </div>
           </div>
           <div class="prompt-brain-row">
             <button
@@ -3209,6 +3218,17 @@
         if (tone === 'success') statusEl.classList.add('success');
       }
 
+      function updateBrainPackRemainingHint() {
+        const hintEl = document.getElementById('brainPackRemainingHint');
+        if (!hintEl) return;
+        if (!loggedIn || !aiBrainState.enabled) {
+          hintEl.textContent = '';
+          return;
+        }
+        const packRemaining = Math.max(0, Number(aiBrainState.pack_remaining || 0));
+        hintEl.textContent = fmt(labels.brain_pack_remaining, { count: packRemaining });
+      }
+
       function updateRestorePromptButton() {
         const restoreBtn = document.getElementById('restorePromptBtn');
         if (!restoreBtn) return;
@@ -3259,6 +3279,7 @@
         runBtn.disabled = runInProgress || confirmModalOpen || generationInFlight;
         updateImprovePromptButton();
         updateBrainPackBuyButton();
+        updateBrainPackRemainingHint();
         updateRestorePromptButton();
       }
 
@@ -4616,11 +4637,7 @@
               : aiBrainState.pack_size_improvements,
           };
           const size = Math.max(1, Number(data.pack_size_improvements || aiBrainState.pack_size_improvements || 1));
-          const remaining = Math.max(0, Number(aiBrainState.pack_remaining || 0));
-          const remainingText = remaining > 0
-            ? ` (${fmt(labels.brain_pack_remaining, { count: remaining })})`
-            : '';
-          setBrainPromptStatus(`${fmt(labels.brain_pack_buy_success, { size })}${remainingText}`, 'success');
+          setBrainPromptStatus(fmt(labels.brain_pack_buy_success, { size }), 'success');
           trackUiEvent('brain_pack_buy_success', {
             pack_size: size,
             pack_price: Math.max(0, Number(data.pack_price_credits || aiBrainState.pack_price_credits || 0)),
