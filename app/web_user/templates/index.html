@@ -4616,7 +4616,11 @@
               : aiBrainState.pack_size_improvements,
           };
           const size = Math.max(1, Number(data.pack_size_improvements || aiBrainState.pack_size_improvements || 1));
-          setBrainPromptStatus(fmt(labels.brain_pack_buy_success, { size }), 'success');
+          const remaining = Math.max(0, Number(aiBrainState.pack_remaining || 0));
+          const remainingText = remaining > 0
+            ? ` (${fmt(labels.brain_pack_remaining, { count: remaining })})`
+            : '';
+          setBrainPromptStatus(`${fmt(labels.brain_pack_buy_success, { size })}${remainingText}`, 'success');
           trackUiEvent('brain_pack_buy_success', {
             pack_size: size,
             pack_price: Math.max(0, Number(data.pack_price_credits || aiBrainState.pack_price_credits || 0)),
