@@ -1250,72 +1250,41 @@
         height: 100%;
         object-fit: cover;
       }
-      .thumb-overlay {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        align-items: flex-end;
-        padding: 7px;
-        background: linear-gradient(180deg, rgba(5, 10, 18, 0.05) 20%, rgba(5, 10, 18, 0.86) 100%);
-        opacity: 0;
-        transform: translateY(4px);
-        pointer-events: none;
-        transition: opacity 0.18s ease, transform 0.18s ease;
-      }
-      .thumb:hover .thumb-overlay,
-      .thumb:focus-within .thumb-overlay,
-      .thumb.menu-open .thumb-overlay {
-        opacity: 1;
-        transform: translateY(0);
-        pointer-events: auto;
-      }
-      .thumb-overlay-actions {
-        width: 100%;
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 5px;
-      }
-      .thumb-overlay-btn {
-        width: 100%;
-        border-radius: 8px;
-        border: 1px solid #355276;
-        background: rgba(15, 27, 43, 0.95);
-        color: var(--text);
-        padding: 6px 8px;
-        font-size: 11px;
-        line-height: 1.15;
-        cursor: pointer;
-        text-align: left;
-      }
-      .thumb-overlay-btn:hover,
-      .thumb-overlay-btn:focus-visible {
-        border-color: #4f6f96;
-        outline: none;
-      }
-      .thumb-overlay-btn.danger {
-        border-color: rgba(255, 118, 118, 0.45);
-        color: #ffcbcb;
-      }
       .thumb-menu-btn {
         position: absolute;
-        top: 6px;
-        left: 6px;
-        width: 24px;
-        height: 24px;
+        top: 2px;
+        right: 2px;
+        width: 40px;
+        height: 40px;
         border-radius: 50%;
         border: 1px solid #355276;
         background: rgba(15, 27, 43, 0.88);
         color: var(--text);
-        display: none;
+        display: inline-flex;
         align-items: center;
         justify-content: center;
         line-height: 1;
+        font-size: 16px;
         cursor: pointer;
+        opacity: 0;
+        transform: scale(0.96);
+        transition: opacity 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+      }
+      .thumb:hover .thumb-menu-btn,
+      .thumb:focus-within .thumb-menu-btn,
+      .thumb.menu-open .thumb-menu-btn {
+        opacity: 1;
+        transform: scale(1);
+      }
+      .thumb-menu-btn:hover,
+      .thumb-menu-btn:focus-visible {
+        border-color: #4f6f96;
+        outline: none;
       }
       .thumb-favorite-badge {
         position: absolute;
         top: 6px;
-        right: 6px;
+        left: 6px;
         min-width: 22px;
         height: 22px;
         border-radius: 999px;
@@ -1330,6 +1299,51 @@
       }
       .thumb.menu-open .thumb-favorite-badge {
         opacity: 0;
+      }
+      .thumb-popover {
+        position: fixed;
+        z-index: 120;
+        min-width: 156px;
+        padding: 6px;
+        border-radius: 10px;
+        border: 1px solid #355276;
+        background: rgba(15, 27, 43, 0.98);
+        box-shadow: 0 16px 34px rgba(2, 8, 16, 0.5);
+        display: none;
+        opacity: 0;
+        transform: translateY(-4px) scale(0.98);
+        transition: opacity 0.18s ease, transform 0.18s ease;
+      }
+      .thumb-popover.open {
+        display: block;
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+      .thumb-popover-item {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--text);
+        text-align: left;
+        font-size: 12px;
+        line-height: 1.2;
+        padding: 9px 10px;
+        cursor: pointer;
+      }
+      .thumb-popover-item:hover,
+      .thumb-popover-item:focus-visible {
+        border-color: #4f6f96;
+        background: rgba(31, 53, 78, 0.55);
+        outline: none;
+      }
+      .thumb-popover-item.danger {
+        color: #ffc7c7;
+      }
+      .thumb-popover-item.danger:hover,
+      .thumb-popover-item.danger:focus-visible {
+        border-color: rgba(255, 118, 118, 0.45);
+        background: rgba(74, 24, 31, 0.55);
       }
       .thumb.pulse {
         animation: thumb-pulse 0.34s ease;
@@ -1350,7 +1364,8 @@
       }
       @media (hover: none) {
         .thumb-menu-btn {
-          display: inline-flex;
+          opacity: 1;
+          transform: scale(1);
         }
       }
       .redeem-panel {
@@ -2149,6 +2164,11 @@
             <div class="thumbs" id="thumbs"></div>
             <button class="thumbs-nav next" id="thumbsNext" type="button" aria-label="Next thumbnails">›</button>
           </div>
+          <div class="thumb-popover" id="thumbPopover" aria-hidden="true">
+            <button class="thumb-popover-item" id="thumbPopoverUseMain" type="button">Use as main</button>
+            <button class="thumb-popover-item" id="thumbPopoverEditAi" type="button">{{ labels['result_edit_ai'] }}</button>
+            <button class="thumb-popover-item danger" id="thumbPopoverDelete" type="button">{{ labels['delete'] }}</button>
+          </div>
           <div class="thumbs-pages" id="thumbsPages" style="display:none;"></div>
         </div>
       </div>
@@ -2268,6 +2288,8 @@
       let toastTimer = null;
       let pendingThumbPulseUrl = '';
       let thumbMenuOpenUrl = '';
+      let thumbMenuItem = null;
+      let thumbMenuAnchorEl = null;
       const THUMB_ROWS = 3;
       const NEW_USER_CONFIRM_REQUIRED_COUNT = 5;
       const GENERATION_STATUS_POLL_BASE_MS = 2200;
@@ -4250,6 +4272,66 @@
         }
       }
 
+      function closeThumbMenu() {
+        const popover = document.getElementById('thumbPopover');
+        if (popover) {
+          popover.classList.remove('open');
+          popover.setAttribute('aria-hidden', 'true');
+          popover.style.top = '';
+          popover.style.left = '';
+        }
+        if (thumbMenuAnchorEl && thumbMenuAnchorEl.closest('.thumb')) {
+          thumbMenuAnchorEl.closest('.thumb').classList.remove('menu-open');
+        }
+        thumbMenuOpenUrl = '';
+        thumbMenuItem = null;
+        thumbMenuAnchorEl = null;
+      }
+
+      function positionThumbMenu() {
+        const popover = document.getElementById('thumbPopover');
+        if (!popover || !thumbMenuAnchorEl) return;
+        const rect = thumbMenuAnchorEl.getBoundingClientRect();
+        popover.classList.add('open');
+        popover.setAttribute('aria-hidden', 'false');
+        popover.style.visibility = 'hidden';
+
+        const menuRect = popover.getBoundingClientRect();
+        const gap = 8;
+        let top = rect.bottom + gap;
+        let left = rect.right - menuRect.width;
+
+        if (top + menuRect.height > window.innerHeight - 8) {
+          top = rect.top - menuRect.height - gap;
+        }
+        if (top < 8) top = 8;
+        if (left < 8) left = 8;
+        if (left + menuRect.width > window.innerWidth - 8) {
+          left = window.innerWidth - menuRect.width - 8;
+        }
+
+        popover.style.top = `${Math.round(top)}px`;
+        popover.style.left = `${Math.round(left)}px`;
+        popover.style.visibility = '';
+      }
+
+      function openThumbMenu(anchorBtn, item) {
+        if (!anchorBtn || !item || !item.url) return;
+        if (thumbMenuOpenUrl && thumbMenuOpenUrl === item.url) {
+          closeThumbMenu();
+          return;
+        }
+        closeThumbMenu();
+        thumbMenuAnchorEl = anchorBtn;
+        thumbMenuItem = item;
+        thumbMenuOpenUrl = String(item.url);
+        const tile = anchorBtn.closest('.thumb');
+        if (tile) {
+          tile.classList.add('menu-open');
+        }
+        positionThumbMenu();
+      }
+
       function applyResultPrompt(item) {
         if (!item || !item.prompt) return;
         const promptEl = getPromptInput();
@@ -4285,11 +4367,11 @@
         renderGallery();
       }
 
-      async function deleteResultItem(item) {
+      async function deleteResultItem(item, confirmOptions = {}) {
         if (!item || !item.generation_id) return;
         const confirmed = await openActionConfirm({
-          title: 'Delete this generation?',
-          text: 'This action cannot be undone.',
+          title: String(confirmOptions.title || 'Delete this generation?'),
+          text: String(confirmOptions.text || 'This action cannot be undone.'),
           cancelText: labels.confirm_cancel || 'Cancel',
           okText: labels.delete || 'Delete',
           danger: true,
@@ -4369,10 +4451,12 @@
         if (!gallery || !grid || !actions || !thumbsWrap || !pages) return;
 
         if (resultSkeletonActive) {
+          closeThumbMenu();
           renderGallerySkeleton();
           return;
         }
 
+        closeThumbMenu();
         gallery.innerHTML = '';
         grid.innerHTML = '';
         const validItems = getValidGalleryItems();
@@ -4540,14 +4624,12 @@
         const pageItems = thumbItems.slice(start, start + pageSize);
         const displayItems = snakeRows(pageItems, cols);
 
+        closeThumbMenu();
         displayItems.forEach((thumbItem) => {
           const wrap = document.createElement('div');
           wrap.className = 'thumb' + (currentItem && thumbItem.url === currentItem.url ? ' active' : '');
           if (pendingThumbPulseUrl && thumbItem.url === pendingThumbPulseUrl) {
             wrap.classList.add('pulse');
-          }
-          if (thumbMenuOpenUrl && thumbItem.url === thumbMenuOpenUrl) {
-            wrap.classList.add('menu-open');
           }
           wrap.tabIndex = 0;
           wrap.setAttribute('role', 'button');
@@ -4587,49 +4669,9 @@
           menuBtn.onclick = (event) => {
             event.preventDefault();
             event.stopPropagation();
-            thumbMenuOpenUrl = thumbMenuOpenUrl === thumbItem.url ? '' : thumbItem.url;
-            renderThumbs(galleryItems[galleryIndex] || null, false);
+            openThumbMenu(menuBtn, thumbItem);
           };
           wrap.appendChild(menuBtn);
-
-          const overlay = document.createElement('div');
-          overlay.className = 'thumb-overlay';
-          const overlayActions = document.createElement('div');
-          overlayActions.className = 'thumb-overlay-actions';
-
-          const useBtn = document.createElement('button');
-          useBtn.className = 'thumb-overlay-btn';
-          useBtn.type = 'button';
-          useBtn.textContent = 'Use as main';
-          useBtn.onclick = (event) => setAsMain(event);
-          overlayActions.appendChild(useBtn);
-
-          const editAiBtn = document.createElement('button');
-          editAiBtn.className = 'thumb-overlay-btn';
-          editAiBtn.type = 'button';
-          editAiBtn.textContent = labels.result_edit_ai;
-          editAiBtn.onclick = (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            thumbMenuOpenUrl = '';
-            openEditWithAiModal(thumbItem);
-          };
-          overlayActions.appendChild(editAiBtn);
-
-          const deleteBtn = document.createElement('button');
-          deleteBtn.className = 'thumb-overlay-btn danger';
-          deleteBtn.type = 'button';
-          deleteBtn.textContent = labels.delete || 'Delete';
-          deleteBtn.onclick = async (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            thumbMenuOpenUrl = '';
-            await deleteResultItem(thumbItem);
-          };
-          overlayActions.appendChild(deleteBtn);
-
-          overlay.appendChild(overlayActions);
-          wrap.appendChild(overlay);
           thumbs.appendChild(wrap);
         });
 
@@ -5463,12 +5505,47 @@
           openExternalLink(href);
         });
       }
+      const thumbPopoverUseMain = document.getElementById('thumbPopoverUseMain');
+      if (thumbPopoverUseMain) {
+        thumbPopoverUseMain.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const item = thumbMenuItem;
+          closeThumbMenu();
+          if (!item) return;
+          activateGalleryItem(item, { preserveScroll: true, pulse: true });
+        });
+      }
+      const thumbPopoverEditAi = document.getElementById('thumbPopoverEditAi');
+      if (thumbPopoverEditAi) {
+        thumbPopoverEditAi.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const item = thumbMenuItem;
+          closeThumbMenu();
+          if (!item) return;
+          openEditWithAiModal(item);
+        });
+      }
+      const thumbPopoverDelete = document.getElementById('thumbPopoverDelete');
+      if (thumbPopoverDelete) {
+        thumbPopoverDelete.addEventListener('click', async (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const item = thumbMenuItem;
+          closeThumbMenu();
+          if (!item) return;
+          await deleteResultItem(item, {
+            title: 'Delete this item?',
+            text: 'This action cannot be undone.',
+          });
+        });
+      }
       document.addEventListener('click', (event) => {
         if (!thumbMenuOpenUrl) return;
         const target = event.target;
-        if (target instanceof Element && target.closest('.thumb')) return;
-        thumbMenuOpenUrl = '';
-        renderThumbs(galleryItems[galleryIndex] || null, false);
+        if (target instanceof Element && (target.closest('.thumb') || target.closest('#thumbPopover'))) return;
+        closeThumbMenu();
       });
       document.getElementById('thumbsPrev').onclick = (e) => {
         e.preventDefault();
@@ -5530,6 +5607,7 @@
           if (generationWaitController.isActive()) {
             generationWaitController.cancelLocally();
           }
+          closeThumbMenu();
           closeEditWithAiModal();
           closeConfirmModal();
           closeQuoteTooltip();
@@ -5539,9 +5617,14 @@
         }
       });
       window.addEventListener('resize', () => {
+        closeThumbMenu();
         if (!galleryItems.length || galleryMode !== 'carousel' || resultSkeletonActive) return;
         renderThumbs(galleryItems[galleryIndex] || null, false);
       });
+      window.addEventListener('scroll', () => {
+        if (!thumbMenuOpenUrl) return;
+        positionThumbMenu();
+      }, true);
       window.addEventListener('beforeunload', () => {
         stopCryptoPolling();
         generationWaitController.stopAndHide();
