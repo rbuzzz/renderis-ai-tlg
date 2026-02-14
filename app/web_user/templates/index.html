@@ -2974,7 +2974,7 @@
       let galleryMode = 'carousel';
       let pendingSkeletonCount = 0;
       let resultSkeletonActive = false;
-      let thumbsVisibleCount = 0;
+      let thumbsPageIndex = 0;
       let thumbsLastColumns = 0;
       let modelNames = {};
       let selectedFiles = [];
@@ -3024,8 +3024,7 @@
       const thumbUrlValidationInFlight = new Set();
       const thumbUrlValidationQueue = [];
       const THUMB_URL_VALIDATION_CONCURRENCY = 4;
-      const THUMB_ROWS_PER_CHUNK = 3;
-      const THUMB_VALIDATION_PREFETCH_MARGIN = 16;
+      const THUMB_ROWS_PER_CHUNK = 2;
       const THUMB_URL_STATUS_CACHE_MAX = 2000;
       const THUMB_URL_STATUS_CACHE_TRIM_TO = 1200;
       const HISTORY_POLL_ACTIVE_MS = 6000;
@@ -5832,12 +5831,6 @@
         return Math.max(safeCols, safeCols * THUMB_ROWS_PER_CHUNK);
       }
 
-      function alignCountToColumns(value, cols) {
-        const safeCols = Math.max(1, Number(cols || 1));
-        const count = Math.max(0, Number(value || 0));
-        return Math.ceil(count / safeCols) * safeCols;
-      }
-
       function effectiveThumbColumns(thumbs, fallbackCols) {
         if (!thumbs) return Math.max(1, Number(fallbackCols || 1));
         const cssCols = String(getComputedStyle(thumbs).gridTemplateColumns || '')
@@ -5968,28 +5961,22 @@
         const requestedCols = thumbColumns();
         thumbs.style.gridTemplateColumns = `repeat(${requestedCols}, minmax(0, 1fr))`;
         const cols = effectiveThumbColumns(thumbs, requestedCols);
-        if (thumbsLastColumns !== cols && thumbsVisibleCount > 0) {
-          thumbsVisibleCount = alignCountToColumns(thumbsVisibleCount, cols);
-        }
         thumbsLastColumns = cols;
-        const chunkSize = thumbChunkSize(cols);
+        const pageSize = thumbChunkSize(cols);
         const currentIdx = currentItem ? thumbItems.findIndex((x) => x.url === currentItem.url) : -1;
+        const total = thumbItems.length;
+        const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-        if (thumbsVisibleCount <= 0) {
-          thumbsVisibleCount = chunkSize;
+        if (focusCurrent && currentIdx >= 0) {
+          thumbsPageIndex = Math.floor(currentIdx / pageSize);
         }
-        if (focusCurrent && currentIdx >= 0 && currentIdx + 1 > thumbsVisibleCount) {
-          thumbsVisibleCount = alignCountToColumns(currentIdx + 1, cols);
-        }
-        thumbsVisibleCount = alignCountToColumns(thumbsVisibleCount, cols);
-        thumbsVisibleCount = Math.max(Math.min(chunkSize, thumbItems.length), thumbsVisibleCount);
-        if (thumbsVisibleCount > thumbItems.length) thumbsVisibleCount = thumbItems.length;
-        const displayItems = thumbItems.slice(0, thumbsVisibleCount);
-        const validationWindowEnd = Math.min(
-          thumbItems.length,
-          Math.max(displayItems.length, thumbsVisibleCount) + THUMB_VALIDATION_PREFETCH_MARGIN
-        );
-        ensureThumbUrlsValidated(thumbItems.slice(0, validationWindowEnd));
+        if (thumbsPageIndex < 0) thumbsPageIndex = 0;
+        if (thumbsPageIndex >= totalPages) thumbsPageIndex = totalPages - 1;
+
+        const pageStart = thumbsPageIndex * pageSize;
+        const pageEnd = Math.min(total, pageStart + pageSize);
+        const displayItems = thumbItems.slice(pageStart, pageEnd);
+        ensureThumbUrlsValidated(displayItems);
 
         closeThumbMenu();
         displayItems.forEach((thumbItem) => {
@@ -6077,38 +6064,45 @@
           }, 360);
         }
 
-        prevBtn.style.display = 'none';
-        nextBtn.style.display = 'none';
-        prevBtn.disabled = true;
-        nextBtn.disabled = true;
+        const canPaginate = totalPages > 1;
+        prevBtn.style.display = canPaginate ? 'inline-flex' : 'none';
+        nextBtn.style.display = canPaginate ? 'inline-flex' : 'none';
+        prevBtn.disabled = !canPaginate || thumbsPageIndex <= 0;
+        nextBtn.disabled = !canPaginate || thumbsPageIndex >= (totalPages - 1);
+        prevBtn.onclick = (event) => {
+          event.preventDefault();
+          if (prevBtn.disabled) return;
+          thumbsPageIndex = Math.max(0, thumbsPageIndex - 1);
+          withScrollAnchor(document.getElementById('thumbsWrap'), () => {
+            renderThumbs(galleryItems[galleryIndex] || currentItem || null, false);
+          });
+        };
+        nextBtn.onclick = (event) => {
+          event.preventDefault();
+          if (nextBtn.disabled) return;
+          thumbsPageIndex = Math.min(totalPages - 1, thumbsPageIndex + 1);
+          withScrollAnchor(document.getElementById('thumbsWrap'), () => {
+            renderThumbs(galleryItems[galleryIndex] || currentItem || null, false);
+          });
+        };
 
         const visible = displayItems.length;
-        const total = thumbItems.length;
+        const rangeStart = visible ? pageStart + 1 : 0;
+        const rangeEnd = pageStart + visible;
         pages.innerHTML = '';
         pages.style.display = total > 1 ? 'flex' : 'none';
         if (total <= 1) return;
 
         const info = document.createElement('span');
         info.className = 'thumbs-pages-info';
-        info.textContent = `Showing ${visible} of ${total}`;
+        info.textContent = `Showing ${rangeStart}-${rangeEnd} of ${total}`;
         pages.appendChild(info);
 
-        if (visible < total) {
-          const loadMoreBtn = document.createElement('button');
-          loadMoreBtn.type = 'button';
-          loadMoreBtn.className = 'thumbs-load-more btn btn--secondaryLift';
-          loadMoreBtn.textContent = 'Load more';
-          loadMoreBtn.onclick = (event) => {
-            event.preventDefault();
-            thumbsVisibleCount = Math.min(
-              total,
-              alignCountToColumns(thumbsVisibleCount + chunkSize, cols)
-            );
-            withScrollAnchor(document.getElementById('thumbsWrap'), () => {
-              renderThumbs(galleryItems[galleryIndex] || currentItem || null, false);
-            });
-          };
-          pages.appendChild(loadMoreBtn);
+        if (canPaginate) {
+          const pageInfo = document.createElement('span');
+          pageInfo.className = 'thumbs-pages-info';
+          pageInfo.textContent = `Page ${thumbsPageIndex + 1}/${totalPages}`;
+          pages.appendChild(pageInfo);
         }
       }
 
@@ -6295,7 +6289,7 @@
           if (!historyRows.length) {
             if (!galleryItems.length) return;
             galleryItems = [];
-            thumbsVisibleCount = 0;
+            thumbsPageIndex = 0;
             renderGallery();
             return;
           }
