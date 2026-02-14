@@ -23,8 +23,9 @@
 
     <div class="subtle" style="margin-bottom: 8px;">Найдено: {{ total }}</div>
 
-    <div class="table-scroll">
-      <table>
+    <div class="table-shell">
+      <div class="table-scroll table-scroll--bounded">
+      <table class="admin-table">
         <thead>
           <tr>
             <th>ID</th>
@@ -53,13 +54,21 @@
             </td>
             <td class="muted">{{ u.first_seen_at_msk }}</td>
             <td class="muted">{{ u.last_seen_at_msk }}</td>
-            <td><a class="row-link" href="/admin/users/{{ u.id }}">Открыть</a></td>
+            <td><a class="row-link table-action-link" href="/admin/users/{{ u.id }}">Открыть</a></td>
           </tr>
           {% else %}
-          <tr><td colspan="8" class="muted">Пользователи не найдены</td></tr>
+          <tr>
+            <td colspan="8">
+              <div class="empty-state">
+                <div class="empty-state__title">Нет записей</div>
+                <div class="empty-state__subtitle">Попробуйте изменить фильтры или обновить страницу</div>
+              </div>
+            </td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
+      </div>
     </div>
 
     <div style="display:flex; gap:10px; margin-top: 12px; align-items:center;">

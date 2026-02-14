@@ -112,8 +112,9 @@
       </form>
     {% endif %}
 
-    <div class="table-scroll">
-      <table>
+    <div class="table-shell">
+      <div class="table-scroll table-scroll--bounded">
+      <table class="admin-table">
         <thead>
           <tr>
             <th>ID</th>
@@ -211,10 +212,18 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="9" class="muted">Записей нет.</td></tr>
+          <tr>
+            <td colspan="9">
+              <div class="empty-state">
+                <div class="empty-state__title">Нет записей</div>
+                <div class="empty-state__subtitle">Попробуйте изменить фильтры или обновить страницу</div>
+              </div>
+            </td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 

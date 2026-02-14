@@ -34,8 +34,9 @@
 
   <div class="section">
     <h3>Последние заказы</h3>
-    <div class="table-scroll">
-      <table>
+    <div class="table-shell">
+      <div class="table-scroll">
+      <table class="admin-table">
         <thead>
           <tr>
             <th>ID</th>
@@ -57,17 +58,26 @@
             <td class="muted">{{ o.created_at_msk }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="6" class="muted">Нет данных</td></tr>
+          <tr>
+            <td colspan="6">
+              <div class="empty-state">
+                <div class="empty-state__title">Нет записей</div>
+                <div class="empty-state__subtitle">Попробуйте изменить фильтры или обновить страницу</div>
+              </div>
+            </td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 
   <div class="section">
     <h3>Последние генерации</h3>
-    <div class="table-scroll">
-      <table>
+    <div class="table-shell">
+      <div class="table-scroll">
+      <table class="admin-table">
         <thead>
           <tr>
             <th>ID</th>
@@ -87,10 +97,18 @@
             <td class="muted">{{ g.created_at_msk }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="5" class="muted">Нет данных</td></tr>
+          <tr>
+            <td colspan="5">
+              <div class="empty-state">
+                <div class="empty-state__title">Нет записей</div>
+                <div class="empty-state__subtitle">Попробуйте изменить фильтры или обновить страницу</div>
+              </div>
+            </td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 {% endblock %}

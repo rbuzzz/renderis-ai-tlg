@@ -17,8 +17,9 @@
     </div>
 
     <div style="height: 16px;"></div>
-    <div class="table-scroll">
-      <table>
+    <div class="table-shell">
+      <div class="table-scroll table-scroll--bounded">
+      <table class="admin-table">
         <thead>
           <tr>
             <th>Код</th>
@@ -32,7 +33,7 @@
         <tbody>
           {% for row in rows %}
           <tr>
-            <td>{{ row.code }}</td>
+            <td class="cell-mono"><span class="truncate" title="{{ row.code }}">{{ row.code }}</span></td>
             <td>
               {% if row.status == 'redeemed' %}
                 <span class="badge ok">Активирован</span>
@@ -55,10 +56,18 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="6" class="muted">Нет кодов</td></tr>
+          <tr>
+            <td colspan="6">
+              <div class="empty-state">
+                <div class="empty-state__title">Нет записей</div>
+                <div class="empty-state__subtitle">Попробуйте изменить фильтры или обновить страницу</div>
+              </div>
+            </td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 

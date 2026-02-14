@@ -24,8 +24,9 @@
       <button type="submit">Обнулить счётчик среднего времени</button>
     </form>
     {% endif %}
-    <div class="table-scroll">
-      <table>
+    <div class="table-shell">
+      <div class="table-scroll table-scroll--bounded">
+      <table class="admin-table">
         <thead>
           <tr>
             <th>Категория</th>
@@ -66,10 +67,18 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="8" class="muted">Нет данных</td></tr>
+          <tr>
+            <td colspan="8">
+              <div class="empty-state">
+                <div class="empty-state__title">Нет записей</div>
+                <div class="empty-state__subtitle">Попробуйте изменить фильтры или обновить страницу</div>
+              </div>
+            </td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
+      </div>
     </div>
   </div>
   <div class="section">
@@ -77,8 +86,9 @@
     <div class="subtle" style="margin-bottom:8px;">
       Итого кредиты = База + Бонус. Если поле USD цена пустое, цена для Crypto считается автоматически из глобальных настроек.
     </div>
-    <div class="table-scroll">
-      <table>
+    <div class="table-shell">
+      <div class="table-scroll table-scroll--bounded">
+      <table class="admin-table">
         <thead>
           <tr>
             <th>Пакет</th>
@@ -138,10 +148,18 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="13" class="muted">Нет пакетов пополнения</td></tr>
+          <tr>
+            <td colspan="13">
+              <div class="empty-state">
+                <div class="empty-state__title">Нет записей</div>
+                <div class="empty-state__subtitle">Попробуйте изменить фильтры или обновить страницу</div>
+              </div>
+            </td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
+      </div>
     </div>
     {% if can_manage %}
     <h3 style="margin-top:18px;">Добавить пакет</h3>

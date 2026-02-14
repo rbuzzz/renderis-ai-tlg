@@ -60,8 +60,9 @@
       </div>
     {% endif %}
 
-    <div class="table-scroll">
-      <table>
+    <div class="table-shell">
+      <div class="table-scroll table-scroll--bounded">
+      <table class="admin-table">
         <thead>
           <tr>
             <th>Батч</th>
@@ -74,17 +75,25 @@
         <tbody>
           {% for b in batches %}
           <tr>
-            <td><a class="row-link" href="/admin/promos/batch/{{ b.batch_id }}">{{ b.batch_id }}</a></td>
+            <td><a class="row-link cell-mono truncate" title="{{ b.batch_id }}" href="/admin/promos/batch/{{ b.batch_id }}">{{ b.batch_id }}</a></td>
             <td class="muted">{{ b.created_at }}</td>
             <td>{{ b.count }}</td>
             <td>{{ b.credits_amount }}</td>
-            <td><a class="row-link" href="/admin/promos/batch/{{ b.batch_id }}">Открыть</a></td>
+            <td><a class="row-link table-action-link" href="/admin/promos/batch/{{ b.batch_id }}">Открыть</a></td>
           </tr>
           {% else %}
-          <tr><td colspan="5" class="muted">Батчи не найдены</td></tr>
+          <tr>
+            <td colspan="5">
+              <div class="empty-state">
+                <div class="empty-state__title">Нет записей</div>
+                <div class="empty-state__subtitle">Попробуйте изменить фильтры или обновить страницу</div>
+              </div>
+            </td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 {% endblock %}

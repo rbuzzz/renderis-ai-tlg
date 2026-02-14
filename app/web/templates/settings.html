@@ -221,8 +221,9 @@
         Путь: <code>{{ storage_usage.root_path }}</code>
       </p>
       {% if storage_usage.available %}
-      <div class="table-scroll">
-        <table>
+      <div class="table-shell">
+        <div class="table-scroll">
+        <table class="admin-table">
           <thead>
             <tr>
               <th>Категория</th>
@@ -245,6 +246,7 @@
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
       {% else %}
       <div class="notice" style="color: var(--danger);">
