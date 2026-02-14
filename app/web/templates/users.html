@@ -2,7 +2,7 @@
 {% block content %}
   <div class="section">
     <h3>Пользователи</h3>
-    <form method="get" action="/admin/users" class="form-row" style="margin-bottom: 12px;">
+    <form method="get" action="/admin/users" class="form-row" style="margin-bottom: 12px;" data-ui-async="true" data-ui-loading="true" data-toast-error="Не удалось выполнить поиск пользователей. Попробуйте ещё раз.">
       <div>
         <label>Поиск (Telegram ID или username)</label>
         <input name="q" value="{{ search }}" placeholder="Например: 493780829 или stepanenko" />

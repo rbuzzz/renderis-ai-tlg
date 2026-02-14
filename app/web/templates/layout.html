@@ -450,31 +450,139 @@
         flex-wrap: wrap;
         gap: 8px;
       }
-      .dirty-toast {
+      .admin-loading-bar {
         position: fixed;
-        right: 16px;
-        bottom: 16px;
-        z-index: 1350;
-        max-width: min(420px, calc(100vw - 24px));
-        border-radius: 10px;
-        border: 1px solid rgba(154, 176, 200, 0.32);
-        background: rgba(11, 24, 38, 0.95);
-        color: var(--text);
-        padding: 9px 12px;
-        font-size: 13px;
-        box-shadow: 0 14px 32px rgba(0, 0, 0, 0.36);
-        opacity: 0;
-        transform: translateY(8px);
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        z-index: 1600;
         pointer-events: none;
-        transition: opacity 0.18s ease, transform 0.18s ease;
+        opacity: 0;
+        transition: opacity 0.2s ease;
       }
-      .dirty-toast.visible {
+      .admin-loading-bar.visible {
         opacity: 1;
-        transform: translateY(0);
       }
-      .dirty-toast.error {
-        border-color: rgba(255, 122, 122, 0.45);
-        color: #ffdede;
+      .admin-loading-bar__line {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg, rgba(60, 207, 145, 0.2), rgba(60, 207, 145, 0.85), rgba(60, 207, 145, 0.2));
+        transform-origin: left center;
+        animation: admin-loading-slide 1.1s linear infinite;
+      }
+      @keyframes admin-loading-slide {
+        0% { transform: translateX(-60%); }
+        100% { transform: translateX(110%); }
+      }
+      .admin-toast-viewport {
+        position: fixed;
+        top: 14px;
+        right: 14px;
+        z-index: 1650;
+        display: grid;
+        gap: 8px;
+        width: min(360px, calc(100vw - 24px));
+        pointer-events: none;
+      }
+      .admin-toast {
+        pointer-events: auto;
+        border-radius: 12px;
+        border: 1px solid rgba(154, 176, 200, 0.28);
+        background: rgba(11, 24, 38, 0.96);
+        color: var(--text);
+        box-shadow: 0 14px 32px rgba(0, 0, 0, 0.34);
+        padding: 10px 12px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        align-items: start;
+        transform: translateY(-6px);
+        opacity: 0;
+        transition: transform 0.2s ease, opacity 0.2s ease;
+      }
+      .admin-toast.visible {
+        transform: translateY(0);
+        opacity: 1;
+      }
+      .admin-toast--success { border-color: rgba(60, 207, 145, 0.45); }
+      .admin-toast--error { border-color: rgba(255, 122, 122, 0.52); }
+      .admin-toast--warning { border-color: rgba(245, 194, 107, 0.5); }
+      .admin-toast--info { border-color: rgba(106, 179, 243, 0.5); }
+      .admin-toast__msg {
+        font-size: 13px;
+        line-height: 1.35;
+      }
+      .admin-toast__close {
+        border: 1px solid rgba(154, 176, 200, 0.28);
+        background: rgba(255, 255, 255, 0.02);
+        color: var(--muted);
+        border-radius: 8px;
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        line-height: 1;
+        font-size: 14px;
+      }
+      .admin-confirm-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 1700;
+        background: rgba(5, 12, 20, 0.72);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 14px;
+      }
+      .admin-confirm-modal.visible {
+        display: flex;
+      }
+      .admin-confirm-modal__card {
+        width: min(440px, calc(100vw - 24px));
+        border-radius: 14px;
+        border: 1px solid rgba(154, 176, 200, 0.28);
+        background: #13253b;
+        box-shadow: 0 20px 48px rgba(0, 0, 0, 0.4);
+        padding: 16px;
+      }
+      .admin-confirm-modal__card.danger {
+        border-color: rgba(255, 122, 122, 0.42);
+      }
+      .admin-confirm-modal__title {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .admin-confirm-modal__message {
+        margin-top: 8px;
+        font-size: 13px;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+      .admin-confirm-modal__actions {
+        margin-top: 14px;
+        display: flex;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .admin-confirm-btn {
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid rgba(154, 176, 200, 0.32);
+        background: transparent;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .admin-confirm-btn.primary {
+        border: none;
+        background: var(--accent);
+        color: #062015;
+        font-weight: 700;
+      }
+      .admin-confirm-modal__card.danger .admin-confirm-btn.primary {
+        background: #cc5e5e;
+        color: #fff;
       }
 
       @media (max-width: 980px) {
@@ -546,10 +654,12 @@
           width: calc(100vw - 24px);
           bottom: 12px;
         }
-        .dirty-toast {
-          right: 12px;
-          bottom: 12px;
-          max-width: calc(100vw - 24px);
+        .admin-toast-viewport {
+          left: 50%;
+          right: auto;
+          transform: translateX(-50%);
+          top: 10px;
+          width: calc(100vw - 24px);
         }
       }
     </style>
@@ -614,7 +724,20 @@
         </div>
       </div>
     </div>
-    <div class="dirty-toast" id="dirtyToast" hidden></div>
+    <div class="admin-loading-bar" id="adminLoadingBar" aria-hidden="true">
+      <div class="admin-loading-bar__line"></div>
+    </div>
+    <div class="admin-toast-viewport" id="adminToastViewport" aria-live="polite" aria-atomic="false"></div>
+    <div class="admin-confirm-modal" id="adminConfirmModal" aria-hidden="true">
+      <div class="admin-confirm-modal__card" id="adminConfirmCard" role="dialog" aria-modal="true" aria-labelledby="adminConfirmTitle">
+        <h3 class="admin-confirm-modal__title" id="adminConfirmTitle">Confirm action</h3>
+        <div class="admin-confirm-modal__message" id="adminConfirmMessage"></div>
+        <div class="admin-confirm-modal__actions">
+          <button class="admin-confirm-btn" type="button" id="adminConfirmCancel">Cancel</button>
+          <button class="admin-confirm-btn primary" type="button" id="adminConfirmOk">Confirm</button>
+        </div>
+      </div>
+    </div>
     <script>
       if ('scrollRestoration' in history) {
         history.scrollRestoration = 'manual';
@@ -642,6 +765,317 @@
     </script>
     <script>
       (() => {
+        const loadingBar = document.getElementById('adminLoadingBar');
+        const toastViewport = document.getElementById('adminToastViewport');
+        const confirmModalEl = document.getElementById('adminConfirmModal');
+        const confirmCardEl = document.getElementById('adminConfirmCard');
+        const confirmTitleEl = document.getElementById('adminConfirmTitle');
+        const confirmMessageEl = document.getElementById('adminConfirmMessage');
+        const confirmCancelEl = document.getElementById('adminConfirmCancel');
+        const confirmOkEl = document.getElementById('adminConfirmOk');
+
+        const activeLoads = new Set();
+        const toastQueue = [];
+        const visibleToasts = new Set();
+        const TOAST_LIMIT = 3;
+        let confirmResolver = null;
+
+        function setLoadingVisible(flag) {
+          if (!loadingBar) return;
+          loadingBar.classList.toggle('visible', Boolean(flag));
+        }
+
+        const loading = {
+          start(key = `load:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`) {
+            activeLoads.add(String(key));
+            setLoadingVisible(activeLoads.size > 0);
+            return key;
+          },
+          stop(key) {
+            if (key !== undefined && key !== null) {
+              activeLoads.delete(String(key));
+            }
+            setLoadingVisible(activeLoads.size > 0);
+          },
+        };
+
+        function removeToast(toastEl, toastState) {
+          if (!toastEl) return;
+          if (toastState?.timer) window.clearTimeout(toastState.timer);
+          toastEl.classList.remove('visible');
+          window.setTimeout(() => {
+            toastEl.remove();
+            visibleToasts.delete(toastEl);
+            flushToastQueue();
+          }, 180);
+        }
+
+        function startToastTimer(toastEl, toastState) {
+          if (!toastState || toastState.remaining <= 0) {
+            removeToast(toastEl, toastState);
+            return;
+          }
+          toastState.startedAt = Date.now();
+          toastState.timer = window.setTimeout(() => {
+            removeToast(toastEl, toastState);
+          }, toastState.remaining);
+        }
+
+        function renderToast(item) {
+          if (!toastViewport) return;
+          const toastEl = document.createElement('div');
+          const kind = item.kind || 'info';
+          toastEl.className = `admin-toast admin-toast--${kind}`;
+
+          const msgEl = document.createElement('div');
+          msgEl.className = 'admin-toast__msg';
+          msgEl.textContent = item.message;
+
+          const closeEl = document.createElement('button');
+          closeEl.className = 'admin-toast__close';
+          closeEl.type = 'button';
+          closeEl.setAttribute('aria-label', 'Dismiss');
+          closeEl.textContent = '×';
+
+          toastEl.appendChild(msgEl);
+          toastEl.appendChild(closeEl);
+          toastViewport.appendChild(toastEl);
+          requestAnimationFrame(() => toastEl.classList.add('visible'));
+
+          const toastState = {
+            duration: Math.max(1200, Math.min(10000, item.duration || 3600)),
+            remaining: Math.max(1200, Math.min(10000, item.duration || 3600)),
+            startedAt: Date.now(),
+            timer: null,
+            paused: false,
+          };
+          visibleToasts.add(toastEl);
+
+          const pause = () => {
+            if (toastState.paused) return;
+            toastState.paused = true;
+            if (toastState.timer) {
+              window.clearTimeout(toastState.timer);
+              toastState.timer = null;
+            }
+            const elapsed = Date.now() - toastState.startedAt;
+            toastState.remaining = Math.max(300, toastState.remaining - elapsed);
+          };
+          const resume = () => {
+            if (!toastState.paused) return;
+            toastState.paused = false;
+            startToastTimer(toastEl, toastState);
+          };
+
+          toastEl.addEventListener('mouseenter', pause);
+          toastEl.addEventListener('mouseleave', resume);
+          closeEl.addEventListener('click', () => removeToast(toastEl, toastState));
+
+          startToastTimer(toastEl, toastState);
+        }
+
+        function flushToastQueue() {
+          while (toastQueue.length && visibleToasts.size < TOAST_LIMIT) {
+            renderToast(toastQueue.shift());
+          }
+        }
+
+        const toast = {
+          push(kind, message, duration) {
+            if (!toastViewport || !message) return;
+            toastQueue.push({ kind, message, duration });
+            flushToastQueue();
+          },
+          success(message, duration) { toast.push('success', message, duration); },
+          error(message, duration) { toast.push('error', message, duration); },
+          info(message, duration) { toast.push('info', message, duration); },
+          warning(message, duration) { toast.push('warning', message, duration); },
+        };
+
+        function parseHttpCode(value) {
+          if (value === null || value === undefined) return null;
+          const str = String(value).toLowerCase();
+          const httpMatch = str.match(/http[_:\s-]?(\d{3})/);
+          if (httpMatch) return Number(httpMatch[1]);
+          if (/^\d{3}$/.test(str)) return Number(str);
+          return null;
+        }
+
+        function toMessage(error, fallback = 'Something went wrong. Please try again.') {
+          const raw = error instanceof Error ? error.message : String(error || '');
+          const lowered = raw.toLowerCase();
+          const code = parseHttpCode(raw);
+          if (lowered.includes('failed to fetch') || lowered.includes('network') || lowered.includes('timeout')) {
+            return 'Network error. Please try again.';
+          }
+          if (code === 401 || code === 403 || lowered.includes('forbidden') || lowered.includes('permission')) {
+            return 'Permission denied.';
+          }
+          if (code === 400 || code === 422 || lowered.includes('validation')) {
+            return 'Validation error. Check input values and try again.';
+          }
+          if (code && code >= 500) {
+            return 'Server error. Please try again in a moment.';
+          }
+          return fallback;
+        }
+
+        function closeConfirm(result) {
+          if (!confirmModalEl || !confirmResolver) return;
+          confirmModalEl.classList.remove('visible');
+          confirmModalEl.setAttribute('aria-hidden', 'true');
+          const resolve = confirmResolver;
+          confirmResolver = null;
+          resolve(Boolean(result));
+        }
+
+        function confirmModal({
+          title = 'Confirm action',
+          message = '',
+          confirmText = 'Confirm',
+          cancelText = 'Cancel',
+          variant = 'default',
+        } = {}) {
+          if (!confirmModalEl || !confirmCardEl || !confirmTitleEl || !confirmMessageEl || !confirmCancelEl || !confirmOkEl) {
+            return Promise.resolve(window.confirm(message || title));
+          }
+          if (confirmResolver) {
+            closeConfirm(false);
+          }
+          confirmTitleEl.textContent = title;
+          confirmMessageEl.textContent = message;
+          confirmCancelEl.textContent = cancelText;
+          confirmOkEl.textContent = confirmText;
+          confirmCardEl.classList.toggle('danger', variant === 'danger');
+          confirmModalEl.classList.add('visible');
+          confirmModalEl.setAttribute('aria-hidden', 'false');
+          requestAnimationFrame(() => confirmOkEl.focus());
+          return new Promise((resolve) => {
+            confirmResolver = resolve;
+          });
+        }
+
+        if (confirmCancelEl) confirmCancelEl.addEventListener('click', () => closeConfirm(false));
+        if (confirmOkEl) confirmOkEl.addEventListener('click', () => closeConfirm(true));
+        if (confirmModalEl) {
+          confirmModalEl.addEventListener('click', (e) => {
+            if (e.target === confirmModalEl) closeConfirm(false);
+          });
+        }
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && confirmModalEl?.classList.contains('visible')) {
+            closeConfirm(false);
+          }
+        });
+
+        window.adminUi = {
+          toast,
+          loading,
+          confirmModal,
+          errors: { toMessage },
+        };
+
+        const params = new URLSearchParams(window.location.search);
+        const hasFeedbackQuery = ['saved', 'error', 'avg_reset', 'brain_error'].some((key) => params.has(key));
+        if (hasFeedbackQuery) {
+          const notices = Array.from(document.querySelectorAll('.notice'));
+          notices.slice(0, 2).forEach((el) => {
+            const message = (el.textContent || '').trim();
+            if (!message) return;
+            const style = (el.getAttribute('style') || '').toLowerCase();
+            const isError = style.includes('danger') || style.includes('ff7a7a');
+            if (isError) toast.error(message);
+            else toast.success(message);
+          });
+        }
+        if (params.has('error')) {
+          toast.error('Operation failed. Please check data and try again.');
+        }
+        if (params.has('brain_error')) {
+          toast.warning('AI Brain is temporarily unavailable.');
+        }
+
+        document.addEventListener('submit', async (event) => {
+          const form = event.target;
+          if (!(form instanceof HTMLFormElement)) return;
+
+          const wantsAsync = form.dataset.uiAsync === 'true';
+          const wantsConfirm = form.dataset.confirmDanger === 'true';
+          const wantsLoading = form.dataset.uiLoading === 'true';
+          if (!wantsAsync && !wantsConfirm && !wantsLoading) return;
+
+          if (wantsAsync) {
+            event.preventDefault();
+            if (wantsConfirm) {
+              const ok = await confirmModal({
+                title: form.dataset.confirmTitle || 'Confirm action',
+                message: form.dataset.confirmMessage || 'Continue?',
+                confirmText: form.dataset.confirmOk || 'Confirm',
+                cancelText: form.dataset.confirmCancel || 'Cancel',
+                variant: 'danger',
+              });
+              if (!ok) return;
+            }
+            const loadKey = `form:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`;
+            if (wantsLoading) loading.start(loadKey);
+            try {
+              const method = (form.getAttribute('method') || form.method || 'GET').toUpperCase();
+              let url = form.getAttribute('action') || window.location.href;
+              const options = { method, credentials: 'same-origin', redirect: 'follow' };
+              if (method === 'GET') {
+                const qs = new URLSearchParams(new FormData(form)).toString();
+                if (qs) {
+                  url += (url.includes('?') ? '&' : '?') + qs;
+                }
+              } else {
+                options.body = new FormData(form);
+              }
+              const response = await fetch(url, options);
+              if (!response.ok) throw new Error(`http_${response.status}`);
+              if (form.dataset.toastSuccess) {
+                toast.success(form.dataset.toastSuccess);
+              }
+              const destination = response.redirected ? response.url : url;
+              window.setTimeout(() => {
+                window.location.href = destination;
+              }, form.dataset.toastSuccess ? 220 : 0);
+            } catch (error) {
+              if (form.dataset.toastError) toast.error(form.dataset.toastError);
+              else toast.error(toMessage(error));
+            } finally {
+              if (wantsLoading) loading.stop(loadKey);
+            }
+            return;
+          }
+
+          if (wantsConfirm) {
+            if (form.dataset.confirmPass === '1') {
+              form.dataset.confirmPass = '';
+              return;
+            }
+            event.preventDefault();
+            const ok = await confirmModal({
+              title: form.dataset.confirmTitle || 'Confirm action',
+              message: form.dataset.confirmMessage || 'Continue?',
+              confirmText: form.dataset.confirmOk || 'Confirm',
+              cancelText: form.dataset.confirmCancel || 'Cancel',
+              variant: 'danger',
+            });
+            if (!ok) return;
+            if (wantsLoading) loading.start(`form:${Date.now()}:native`);
+            form.dataset.confirmPass = '1';
+            form.requestSubmit();
+            return;
+          }
+
+          if (wantsLoading) {
+            loading.start(`form:${Date.now()}:submit`);
+          }
+        }, true);
+      })();
+    </script>
+    <script>
+      (() => {
         const trackedForms = Array.from(document.querySelectorAll('form[data-dirty-track="true"]'));
         if (!trackedForms.length) return;
 
@@ -657,7 +1091,6 @@
         const dirtyGuardSaveBtn = document.getElementById('dirtyGuardSaveBtn');
         const dirtyGuardDiscardBtn = document.getElementById('dirtyGuardDiscardBtn');
         const dirtyGuardCancelBtn = document.getElementById('dirtyGuardCancelBtn');
-        const dirtyToast = document.getElementById('dirtyToast');
         const dirtyDebug = {{ 'true' if admin_layout_debug else 'false' }};
 
         const formState = new Map();
@@ -872,20 +1305,10 @@
           if (dirtyGuardCancelBtn) dirtyGuardCancelBtn.disabled = flag;
         }
 
-        let dirtyToastTimer = null;
         function showToast(message, isError = false) {
-          if (!dirtyToast) return;
-          dirtyToast.textContent = message;
-          dirtyToast.classList.toggle('error', Boolean(isError));
-          dirtyToast.hidden = false;
-          requestAnimationFrame(() => dirtyToast.classList.add('visible'));
-          if (dirtyToastTimer) clearTimeout(dirtyToastTimer);
-          dirtyToastTimer = window.setTimeout(() => {
-            dirtyToast.classList.remove('visible');
-            window.setTimeout(() => {
-              dirtyToast.hidden = true;
-            }, 200);
-          }, isError ? 3200 : 2200);
+          if (!window.adminUi || !window.adminUi.toast) return;
+          if (isError) window.adminUi.toast.error(message);
+          else window.adminUi.toast.success(message);
         }
 
         async function saveSingleForm(form) {
@@ -940,28 +1363,33 @@
           isSubmitting = true;
           setSavingUi(true);
           window.removeEventListener('beforeunload', beforeUnloadHandler);
+          const loadingKey = `dirty-save:${Date.now()}`;
+          if (window.adminUi?.loading) window.adminUi.loading.start(loadingKey);
 
           let savedFields = 0;
           const failedForms = [];
-          for (const form of dirtyForms) {
-            const state = formState.get(form);
-            const dirtyFieldsInForm = state ? state.dirty.size : 0;
-            try {
-              await saveSingleForm(form);
-              setFormSaved(form);
-              savedFields += dirtyFieldsInForm;
-            } catch (error) {
-              failedForms.push({
-                form,
-                error: error instanceof Error ? error.message : String(error),
-                fields: dirtyFieldsInForm,
-              });
+          try {
+            for (const form of dirtyForms) {
+              const state = formState.get(form);
+              const dirtyFieldsInForm = state ? state.dirty.size : 0;
+              try {
+                await saveSingleForm(form);
+                setFormSaved(form);
+                savedFields += dirtyFieldsInForm;
+              } catch (error) {
+                failedForms.push({
+                  form,
+                  error: error instanceof Error ? error.message : String(error),
+                  fields: dirtyFieldsInForm,
+                });
+              }
             }
+          } finally {
+            updateGlobalState();
+            isSubmitting = false;
+            setSavingUi(false);
+            if (window.adminUi?.loading) window.adminUi.loading.stop(loadingKey);
           }
-
-          updateGlobalState();
-          isSubmitting = false;
-          setSavingUi(false);
 
           if (dirtyDebug) {
             console.debug('[dirty-save] done', {
@@ -1035,9 +1463,18 @@
         }
 
         if (dirtyDiscardBtn) {
-          dirtyDiscardBtn.addEventListener('click', () => {
+          dirtyDiscardBtn.addEventListener('click', async () => {
             if (!hasDirty) return;
-            if (!window.confirm('Discard changes?')) return;
+            const ok = window.adminUi?.confirmModal
+              ? await window.adminUi.confirmModal({
+                  title: 'Discard changes?',
+                  message: 'Unsaved edits will be lost.',
+                  confirmText: 'Discard',
+                  cancelText: 'Cancel',
+                  variant: 'danger',
+                })
+              : window.confirm('Discard changes?');
+            if (!ok) return;
             discardAllChanges();
           });
         }

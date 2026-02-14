@@ -48,7 +48,7 @@
             <td class="muted">{{ row.user_balance or '—' }}</td>
             <td>
               {% if row.can_deactivate and can_manage %}
-                <form method="post" action="/admin/promos/code/{{ row.code }}/deactivate">
+                <form method="post" action="/admin/promos/code/{{ row.code }}/deactivate" data-ui-async="true" data-ui-loading="true" data-confirm-danger="true" data-confirm-title="Деактивировать промокод?" data-confirm-message="Это действие нельзя отменить." data-confirm-ok="Деактивировать" data-confirm-cancel="Отмена" data-toast-success="Промокод деактивирован.">
                   <input type="hidden" name="next" value="/admin/promos/batch/{{ batch.batch_id }}" />
                   <button type="submit">Деактивировать</button>
                 </form>

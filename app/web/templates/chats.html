@@ -420,6 +420,12 @@
   let pendingImageFile = null;
   let pendingImageUrl = '';
   let dragCounter = 0;
+  const adminUi = window.adminUi || null;
+
+  function uiErrorMessage(error, fallback = 'Operation failed. Please try again.') {
+    if (adminUi?.errors?.toMessage) return adminUi.errors.toMessage(error, fallback);
+    return fallback;
+  }
 
   function openImagePreview(src, alt) {
     if (!imagePreviewModal || !imagePreviewImg) return;
@@ -666,15 +672,28 @@
   async function deleteCurrentThread() {
     if (!canManage || !currentThread) return;
     const threadId = currentThread;
-    const ok = window.confirm('Удалить этот чат и все сообщения? Действие необратимо.');
+    const ok = adminUi?.confirmModal
+      ? await adminUi.confirmModal({
+          title: 'Delete this chat?',
+          message: 'All messages in this chat will be removed.',
+          confirmText: 'Delete',
+          cancelText: 'Cancel',
+          variant: 'danger',
+        })
+      : window.confirm('Удалить этот чат и все сообщения? Действие необратимо.');
     if (!ok) return;
     setStatus('Удаляем чат...');
+    const loadKey = `chat-delete:${threadId}:${Date.now()}`;
+    if (adminUi?.loading) adminUi.loading.start(loadKey);
     let res;
     try {
       res = await fetch(`/admin/api/chats/${threadId}`, { method: 'DELETE' });
     } catch (err) {
       setStatus('Не удалось удалить чат.', true);
+      if (adminUi?.toast) adminUi.toast.error(uiErrorMessage(err, 'Could not delete chat.'));
       return;
+    } finally {
+      if (adminUi?.loading) adminUi.loading.stop(loadKey);
     }
     if (!res.ok) {
       let error = `http_${res.status}`;
@@ -685,6 +704,7 @@
         // ignore parse errors
       }
       setStatus(`Не удалось удалить чат: ${error}`, true);
+      if (adminUi?.toast) adminUi.toast.error(uiErrorMessage(error, 'Could not delete chat.'));
       return;
     }
     currentThread = null;
@@ -695,6 +715,7 @@
     renderChatHeader();
     await loadThreads();
     setStatus('Чат удалён.');
+    if (adminUi?.toast) adminUi.toast.success('Chat deleted.');
   }
 
   function handlePasteImage(event) {
@@ -872,6 +893,8 @@
     if (!text && !image) return;
     chatSend.disabled = true;
     if (chatAttach) chatAttach.disabled = true;
+    const loadKey = `chat-send:${currentThread}:${Date.now()}`;
+    if (adminUi?.loading) adminUi.loading.start(loadKey);
     try {
       let res;
       if (image) {
@@ -898,6 +921,7 @@
           // ignore parse errors
         }
         setStatus(`Не удалось отправить сообщение: ${error}`, true);
+        if (adminUi?.toast) adminUi.toast.error(uiErrorMessage(error, 'Could not send message.'));
         return;
       }
       chatInput.value = '';
@@ -905,7 +929,9 @@
       setStatus('');
       await loadMessages(true);
       await loadSummary();
+      if (adminUi?.toast) adminUi.toast.success('Message sent.');
     } finally {
+      if (adminUi?.loading) adminUi.loading.stop(loadKey);
       chatSend.disabled = false;
       if (chatAttach) chatAttach.disabled = false;
     }

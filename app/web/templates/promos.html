@@ -7,7 +7,7 @@
     {% endif %}
 
     {% if can_manage %}
-    <form method="post" action="/admin/promos/create" class="form-row" style="margin-bottom: 16px;">
+    <form method="post" action="/admin/promos/create" class="form-row" style="margin-bottom: 16px;" data-ui-async="true" data-ui-loading="true" data-toast-success="Батч создан.">
       <div>
         <label>Количество кодов</label>
         <input name="amount" placeholder="Например 50" />
@@ -27,7 +27,7 @@
     </div>
     {% endif %}
 
-    <form method="get" action="/admin/promos" class="form-row" style="margin-bottom: 16px;">
+    <form method="get" action="/admin/promos" class="form-row" style="margin-bottom: 16px;" data-ui-async="true" data-ui-loading="true" data-toast-error="Не удалось выполнить поиск. Попробуйте ещё раз.">
       <div>
         <label>Поиск промо-кода</label>
         <input name="code" value="{{ search_code }}" placeholder="Введите промо-код" />
@@ -51,7 +51,7 @@
             <div class="subtle">Баланс пользователя: {{ promo.user_balance or '—' }}</div>
           </div>
           {% if promo.can_deactivate and can_manage %}
-            <form method="post" action="/admin/promos/code/{{ promo.code }}/deactivate">
+            <form method="post" action="/admin/promos/code/{{ promo.code }}/deactivate" data-ui-async="true" data-ui-loading="true" data-confirm-danger="true" data-confirm-title="Деактивировать промокод?" data-confirm-message="Это действие нельзя отменить." data-confirm-ok="Деактивировать" data-confirm-cancel="Отмена" data-toast-success="Промокод деактивирован.">
               <input type="hidden" name="next" value="/admin/promos?code={{ promo.code }}" />
               <button type="submit">Деактивировать</button>
             </form>
