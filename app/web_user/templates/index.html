@@ -801,6 +801,9 @@
         font-size: 12px;
         color: var(--muted);
       }
+      .gen-live-sub:empty {
+        display: none;
+      }
       .genProgress {
         margin-top: 8px;
         opacity: 1;
@@ -1203,6 +1206,32 @@
       .action-btn.btn-danger:focus-visible {
         border-color: rgba(255, 138, 138, 0.68);
         color: #ffd3d3;
+      }
+      .result-actions .result-action-activate {
+        transition: opacity 0.28s ease, box-shadow 0.26s ease, transform 0.26s ease;
+      }
+      .result-actions.is-generating .result-action-activate {
+        opacity: 0.7;
+        pointer-events: none;
+        box-shadow: none !important;
+        transform: none !important;
+      }
+      .result-actions .result-action-activate.activate-pulse {
+        animation: action-activate-pulse 0.26s ease;
+      }
+      @keyframes action-activate-pulse {
+        0% {
+          transform: scale(0.98);
+          box-shadow: 0 0 0 rgba(245, 185, 79, 0);
+        }
+        55% {
+          transform: scale(1);
+          box-shadow: 0 0 14px rgba(245, 185, 79, 0.35);
+        }
+        100% {
+          transform: scale(1);
+          box-shadow: 0 0 0 rgba(245, 185, 79, 0);
+        }
       }
       .gallery-grid {
         display: grid;
@@ -3340,6 +3369,7 @@
         tone = '',
         showSpinner = true,
         showCancel = false,
+        showProgress = null,
       }) {
         const wrap = document.getElementById('genLive');
         const textEl = document.getElementById('genLiveText');
@@ -3361,14 +3391,16 @@
         spinner.classList.toggle('hidden', !showSpinner);
         cancelBtn.classList.toggle('hidden', !showCancel);
         if (progressWrap) {
-          const showProgress = !!visible && !!showSpinner;
-          if (showProgress) {
+          const shouldShowProgress = (showProgress === null)
+            ? (!!visible && !!showSpinner)
+            : !!showProgress;
+          if (shouldShowProgress) {
             progressWrap.classList.remove('hidden', 'is-fading');
           } else {
             progressWrap.classList.add('hidden');
             progressWrap.classList.remove('is-finishing', 'is-fading');
           }
-          if (!showProgress && progressFill) {
+          if (!shouldShowProgress && progressFill) {
             progressFill.style.transform = 'scaleX(0)';
           }
         }
@@ -3381,9 +3413,6 @@
         const stageMessages = isRuLocale
           ? ['В очереди...', 'Создаю изображение...', 'Добавляю детали...', 'Финализирую...']
           : ['Queued...', 'Creating your image...', 'Adding details...', 'Finalizing...'];
-        const calmMicrocopy = isRuLocale
-          ? 'Обычно занимает 10-20 секунд.'
-          : 'Usually takes 10-20 seconds.';
         let active = false;
         let generationId = 0;
         let modelKey = '';
@@ -3526,22 +3555,21 @@
         function render() {
           if (!active) return;
           const stage = inferStageFromServer(serverSnapshot);
-          let sub = calmMicrocopy;
           let tone = '';
-          if (connectionIssue) {
-            sub = `${sub} ${labels.gen_connection_retrying}`;
-          }
           if (Date.now() - startedAt >= GENERATION_LONG_WAIT_MS) {
-            sub = `${sub} ${labels.gen_taking_long}`;
+            tone = tone || 'warning';
+          }
+          if (connectionIssue) {
             tone = tone || 'warning';
           }
           setGenerationLiveState({
             visible: true,
             text: stageLabel(stage),
-            sub,
+            sub: '',
             tone,
-            showSpinner: true,
+            showSpinner: false,
             showCancel: true,
+            showProgress: true,
           });
         }
 
@@ -3623,6 +3651,8 @@
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
           renderGallery();
+          setResultActionsGenerating(false);
+          pulseResultActionsActivation();
           setGenerationControlsLocked(false);
           setRunButtonState();
           setGenerationLiveState({
@@ -3651,6 +3681,7 @@
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
           renderGallery();
+          setResultActionsGenerating(false);
           setGenerationControlsLocked(false);
           setRunButtonState();
           setGenerationLiveState({
@@ -3688,6 +3719,7 @@
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
           renderGallery();
+          setResultActionsGenerating(false);
           setGenerationControlsLocked(false);
           setRunButtonState();
           callBackendCancel();
@@ -3716,6 +3748,7 @@
           resultSkeletonActive = false;
           pendingSkeletonCount = 0;
           renderGallery();
+          setResultActionsGenerating(false);
           setGenerationControlsLocked(false);
           setRunButtonState();
           setGenerationLiveState({
@@ -4639,7 +4672,14 @@
         gallery.style.display = 'block';
         grid.style.display = 'none';
         grid.innerHTML = '';
-        actions.style.display = 'none';
+        actions.innerHTML = '';
+        if (activeItem) {
+          actions.appendChild(renderGalleryCardActions(activeItem, false));
+          actions.style.display = 'flex';
+        } else {
+          actions.style.display = 'none';
+        }
+        setResultActionsGenerating(true);
         thumbsWrap.style.display = validItems.length > 1 ? 'block' : 'none';
         pages.style.display = 'none';
         if (validItems.length > 1) {
@@ -4826,6 +4866,28 @@
         await performDeleteResultItem(item);
       }
 
+      function setResultActionsGenerating(isGenerating) {
+        const actions = document.getElementById('galleryActions');
+        if (!actions) return;
+        actions.classList.toggle('is-generating', !!isGenerating);
+      }
+
+      function pulseResultActionsActivation() {
+        const actions = document.getElementById('galleryActions');
+        if (!actions) return;
+        const pulseTargets = Array.from(actions.querySelectorAll('.result-action-activate'));
+        if (!pulseTargets.length) return;
+        pulseTargets.forEach((el) => {
+          el.classList.remove('activate-pulse');
+          // Restart keyframe animation reliably.
+          void el.offsetWidth;
+          el.classList.add('activate-pulse');
+          setTimeout(() => {
+            el.classList.remove('activate-pulse');
+          }, 280);
+        });
+      }
+
       function renderGalleryCardActions(item, compact = false) {
         const fragment = document.createDocumentFragment();
         const addAction = (element) => {
@@ -4837,6 +4899,7 @@
 
         const download = document.createElement('a');
         download.className = 'action-btn btn-primary';
+        download.classList.add('result-action-activate');
         download.href = `/api/download?url=${encodeURIComponent(item.url)}`;
         download.setAttribute('download', '');
         download.textContent = `⬇ ${labels.result_download}`;
@@ -4845,6 +4908,7 @@
 
         const regenerateBtn = document.createElement('button');
         regenerateBtn.className = 'action-btn btn-secondary';
+        regenerateBtn.classList.add('result-action-activate');
         regenerateBtn.type = 'button';
         regenerateBtn.textContent = `🔁 ${compact ? labels.result_regenerate_this : labels.result_regenerate}`;
         regenerateBtn.onclick = () => {
@@ -4854,6 +4918,7 @@
 
         const editPromptBtn = document.createElement('button');
         editPromptBtn.className = 'action-btn btn-ghost';
+        editPromptBtn.classList.add('result-action-activate');
         editPromptBtn.type = 'button';
         editPromptBtn.textContent = `✏ ${labels.result_edit_prompt}`;
         editPromptBtn.onclick = () => applyResultPrompt(item);
@@ -4861,6 +4926,7 @@
 
         const editAiBtn = document.createElement('button');
         editAiBtn.className = 'action-btn btn-secondary';
+        editAiBtn.classList.add('result-action-activate');
         editAiBtn.type = 'button';
         editAiBtn.textContent = `🧩 ${labels.result_edit_ai}`;
         editAiBtn.onclick = () => openEditWithAiModal(item);
@@ -4917,6 +4983,7 @@
           gallery.style.display = 'block';
           grid.style.display = 'none';
           actions.style.display = 'none';
+          setResultActionsGenerating(false);
           thumbsWrap.style.display = 'none';
           pages.style.display = 'none';
           if (resultMeta) {
@@ -5039,6 +5106,7 @@
         actions.innerHTML = '';
         actions.appendChild(renderGalleryCardActions(item, false));
         actions.style.display = 'flex';
+        setResultActionsGenerating(!!generationInFlight);
         thumbsWrap.style.display = validItems.length > 1 ? 'block' : 'none';
         pages.style.display = 'none';
         renderThumbs(item, true);
@@ -5308,7 +5376,7 @@
               setGenerationLiveState({
                 visible: true,
                 text: labels.gen_status_queued,
-                sub: labels.gen_taking_long,
+                sub: '',
                 tone: 'warning',
                 showSpinner: false,
                 showCancel: false,
