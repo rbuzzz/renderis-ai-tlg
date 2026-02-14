@@ -2297,6 +2297,7 @@
       let thumbMenuItem = null;
       let thumbMenuAnchorEl = null;
       const THUMB_ROWS = 3;
+      const INITIAL_THUMBS_RENDER_LIMIT = 10;
       const NEW_USER_CONFIRM_REQUIRED_COUNT = 5;
       const GENERATION_STATUS_POLL_BASE_MS = 2200;
       const GENERATION_STATUS_POLL_MAX_MS = 15000;
@@ -2304,6 +2305,8 @@
       const SKIP_CONFIRM_STORAGE_KEY = 'renderis.skip_confirm_generation';
       const FAVORITES_STORAGE_KEY = 'renderis.favorites.v1';
       const FAVORITES_MAX_ITEMS = 20;
+      let thumbsInitialHydrated = false;
+      let thumbsIdleHydrateScheduled = false;
       const PROMPT_HISTORY_STORAGE_KEY = 'renderis.prompt_history.v1';
       const PROMPT_HISTORY_LIMIT = 10;
       const PROMPT_TEMPLATES = [
@@ -2564,6 +2567,24 @@
 
         if (markAppOpenSentOnce()) {
           sendMiniAppAnalyticsEvent('app_open', { source: 'miniapp' });
+        }
+      }
+
+      function scheduleMiniAppAnalyticsInit() {
+        const run = () => {
+          void initMiniAppAnalytics();
+        };
+        const defer = () => {
+          if (typeof window.requestIdleCallback === 'function') {
+            window.requestIdleCallback(run, { timeout: 1200 });
+          } else {
+            setTimeout(run, 50);
+          }
+        };
+        if (typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(defer);
+        } else {
+          defer();
         }
       }
 
@@ -4511,6 +4532,8 @@
             main.className = 'gallery-card-main';
             const img = document.createElement('img');
             img.src = cardItem.url;
+            img.loading = 'lazy';
+            img.decoding = 'async';
             img.onerror = () => {
               cardItem.invalid = true;
               renderGallery();
@@ -4538,6 +4561,8 @@
 
         const img = document.createElement('img');
         img.className = 'gallery-image-enter';
+        img.loading = isElementInViewport(gallery) ? 'eager' : 'lazy';
+        img.decoding = 'async';
         img.src = item.url;
         img.onerror = () => {
           item.invalid = true;
@@ -4608,6 +4633,29 @@
         return out;
       }
 
+      function scheduleThumbsIdleHydration() {
+        if (thumbsInitialHydrated || thumbsIdleHydrateScheduled) return;
+        thumbsIdleHydrateScheduled = true;
+        const hydrate = () => {
+          thumbsIdleHydrateScheduled = false;
+          if (thumbsInitialHydrated) return;
+          thumbsInitialHydrated = true;
+          if (!galleryItems.length || galleryMode !== 'carousel' || resultSkeletonActive) return;
+          renderThumbs(galleryItems[galleryIndex] || null, false);
+        };
+        if (typeof window.requestIdleCallback === 'function') {
+          window.requestIdleCallback(hydrate, { timeout: 1200 });
+        } else {
+          setTimeout(hydrate, 80);
+        }
+      }
+
+      function isElementInViewport(element) {
+        if (!element || typeof element.getBoundingClientRect !== 'function') return true;
+        const rect = element.getBoundingClientRect();
+        return rect.bottom > 0 && rect.top < window.innerHeight;
+      }
+
       function renderThumbs(currentItem, focusCurrent) {
         const thumbs = document.getElementById('thumbs');
         const prevBtn = document.getElementById('thumbsPrev');
@@ -4637,7 +4685,18 @@
 
         const start = thumbsPage * pageSize;
         const pageItems = thumbItems.slice(start, start + pageSize);
-        const displayItems = snakeRows(pageItems, cols);
+        const shouldDeferPageHydration = (
+          !thumbsInitialHydrated
+          && thumbsPage === 0
+          && pageItems.length > INITIAL_THUMBS_RENDER_LIMIT
+        );
+        const displaySource = shouldDeferPageHydration
+          ? pageItems.slice(0, INITIAL_THUMBS_RENDER_LIMIT)
+          : pageItems;
+        const displayItems = snakeRows(displaySource, cols);
+        if (shouldDeferPageHydration) {
+          scheduleThumbsIdleHydration();
+        }
 
         closeThumbMenu();
         displayItems.forEach((thumbItem) => {
@@ -4651,6 +4710,8 @@
           wrap.setAttribute('aria-label', 'Set as main result');
           const timg = document.createElement('img');
           timg.src = thumbItem.url;
+          timg.loading = 'lazy';
+          timg.decoding = 'async';
           timg.onerror = () => {
             thumbItem.invalid = true;
             wrap.remove();
@@ -5909,7 +5970,7 @@
         return false;
       }
 
-      void initMiniAppAnalytics();
+      scheduleMiniAppAnalyticsInit();
 
       (async () => {
         const reloading = await maybeAutoMiniAppAuth();
@@ -5917,7 +5978,16 @@
         loadModels();
         if (loggedIn) {
           loadMe();
-          loadHistory();
+          const bootHistory = () => {
+            void loadHistory();
+          };
+          if (typeof window.requestAnimationFrame === 'function') {
+            window.requestAnimationFrame(() => {
+              setTimeout(bootHistory, 0);
+            });
+          } else {
+            setTimeout(bootHistory, 0);
+          }
           setInterval(loadHistory, 15000);
           return;
         }
