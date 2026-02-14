@@ -5272,6 +5272,26 @@
         metaEl.style.display = parts.length ? 'block' : 'none';
       }
 
+      function withScrollAnchor(anchorEl, updateFn) {
+        const anchor = anchorEl && typeof anchorEl.getBoundingClientRect === 'function'
+          ? anchorEl
+          : null;
+        const beforeTop = anchor ? anchor.getBoundingClientRect().top : 0;
+        updateFn();
+        if (!anchor) return;
+        const restore = () => {
+          const afterTop = anchor.getBoundingClientRect().top;
+          const delta = afterTop - beforeTop;
+          if (Math.abs(delta) > 1) {
+            window.scrollBy({ top: delta, left: 0 });
+          }
+        };
+        window.requestAnimationFrame(() => {
+          restore();
+          window.requestAnimationFrame(restore);
+        });
+      }
+
       function activateGalleryItem(targetItem, options = {}) {
         const item = targetItem && typeof targetItem === 'object' ? targetItem : null;
         if (!item) return;
@@ -5279,14 +5299,14 @@
         if (idx < 0) return;
         const preserveScroll = options.preserveScroll !== false;
         const pulse = !!options.pulse;
-        const currentScrollY = window.scrollY;
         galleryIndex = idx;
         if (pulse && item.url) {
           pendingThumbPulseUrl = String(item.url);
         }
-        renderGallery();
         if (preserveScroll) {
-          window.requestAnimationFrame(() => window.scrollTo({ top: currentScrollY, left: 0 }));
+          withScrollAnchor(document.getElementById('thumbsWrap'), () => renderGallery());
+        } else {
+          renderGallery();
         }
       }
 
@@ -5667,7 +5687,7 @@
           prev.textContent = '‹';
           prev.onclick = () => {
             galleryIndex = (galleryIndex - 1 + galleryItems.length) % galleryItems.length;
-            renderGallery();
+            withScrollAnchor(document.getElementById('thumbsWrap'), () => renderGallery());
           };
           gallery.appendChild(prev);
 
@@ -5676,7 +5696,7 @@
           next.textContent = '›';
           next.onclick = () => {
             galleryIndex = (galleryIndex + 1) % galleryItems.length;
-            renderGallery();
+            withScrollAnchor(document.getElementById('thumbsWrap'), () => renderGallery());
           };
           gallery.appendChild(next);
         }
@@ -5875,13 +5895,13 @@
           loadMoreBtn.textContent = 'Load more';
           loadMoreBtn.onclick = (event) => {
             event.preventDefault();
-            const currentScrollY = window.scrollY;
             thumbsVisibleCount = Math.min(
               total,
               alignCountToColumns(thumbsVisibleCount + chunkSize, cols)
             );
-            renderThumbs(galleryItems[galleryIndex] || currentItem || null, false);
-            window.requestAnimationFrame(() => window.scrollTo({ top: currentScrollY, left: 0 }));
+            withScrollAnchor(document.getElementById('thumbsWrap'), () => {
+              renderThumbs(galleryItems[galleryIndex] || currentItem || null, false);
+            });
           };
           pages.appendChild(loadMoreBtn);
         }
