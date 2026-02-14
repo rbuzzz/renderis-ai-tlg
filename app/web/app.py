@@ -2363,6 +2363,7 @@ def create_app() -> FastAPI:
             settings_service = AppSettingsService(session)
             stars_per_credit = await settings_service.get_float("stars_per_credit", 2.0)
             usd_per_star = await settings_service.get_float("usd_per_star", 0.013)
+            signup_bonus_credits = await settings_service.get_int("signup_bonus_credits", settings.signup_bonus_credits)
             usd_per_credit = round(stars_per_credit * usd_per_star, 6)
             kie_usd_per_credit = await settings_service.get_float("kie_usd_per_credit", 0.02)
             kie_balance_service = KieBalanceService(session)
@@ -2415,6 +2416,7 @@ def create_app() -> FastAPI:
                 "active_tab": "settings",
                 "stars_per_credit": stars_per_credit,
                 "usd_per_star": usd_per_star,
+                "signup_bonus_credits": signup_bonus_credits,
                 "usd_per_credit": usd_per_credit,
                 "kie_usd_per_credit": kie_usd_per_credit,
                 "kie_balance_credits": kie_balance_credits,
@@ -2450,6 +2452,7 @@ def create_app() -> FastAPI:
         request: Request,
         stars_per_credit: str = Form(""),
         usd_per_star: str = Form(""),
+        signup_bonus_credits: str = Form(""),
         kie_usd_per_credit: str = Form(""),
         set_kie_balance: str = Form(""),
         add_kie_credits: str = Form(""),
@@ -2492,6 +2495,10 @@ def create_app() -> FastAPI:
                 parsed = _parse_float(usd_per_star.strip())
                 if parsed is not None:
                     await settings_service.set("usd_per_star", str(parsed))
+            if signup_bonus_credits.strip():
+                parsed = _parse_int(signup_bonus_credits.strip())
+                if parsed is not None:
+                    await settings_service.set("signup_bonus_credits", str(max(0, parsed)))
             if kie_usd_per_credit.strip():
                 parsed = _parse_float(kie_usd_per_credit.strip())
                 if parsed is not None:

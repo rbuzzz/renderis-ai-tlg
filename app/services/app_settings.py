@@ -53,3 +53,10 @@ class AppSettingsService:
             return float(raw) if raw is not None else default
         except ValueError:
             return default
+
+    async def get_int(self, key: str, default: int) -> int:
+        raw = await self.get(key, str(default))
+        try:
+            return int(raw) if raw is not None else default
+        except ValueError:
+            return default

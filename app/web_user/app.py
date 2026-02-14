@@ -579,6 +579,8 @@ def create_app() -> FastAPI:
         photo_url = (data.get("photo_url") or "").strip()
         async with app.state.sessionmaker() as session:
             credits = CreditsService(session)
+            settings_service = AppSettingsService(session)
+            signup_bonus_credits = await settings_service.get_int("signup_bonus_credits", settings.signup_bonus_credits)
             is_admin = int(data["id"]) in settings.admin_ids()
             user = await credits.ensure_user(int(data["id"]), data.get("username"), is_admin)
             settings_payload = dict(user.settings or {})
@@ -590,7 +592,7 @@ def create_app() -> FastAPI:
             if photo_url:
                 settings_payload["photo_url"] = photo_url
             user.settings = settings_payload
-            await credits.apply_signup_bonus(user, settings.signup_bonus_credits)
+            await credits.apply_signup_bonus(user, signup_bonus_credits)
             await session.commit()
 
         request.session["user_id"] = int(data["id"])
@@ -629,6 +631,8 @@ def create_app() -> FastAPI:
 
         async with app.state.sessionmaker() as session:
             credits = CreditsService(session)
+            settings_service = AppSettingsService(session)
+            signup_bonus_credits = await settings_service.get_int("signup_bonus_credits", settings.signup_bonus_credits)
             is_admin = telegram_id in settings.admin_ids()
             user = await credits.ensure_user(telegram_id, username, is_admin)
             settings_payload = dict(user.settings or {})
@@ -640,7 +644,7 @@ def create_app() -> FastAPI:
             if photo_url:
                 settings_payload["photo_url"] = photo_url
             user.settings = settings_payload
-            await credits.apply_signup_bonus(user, settings.signup_bonus_credits)
+            await credits.apply_signup_bonus(user, signup_bonus_credits)
             await session.commit()
 
         request.session["user_id"] = telegram_id
@@ -1980,6 +1984,11 @@ def create_app() -> FastAPI:
         "prompt_length_hint",
         "prompt_too_long",
         "brain_improve_button",
+        "brain_pack_buy_button",
+        "brain_pack_remaining",
+        "brain_pack_buying",
+        "brain_pack_buy_success",
+        "brain_pack_buy_failed",
         "brain_improve_loading",
         "brain_restore_original",
         "brain_improve_success",

@@ -14,6 +14,7 @@ from app.bot.utils import safe_cleanup_callback
 from app.config import get_settings
 from app.db.models import Price
 from app.i18n import normalize_lang
+from app.services.app_settings import AppSettingsService
 from app.services.credits import CreditsService
 from app.utils.text import escape_html
 
@@ -50,7 +51,9 @@ async def cmd_start(message: Message, session: AsyncSession, command: CommandObj
     settings_payload["lang"] = lang
     user.settings = settings_payload
 
-    bonus_applied = await credits.apply_signup_bonus(user, settings.signup_bonus_credits)
+    settings_service = AppSettingsService(session)
+    signup_bonus_credits = await settings_service.get_int("signup_bonus_credits", settings.signup_bonus_credits)
+    bonus_applied = await credits.apply_signup_bonus(user, signup_bonus_credits)
     await session.commit()
 
     text = (
@@ -59,7 +62,7 @@ async def cmd_start(message: Message, session: AsyncSession, command: CommandObj
         f"{t(lang, 'start_terms')}"
     )
     if bonus_applied:
-        text += f"\n{tf(lang, 'start_bonus', credits=settings.signup_bonus_credits)}"
+        text += f"\n{tf(lang, 'start_bonus', credits=signup_bonus_credits)}"
     await message.answer(
         text,
         reply_markup=main_menu(lang),
