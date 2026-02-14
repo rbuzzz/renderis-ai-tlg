@@ -1861,6 +1861,13 @@
               >
                 ✨ {{ labels['brain_improve_button'] }}
               </button>
+              <button
+                class="prompt-improve-btn"
+                id="brainPackBuyBtn"
+                type="button"
+              >
+                🎁 {{ labels['brain_pack_buy_button'] }}
+              </button>
             </div>
           </div>
           <textarea id="prompt" placeholder="{{ labels['prompt_placeholder'] }}"></textarea>
@@ -2037,11 +2044,16 @@
     <div class="ui-toast" id="uiToast"></div>
 
     <script src="https://telegram.org/js/telegram-web-app.js?59"></script>
+    {% if miniapp_analytics_token and miniapp_analytics_app_name %}
+      <script async src="https://tganalytics.xyz/index.js"></script>
+    {% endif %}
     <script>
       const labels = {{ labels | tojson }};
       const loggedIn = {{ 'true' if logged_in else 'false' }};
       const botUsername = {{ bot_username | tojson }};
       const maxPromptLength = Number({{ max_prompt_length | tojson }}) || 0;
+      const miniAppAnalyticsToken = {{ miniapp_analytics_token | tojson }};
+      const miniAppAnalyticsAppName = {{ miniapp_analytics_app_name | tojson }};
       let models = [];
       let currentModel = null;
       let optionsState = {};
@@ -2078,6 +2090,7 @@
         pack_size_improvements: 0,
       };
       let improvePromptBusy = false;
+      let buyBrainPackBusy = false;
       let originalPromptBeforeImprove = '';
       let runInProgress = false;
       let generationInFlight = false;
@@ -2163,6 +2176,133 @@
         window.location.href = url;
       }
 
+      const MINIAPP_ANALYTICS_EVENT_MAP = {
+        brain_prompt_improved: 'improve_prompt_used',
+        brain_pack_buy_success: 'purchase_success',
+      };
+      const MINIAPP_ANALYTICS_ALLOWED_EVENTS = new Set([
+        'app_open',
+        'generation_started',
+        'generation_success',
+        'generation_fail',
+        'purchase_started',
+        'purchase_success',
+        'improve_prompt_used',
+      ]);
+      const MINIAPP_ANALYTICS_SESSION_KEY = 'renderis.miniapp.analytics.session.v1';
+      const miniAppAnalyticsState = {
+        enabled: false,
+        userId: 0,
+        sessionId: '',
+        appOpenSent: false,
+      };
+
+      function miniAppAnalyticsEnabled() {
+        return (
+          isMiniApp
+          && !!miniAppAnalyticsToken
+          && !!miniAppAnalyticsAppName
+          && miniAppAnalyticsState.enabled
+        );
+      }
+
+      function miniAppAnalyticsUserId() {
+        if (!tgWebApp || !tgWebApp.initDataUnsafe || !tgWebApp.initDataUnsafe.user) return 0;
+        const userId = Number(tgWebApp.initDataUnsafe.user.id || 0);
+        return Number.isFinite(userId) && userId > 0 ? userId : 0;
+      }
+
+      function ensureMiniAppAnalyticsSessionId() {
+        let value = '';
+        try {
+          value = String(sessionStorage.getItem(MINIAPP_ANALYTICS_SESSION_KEY) || '').trim();
+        } catch (e) {
+          value = '';
+        }
+        if (value) return value;
+        try {
+          if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            value = window.crypto.randomUUID();
+          } else {
+            value = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+          }
+          sessionStorage.setItem(MINIAPP_ANALYTICS_SESSION_KEY, value);
+        } catch (e) {
+          value = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        }
+        return value;
+      }
+
+      function mapUiEventToMiniAppEvent(eventName, payload = {}) {
+        const mappedName = MINIAPP_ANALYTICS_EVENT_MAP[eventName] || eventName;
+        if (!MINIAPP_ANALYTICS_ALLOWED_EVENTS.has(mappedName)) return null;
+        const mappedPayload = { ...(payload || {}) };
+        if (eventName === 'brain_pack_buy_success' && !mappedPayload.provider) {
+          mappedPayload.provider = 'brain_pack';
+        }
+        return { name: mappedName, payload: mappedPayload };
+      }
+
+      function sendMiniAppAnalyticsEvent(eventName, payload = {}) {
+        if (!miniAppAnalyticsEnabled()) return;
+        const mapped = mapUiEventToMiniAppEvent(eventName, payload);
+        if (!mapped) return;
+
+        const row = {
+          event_name: 'custom-event',
+          user_id: miniAppAnalyticsState.userId,
+          session_id: miniAppAnalyticsState.sessionId,
+          app_name: miniAppAnalyticsAppName,
+          is_premium: Boolean(tgWebApp && tgWebApp.initDataUnsafe && tgWebApp.initDataUnsafe.user && tgWebApp.initDataUnsafe.user.is_premium),
+          platform: (tgWebApp && tgWebApp.platform) ? String(tgWebApp.platform) : '',
+          locale: (tgWebApp && tgWebApp.initDataUnsafe && tgWebApp.initDataUnsafe.user && tgWebApp.initDataUnsafe.user.language_code)
+            ? String(tgWebApp.initDataUnsafe.user.language_code)
+            : '',
+          custom_data: {
+            event: mapped.name,
+            ...mapped.payload,
+          },
+        };
+
+        fetch('https://tganalytics.xyz/events', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'TGA-Auth-Token': miniAppAnalyticsToken,
+          },
+          body: JSON.stringify([row]),
+          keepalive: true,
+          credentials: 'omit',
+        }).catch(() => {
+          // Best effort only.
+        });
+      }
+
+      function initMiniAppAnalytics() {
+        const userId = miniAppAnalyticsUserId();
+        if (!isMiniApp || !miniAppAnalyticsToken || !miniAppAnalyticsAppName || !userId) return;
+
+        miniAppAnalyticsState.enabled = true;
+        miniAppAnalyticsState.userId = userId;
+        miniAppAnalyticsState.sessionId = ensureMiniAppAnalyticsSessionId();
+
+        try {
+          if (window.telegramAnalytics && typeof window.telegramAnalytics.init === 'function') {
+            window.telegramAnalytics.init({
+              token: miniAppAnalyticsToken,
+              appName: miniAppAnalyticsAppName,
+            });
+          }
+        } catch (e) {
+          // SDK init is optional; custom events still go through direct endpoint call.
+        }
+
+        if (!miniAppAnalyticsState.appOpenSent) {
+          miniAppAnalyticsState.appOpenSent = true;
+          sendMiniAppAnalyticsEvent('app_open', { source: 'miniapp' });
+        }
+      }
+
       function fmt(template, params = {}) {
         let out = template || '';
         Object.keys(params).forEach((k) => {
@@ -2190,6 +2330,7 @@
             window.gtag('event', eventName, payload);
           }
           window.dispatchEvent(new CustomEvent('renderis:analytics', { detail }));
+          sendMiniAppAnalyticsEvent(eventName, payload);
         } catch (e) {
           // Keep analytics best-effort and non-blocking.
         }
@@ -2552,7 +2693,7 @@
         if (promptEl) {
           promptEl.disabled = !!locked;
         }
-        ['promptHelperBtn', 'promptHistoryBtn', 'improvePromptBtn', 'restorePromptBtn', 'refFiles', 'refReplaceFile'].forEach((id) => {
+        ['promptHelperBtn', 'promptHistoryBtn', 'improvePromptBtn', 'brainPackBuyBtn', 'restorePromptBtn', 'refFiles', 'refReplaceFile'].forEach((id) => {
           const el = document.getElementById(id);
           if (!el) return;
           if ('disabled' in el) {
@@ -2807,6 +2948,7 @@
             runStatus.classList.remove('error');
             runStatus.textContent = isPartial ? labels.gen_partial_done : labels.request_sent;
           }
+          trackUiEvent('generation_success', { partial: Boolean(isPartial) });
           await loadMe();
           await loadHistory();
         }
@@ -2834,6 +2976,7 @@
             runStatus.classList.add('error');
             runStatus.textContent = `${labels.error_prefix}: ${message || labels.gen_failed_basic}`;
           }
+          trackUiEvent('generation_fail', { message: String(message || labels.gen_failed_basic) });
         }
 
         function callBackendCancel() {
@@ -3005,11 +3148,35 @@
         improveBtn.classList.toggle('active', !!aiBrainState.enabled);
       }
 
+      function updateBrainPackBuyButton() {
+        const buyBtn = document.getElementById('brainPackBuyBtn');
+        if (!buyBtn) return;
+        const packSize = Math.max(1, Number(aiBrainState.pack_size_improvements || 0));
+        const packPrice = Math.max(0, Number(aiBrainState.pack_price_credits || 0));
+        const packRemaining = Math.max(0, Number(aiBrainState.pack_remaining || 0));
+        let buttonText = fmt(labels.brain_pack_buy_button, { size: packSize, price: packPrice });
+        if (packRemaining > 0) {
+          buttonText = `${buttonText} · ${fmt(labels.brain_pack_remaining, { count: packRemaining })}`;
+        }
+        buyBtn.textContent = `🎁 ${buttonText}`;
+        buyBtn.disabled = (
+          !loggedIn
+          || !aiBrainState.enabled
+          || buyBrainPackBusy
+          || improvePromptBusy
+          || runInProgress
+          || generationInFlight
+          || confirmModalOpen
+        );
+        buyBtn.classList.toggle('active', !!aiBrainState.enabled);
+      }
+
       function setRunButtonState() {
         const runBtn = document.getElementById('runBtn');
         if (!runBtn) return;
         runBtn.disabled = runInProgress || confirmModalOpen || generationInFlight;
         updateImprovePromptButton();
+        updateBrainPackBuyButton();
         updateRestorePromptButton();
       }
 
@@ -4070,6 +4237,10 @@
         runInProgress = true;
         setRunButtonState();
         document.getElementById('runStatus').textContent = labels.run_pending;
+        trackUiEvent('generation_started', {
+          model: currentModel ? currentModel.key : '',
+          outputs: Number(payload.outputs || 1),
+        });
         try {
           const res = await fetch('/api/generate', { method: 'POST', body: form });
           const data = await res.json().catch(() => ({}));
@@ -4212,6 +4383,15 @@
         return labels.brain_failed;
       }
 
+      function mapBrainPackBuyError(errorCode) {
+        const code = String(errorCode || '').trim().toLowerCase();
+        if (!code) return labels.brain_pack_buy_failed;
+        if (code === 'brain_disabled' || code === 'brain_unavailable') return labels.brain_unavailable;
+        if (code === 'insufficient_credits') return labels.brain_not_enough_credits;
+        if (code === 'rate_limited') return labels.brain_rate_limited;
+        return labels.brain_pack_buy_failed;
+      }
+
       async function improvePromptWithBrain() {
         if (!loggedIn) {
           setBrainPromptStatus(labels.login_required, 'error');
@@ -4309,6 +4489,64 @@
         }
       }
 
+      async function buyBrainPack() {
+        if (!loggedIn) {
+          setBrainPromptStatus(labels.login_required, 'error');
+          return;
+        }
+        if (buyBrainPackBusy) return;
+        if (!aiBrainState.enabled) {
+          setBrainPromptStatus(labels.brain_unavailable, 'error');
+          return;
+        }
+        const packPrice = Math.max(0, Number(aiBrainState.pack_price_credits || 0));
+        if (packPrice > 0 && currentBalance < packPrice) {
+          setBrainPromptStatus(labels.brain_not_enough_credits, 'error');
+          return;
+        }
+
+        buyBrainPackBusy = true;
+        setRunButtonState();
+        setBrainPromptStatus(labels.brain_pack_buying);
+        try {
+          const res = await fetch('/api/brain/pack/buy', {
+            method: 'POST',
+            credentials: 'include',
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            setBrainPromptStatus(mapBrainPackBuyError(data.error), 'error');
+            return;
+          }
+          if (Number.isFinite(Number(data.balance))) {
+            setBalance(Number(data.balance));
+          }
+          aiBrainState = {
+            ...aiBrainState,
+            pack_remaining: Number.isFinite(Number(data.remaining_improvements))
+              ? Number(data.remaining_improvements)
+              : aiBrainState.pack_remaining,
+            pack_price_credits: Number.isFinite(Number(data.pack_price_credits))
+              ? Number(data.pack_price_credits)
+              : aiBrainState.pack_price_credits,
+            pack_size_improvements: Number.isFinite(Number(data.pack_size_improvements))
+              ? Number(data.pack_size_improvements)
+              : aiBrainState.pack_size_improvements,
+          };
+          const size = Math.max(1, Number(data.pack_size_improvements || aiBrainState.pack_size_improvements || 1));
+          setBrainPromptStatus(fmt(labels.brain_pack_buy_success, { size }), 'success');
+          trackUiEvent('brain_pack_buy_success', {
+            pack_size: size,
+            pack_price: Math.max(0, Number(data.pack_price_credits || aiBrainState.pack_price_credits || 0)),
+          });
+        } catch (err) {
+          setBrainPromptStatus(labels.brain_pack_buy_failed, 'error');
+        } finally {
+          buyBrainPackBusy = false;
+          setRunButtonState();
+        }
+      }
+
       function restoreOriginalPrompt() {
         if (!originalPromptBeforeImprove) return;
         const promptEl = getPromptInput();
@@ -4340,6 +4578,7 @@
         const payLink = document.getElementById('cryptoPayLink');
         const checkBtn = document.getElementById('cryptoCheckBtn');
         if (!createBtn || !payLink || !checkBtn) return;
+        trackUiEvent('purchase_started', { provider: 'cryptopay', product_id: productId });
         createBtn.disabled = true;
         setCryptoStatus(labels.crypto_loading_packages);
 
@@ -4413,6 +4652,7 @@
           if (data.paid || status === 'paid' || status === 'overpaid') {
             const creditsAdded = Number(data.credits_added || cryptoInvoiceCredits || 0);
             setCryptoStatus(fmt(labels.crypto_paid, { credits: creditsAdded }), 'success');
+            trackUiEvent('purchase_success', { provider: 'cryptopay', credits: creditsAdded });
             await loadMe();
             stopCryptoPolling();
             return;
@@ -4499,6 +4739,7 @@
         if (runStatus) {
           runStatus.textContent = labels.topup_stars_redirect;
         }
+        trackUiEvent('purchase_started', { provider: 'telegram_stars' });
         openTelegramDeepLink(deepLink);
       }
 
@@ -4506,6 +4747,7 @@
       const promptHelperBtn = document.getElementById('promptHelperBtn');
       const promptHistoryBtn = document.getElementById('promptHistoryBtn');
       const improvePromptBtn = document.getElementById('improvePromptBtn');
+      const brainPackBuyBtn = document.getElementById('brainPackBuyBtn');
       const restorePromptBtn = document.getElementById('restorePromptBtn');
       const promptHelperPanel = document.getElementById('promptHelperPanel');
       const promptHistoryPanel = document.getElementById('promptHistoryPanel');
@@ -4543,6 +4785,13 @@
           event.preventDefault();
           event.stopPropagation();
           void improvePromptWithBrain();
+        });
+      }
+      if (brainPackBuyBtn) {
+        brainPackBuyBtn.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          void buyBrainPack();
         });
       }
       if (restorePromptBtn) {
@@ -5039,6 +5288,8 @@
         }
         return false;
       }
+
+      initMiniAppAnalytics();
 
       (async () => {
         const reloading = await maybeAutoMiniAppAuth();

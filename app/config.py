@@ -78,6 +78,8 @@ class Settings(BaseSettings):
     user_web_secret: str = Field('change-me', alias='USER_WEB_SECRET')
     user_web_public_url: str = Field('', alias='USER_WEB_PUBLIC_URL')
     user_web_poll_enabled: bool = Field(True, alias='USER_WEB_POLL_ENABLED')
+    miniapp_analytics_token: str = Field('', alias='MINIAPP_ANALYTICS_TOKEN')
+    miniapp_analytics_app_name: str = Field('', alias='MINIAPP_ANALYTICS_APP_NAME')
 
     # Support bot
     support_bot_token: str = Field('', alias='SUPPORT_BOT_TOKEN')

@@ -510,6 +510,8 @@ def create_app() -> FastAPI:
                 "lang_options": lang_options,
                 "current_lang_label": current_lang_label,
                 "max_prompt_length": settings.max_prompt_length,
+                "miniapp_analytics_token": settings.miniapp_analytics_token,
+                "miniapp_analytics_app_name": settings.miniapp_analytics_app_name,
             },
         )
 
