@@ -63,7 +63,7 @@
               {% if can_manage %}
               <button form="price-{{ p.row_id }}" type="submit">Сохранить</button>
               {% endif %}
-              <form id="price-{{ p.row_id }}" method="post" action="/admin/products/{{ p.row_id }}"></form>
+              <form id="price-{{ p.row_id }}" method="post" action="/admin/products/{{ p.row_id }}" {% if can_manage %}data-dirty-track="true"{% endif %}></form>
             </td>
           </tr>
           {% else %}
@@ -144,7 +144,7 @@
               {% if can_manage %}
               <button form="topup-{{ p.id }}" type="submit">Сохранить</button>
               {% endif %}
-              <form id="topup-{{ p.id }}" method="post" action="/admin/topup-products/{{ p.id }}"></form>
+              <form id="topup-{{ p.id }}" method="post" action="/admin/topup-products/{{ p.id }}" {% if can_manage %}data-dirty-track="true"{% endif %}></form>
             </td>
           </tr>
           {% else %}
@@ -163,7 +163,7 @@
     </div>
     {% if can_manage %}
     <h3 style="margin-top:18px;">Добавить пакет</h3>
-    <form class="form-row" method="post" action="/admin/topup-products/create">
+    <form class="form-row" method="post" action="/admin/topup-products/create" {% if can_manage %}data-dirty-track="true"{% endif %}>
       <div>
         <label>Название</label>
         <input name="title" placeholder="Например: 500 кредитов" />

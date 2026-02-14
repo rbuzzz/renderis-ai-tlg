@@ -54,7 +54,7 @@
   {% if not can_manage %}
   <div class="section">
     <h3>Новое предложение</h3>
-    <form method="post" action="/admin/change-requests/create" id="new-request-form">
+    <form method="post" action="/admin/change-requests/create" id="new-request-form" data-dirty-track="true">
       <div class="form-row">
         <div>
           <label>Пользователь</label>

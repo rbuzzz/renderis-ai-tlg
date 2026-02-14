@@ -19,7 +19,7 @@
     {% if not can_manage %}
     <div class="notice" style="color: var(--muted);">Режим только просмотра: изменение настроек недоступно для субадмина.</div>
     {% endif %}
-    <form method="post" action="/admin/settings" enctype="multipart/form-data">
+    <form method="post" action="/admin/settings" enctype="multipart/form-data" {% if can_manage %}data-dirty-track="true"{% endif %}>
       <p class="muted" style="margin-top: 6px;">
         Формула: стоимость 1 кредита Renderis (USD) = стоимость 1 звезды (USD) × звезд за 1 кредит.
       </p>

@@ -327,6 +327,129 @@
         font-size: 12px;
         color: var(--muted);
       }
+      .is-dirty-field {
+        border-color: rgba(245, 194, 107, 0.65) !important;
+        box-shadow: 0 0 0 2px rgba(245, 194, 107, 0.14);
+      }
+      .dirty-savebar {
+        position: fixed;
+        left: 50%;
+        bottom: 16px;
+        transform: translate(-50%, 12px);
+        width: min(820px, calc(100vw - 36px));
+        border: 1px solid rgba(60, 207, 145, 0.35);
+        border-radius: 14px;
+        background: rgba(11, 24, 38, 0.95);
+        backdrop-filter: blur(8px);
+        box-shadow: 0 16px 34px rgba(0, 0, 0, 0.35);
+        padding: 10px 12px;
+        z-index: 1200;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.18s ease, transform 0.18s ease;
+      }
+      .dirty-savebar.visible {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translate(-50%, 0);
+      }
+      .dirty-savebar__row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .dirty-savebar__meta {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+      .dirty-savebar__title {
+        font-weight: 700;
+        font-size: 14px;
+        color: var(--text);
+        white-space: nowrap;
+      }
+      .dirty-savebar__count {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .dirty-savebar__link {
+        background: transparent;
+        border: 1px solid rgba(154, 176, 200, 0.35);
+        color: var(--muted);
+        padding: 6px 10px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .dirty-savebar__actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .dirty-btn-secondary {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid rgba(154, 176, 200, 0.35);
+      }
+      .dirty-savebar__changes {
+        margin-top: 8px;
+        border-top: 1px solid rgba(154, 176, 200, 0.18);
+        padding-top: 8px;
+      }
+      .dirty-savebar__changes ul {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 4px;
+      }
+      .dirty-savebar__changes li {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.35;
+      }
+      .dirty-guard-modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(5, 12, 20, 0.7);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1300;
+        padding: 16px;
+      }
+      .dirty-guard-modal.visible {
+        display: flex;
+      }
+      .dirty-guard-modal__card {
+        width: min(440px, calc(100vw - 28px));
+        border-radius: 14px;
+        border: 1px solid rgba(154, 176, 200, 0.28);
+        background: #13253b;
+        box-shadow: 0 20px 48px rgba(0, 0, 0, 0.4);
+        padding: 16px;
+      }
+      .dirty-guard-modal__title {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .dirty-guard-modal__text {
+        margin-top: 8px;
+        font-size: 13px;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+      .dirty-guard-modal__actions {
+        margin-top: 14px;
+        display: flex;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
 
       @media (max-width: 980px) {
         :root {
@@ -393,6 +516,10 @@
         .admin-table td {
           padding: 8px 8px;
         }
+        .dirty-savebar {
+          width: calc(100vw - 24px);
+          bottom: 12px;
+        }
       }
     </style>
   </head>
@@ -429,6 +556,33 @@
       </div>
     </main>
     </div>
+    <div class="dirty-savebar" id="dirtySaveBar" hidden>
+      <div class="dirty-savebar__row">
+        <div class="dirty-savebar__meta">
+          <span class="dirty-savebar__title">Unsaved changes</span>
+          <span class="dirty-savebar__count" id="dirtySaveBarCount">0 fields changed</span>
+          <button class="dirty-savebar__link" type="button" id="dirtySaveBarToggle">View changes</button>
+        </div>
+        <div class="dirty-savebar__actions">
+          <button class="dirty-btn-secondary" type="button" id="dirtyDiscardBtn">Discard</button>
+          <button type="button" id="dirtySaveBtn">Save</button>
+        </div>
+      </div>
+      <div class="dirty-savebar__changes" id="dirtySaveBarChanges" hidden>
+        <ul id="dirtySaveBarChangesList"></ul>
+      </div>
+    </div>
+    <div class="dirty-guard-modal" id="dirtyGuardModal" aria-hidden="true">
+      <div class="dirty-guard-modal__card" role="dialog" aria-modal="true" aria-labelledby="dirtyGuardTitle">
+        <h3 class="dirty-guard-modal__title" id="dirtyGuardTitle">You have unsaved changes</h3>
+        <div class="dirty-guard-modal__text">Save, discard, or cancel navigation.</div>
+        <div class="dirty-guard-modal__actions">
+          <button class="dirty-btn-secondary" type="button" id="dirtyGuardCancelBtn">Cancel</button>
+          <button class="dirty-btn-secondary" type="button" id="dirtyGuardDiscardBtn">Discard</button>
+          <button type="button" id="dirtyGuardSaveBtn">Save</button>
+        </div>
+      </div>
+    </div>
     <script>
       if ('scrollRestoration' in history) {
         history.scrollRestoration = 'manual';
@@ -453,6 +607,307 @@
           });
         });
       }
+    </script>
+    <script>
+      (() => {
+        const trackedForms = Array.from(document.querySelectorAll('form[data-dirty-track="true"]'));
+        if (!trackedForms.length) return;
+
+        const trackedFormsSet = new Set(trackedForms);
+        const dirtySaveBar = document.getElementById('dirtySaveBar');
+        const dirtySaveBarCount = document.getElementById('dirtySaveBarCount');
+        const dirtySaveBarToggle = document.getElementById('dirtySaveBarToggle');
+        const dirtySaveBarChanges = document.getElementById('dirtySaveBarChanges');
+        const dirtySaveBarChangesList = document.getElementById('dirtySaveBarChangesList');
+        const dirtyDiscardBtn = document.getElementById('dirtyDiscardBtn');
+        const dirtySaveBtn = document.getElementById('dirtySaveBtn');
+        const dirtyGuardModal = document.getElementById('dirtyGuardModal');
+        const dirtyGuardSaveBtn = document.getElementById('dirtyGuardSaveBtn');
+        const dirtyGuardDiscardBtn = document.getElementById('dirtyGuardDiscardBtn');
+        const dirtyGuardCancelBtn = document.getElementById('dirtyGuardCancelBtn');
+
+        const formState = new Map();
+        let hasDirty = false;
+        let isSubmitting = false;
+        let pendingHref = null;
+        const esc = (value) => {
+          const raw = String(value ?? '');
+          if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(raw);
+          return raw.replace(/["\\]/g, '\\$&');
+        };
+
+        const SKIP_TYPES = new Set(['hidden', 'submit', 'button', 'reset', 'image']);
+
+        function isTrackableField(el) {
+          if (!el) return false;
+          if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement)) {
+            return false;
+          }
+          if (el.disabled || el.readOnly) return false;
+          if (el instanceof HTMLInputElement && SKIP_TYPES.has((el.type || '').toLowerCase())) return false;
+          return true;
+        }
+
+        function fieldOwnerForm(el) {
+          if (!el) return null;
+          if (el.form) return el.form;
+          const formId = el.getAttribute('form');
+          if (!formId) return null;
+          return document.getElementById(formId);
+        }
+
+        function fieldSnapshot(el) {
+          if (el instanceof HTMLInputElement) {
+            const type = (el.type || '').toLowerCase();
+            if (type === 'checkbox' || type === 'radio') return el.checked ? '1' : '0';
+            if (type === 'file') return String(el.files ? el.files.length : 0);
+            return el.value ?? '';
+          }
+          if (el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) {
+            return el.value ?? '';
+          }
+          return '';
+        }
+
+        function resolveFieldLabel(el) {
+          if (el.dataset && el.dataset.dirtyLabel) return el.dataset.dirtyLabel;
+          if (el.id) {
+            const explicitLabel = document.querySelector(`label[for="${esc(el.id)}"]`);
+            if (explicitLabel) return explicitLabel.textContent.trim();
+          }
+          const inlineLabel = el.closest('div')?.querySelector(':scope > label');
+          if (inlineLabel) return inlineLabel.textContent.trim();
+          if (el.name) return el.name;
+          return 'Field';
+        }
+
+        function refreshChangesList() {
+          if (!dirtySaveBarChangesList) return;
+          dirtySaveBarChangesList.innerHTML = '';
+          const rendered = new Set();
+          formState.forEach((state) => {
+            state.dirty.forEach((el) => {
+              const label = resolveFieldLabel(el);
+              if (!label || rendered.has(label)) return;
+              rendered.add(label);
+              const li = document.createElement('li');
+              li.textContent = label;
+              dirtySaveBarChangesList.appendChild(li);
+            });
+          });
+        }
+
+        function beforeUnloadHandler(e) {
+          if (!hasDirty || isSubmitting) return;
+          e.preventDefault();
+          e.returnValue = '';
+        }
+
+        function updateGlobalState() {
+          let dirtyCount = 0;
+          let dirtyFormsCount = 0;
+          formState.forEach((state) => {
+            const count = state.dirty.size;
+            if (count > 0) {
+              dirtyFormsCount += 1;
+              dirtyCount += count;
+            }
+          });
+          hasDirty = dirtyCount > 0;
+          if (dirtySaveBar && dirtySaveBarCount) {
+            if (hasDirty) {
+              dirtySaveBar.hidden = false;
+              dirtySaveBar.classList.add('visible');
+              dirtySaveBarCount.textContent = `${dirtyCount} field${dirtyCount === 1 ? '' : 's'} changed`;
+            } else {
+              dirtySaveBar.classList.remove('visible');
+              dirtySaveBar.hidden = true;
+              dirtySaveBarChanges.hidden = true;
+              dirtySaveBarToggle.textContent = 'View changes';
+            }
+          }
+          if (hasDirty) {
+            window.addEventListener('beforeunload', beforeUnloadHandler);
+            refreshChangesList();
+          } else {
+            window.removeEventListener('beforeunload', beforeUnloadHandler);
+          }
+        }
+
+        function markFieldDirty(form, el, isDirtyField) {
+          const state = formState.get(form);
+          if (!state) return;
+          if (isDirtyField) {
+            state.dirty.add(el);
+            el.classList.add('is-dirty-field');
+          } else {
+            state.dirty.delete(el);
+            el.classList.remove('is-dirty-field');
+          }
+          updateGlobalState();
+        }
+
+        function bindField(form, el) {
+          if (!isTrackableField(el)) return;
+          const state = formState.get(form);
+          if (!state || state.initial.has(el)) return;
+          state.initial.set(el, fieldSnapshot(el));
+          state.order.push(el);
+          const sync = () => {
+            const initial = state.initial.get(el);
+            const current = fieldSnapshot(el);
+            markFieldDirty(form, el, current !== initial);
+          };
+          el.addEventListener('change', sync);
+          el.addEventListener('input', sync);
+        }
+
+        function bindForm(form) {
+          if (!formState.has(form)) {
+            formState.set(form, { initial: new Map(), dirty: new Set(), order: [] });
+          }
+          form.querySelectorAll('input, textarea, select').forEach((el) => bindField(form, el));
+          if (form.id) {
+            document.querySelectorAll(`[form="${esc(form.id)}"]`).forEach((el) => bindField(form, el));
+          }
+          form.addEventListener('submit', () => {
+            isSubmitting = true;
+            window.removeEventListener('beforeunload', beforeUnloadHandler);
+          });
+        }
+
+        trackedForms.forEach(bindForm);
+
+        function firstDirtyForm() {
+          const focusedOwner = fieldOwnerForm(document.activeElement);
+          if (focusedOwner && trackedFormsSet.has(focusedOwner)) {
+            const focusedState = formState.get(focusedOwner);
+            if (focusedState && focusedState.dirty.size > 0) return focusedOwner;
+          }
+          for (const form of trackedForms) {
+            const state = formState.get(form);
+            if (state && state.dirty.size > 0) return form;
+          }
+          return null;
+        }
+
+        function submitDirtyForm() {
+          const form = firstDirtyForm();
+          if (!form) return;
+          isSubmitting = true;
+          window.removeEventListener('beforeunload', beforeUnloadHandler);
+          form.submit();
+        }
+
+        function discardAllChanges() {
+          formState.forEach((state) => {
+            state.order.forEach((el) => {
+              const initial = state.initial.get(el);
+              if (initial === undefined) return;
+              if (el instanceof HTMLInputElement) {
+                const type = (el.type || '').toLowerCase();
+                if (type === 'checkbox' || type === 'radio') {
+                  el.checked = initial === '1';
+                } else if (type === 'file') {
+                  el.value = '';
+                } else {
+                  el.value = initial;
+                }
+              } else if (el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) {
+                el.value = initial;
+              }
+              el.classList.remove('is-dirty-field');
+            });
+            state.dirty.clear();
+          });
+          updateGlobalState();
+        }
+
+        function closeGuardModal() {
+          if (!dirtyGuardModal) return;
+          dirtyGuardModal.classList.remove('visible');
+          dirtyGuardModal.setAttribute('aria-hidden', 'true');
+          pendingHref = null;
+        }
+
+        function openGuardModal(href) {
+          if (!dirtyGuardModal) return;
+          pendingHref = href;
+          dirtyGuardModal.classList.add('visible');
+          dirtyGuardModal.setAttribute('aria-hidden', 'false');
+        }
+
+        if (dirtySaveBarToggle && dirtySaveBarChanges) {
+          dirtySaveBarToggle.addEventListener('click', () => {
+            const willOpen = dirtySaveBarChanges.hidden;
+            dirtySaveBarChanges.hidden = !willOpen;
+            dirtySaveBarToggle.textContent = willOpen ? 'Hide changes' : 'View changes';
+          });
+        }
+
+        if (dirtyDiscardBtn) {
+          dirtyDiscardBtn.addEventListener('click', () => {
+            if (!hasDirty) return;
+            if (!window.confirm('Discard changes?')) return;
+            discardAllChanges();
+          });
+        }
+
+        if (dirtySaveBtn) {
+          dirtySaveBtn.addEventListener('click', () => {
+            if (!hasDirty) return;
+            submitDirtyForm();
+          });
+        }
+
+        if (dirtyGuardCancelBtn) {
+          dirtyGuardCancelBtn.addEventListener('click', closeGuardModal);
+        }
+        if (dirtyGuardDiscardBtn) {
+          dirtyGuardDiscardBtn.addEventListener('click', () => {
+            const href = pendingHref;
+            discardAllChanges();
+            closeGuardModal();
+            if (href) window.location.href = href;
+          });
+        }
+        if (dirtyGuardSaveBtn) {
+          dirtyGuardSaveBtn.addEventListener('click', () => {
+            closeGuardModal();
+            submitDirtyForm();
+          });
+        }
+        if (dirtyGuardModal) {
+          dirtyGuardModal.addEventListener('click', (e) => {
+            if (e.target === dirtyGuardModal) closeGuardModal();
+          });
+        }
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && dirtyGuardModal?.classList.contains('visible')) {
+            closeGuardModal();
+          }
+        });
+
+        document.addEventListener('click', (e) => {
+          if (!hasDirty || isSubmitting) return;
+          const link = e.target.closest('a[href]');
+          if (!link) return;
+          if (link.target && link.target.toLowerCase() === '_blank') return;
+          if (link.hasAttribute('download')) return;
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+          let url;
+          try {
+            url = new URL(link.href, window.location.href);
+          } catch (err) {
+            return;
+          }
+          if (url.origin !== window.location.origin) return;
+          if (url.pathname === window.location.pathname && url.search === window.location.search && url.hash) return;
+          if (url.href === window.location.href) return;
+          e.preventDefault();
+          openGuardModal(url.href);
+        });
+      })();
     </script>
   </body>
 </html>
