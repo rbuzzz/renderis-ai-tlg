@@ -3,7 +3,6 @@
 import tempfile
 import uuid
 import asyncio
-from decimal import Decimal, InvalidOperation
 
 from aiogram import Bot, F, Router
 from aiogram.client.default import DefaultBotProperties
@@ -144,7 +143,7 @@ async def admin_set_price(callback: CallbackQuery, state: FSMContext, session: A
         await callback.answer('Недостаточно прав', show_alert=True)
         return
     await state.set_state(AdminFlow.setting_price)
-    await callback.message.answer('Формат: model_key option_key price_credits. Пример: nano_banana base 1.5')
+    await callback.message.answer('Формат: model_key option_key price_credits. Пример: nano_banana base 5')
     await callback.answer()
     await safe_cleanup_callback(callback)
 
@@ -153,18 +152,9 @@ async def admin_set_price(callback: CallbackQuery, state: FSMContext, session: A
 async def admin_set_price_input(message: Message, state: FSMContext, session: AsyncSession) -> None:
     parts = (message.text or '').split()
     if len(parts) != 3:
-        await message.answer('Неверный формат. Пример: nano_banana base 1.5')
+        await message.answer('Неверный формат. Пример: nano_banana base 5')
         return
-    model_key, option_key = parts[0], parts[1]
-    raw_price = parts[2].replace(',', '.')
-    try:
-        price = Decimal(raw_price)
-    except (InvalidOperation, ValueError):
-        await message.answer('Цена должна быть числом, например 1.5')
-        return
-    if price < 0:
-        await message.answer('Цена не может быть отрицательной.')
-        return
+    model_key, option_key, price = parts[0], parts[1], int(parts[2])
     model = get_model(model_key)
     if not model:
         await message.answer('Модель не найдена.')

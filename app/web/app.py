@@ -59,7 +59,6 @@ from app.services.change_requests import (
     STATUS_REJECTED,
     ChangeRequestService,
 )
-from app.utils.credits import to_credits
 
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
@@ -823,12 +822,10 @@ async def _save_support_media_upload(upload: UploadFile, storage_root: str, thre
     return True, {"path": rel_path, "name": source_name, "mime": mime_type}, ""
 
 
-def _get_price_value(price: Price | None, attr: str) -> Decimal | int:
+def _get_price_value(price: Price | None, attr: str) -> int:
     if not price:
-        return Decimal("0") if attr == "price_credits" else 0
+        return 0
     value = getattr(price, attr)
-    if attr == "price_credits":
-        return to_credits(value)
     return int(value or 0)
 
 
@@ -1777,7 +1774,7 @@ def create_app() -> FastAPI:
             user = await session.get(User, user_id)
             if not user:
                 return RedirectResponse(url="/admin/users?error=user_not_found", status_code=302)
-            if to_credits(user.balance_credits) < to_credits(parsed_amount):
+            if int(user.balance_credits or 0) < parsed_amount:
                 return RedirectResponse(url=f"/admin/users/{user_id}?error=insufficient_balance", status_code=302)
             credits = CreditsService(session)
             await credits.add_ledger(
@@ -1799,16 +1796,15 @@ def create_app() -> FastAPI:
             return RedirectResponse(url="/login", status_code=302)
         if not _can_manage(request):
             return _forbidden_redirect()
-        parsed_balance = _parse_decimal(balance.strip())
+        parsed_balance = _parse_int(balance.strip())
         if parsed_balance is None or parsed_balance < 0:
             return RedirectResponse(url=f"/admin/users/{user_id}?error=invalid_balance", status_code=302)
         async with app.state.sessionmaker() as session:
             user = await session.get(User, user_id)
             if not user:
                 return RedirectResponse(url="/admin/users?error=user_not_found", status_code=302)
-            current_balance = to_credits(user.balance_credits)
-            target_balance = to_credits(parsed_balance)
-            delta = target_balance - current_balance
+            current_balance = int(user.balance_credits or 0)
+            delta = parsed_balance - current_balance
             if delta != 0:
                 credits = CreditsService(session)
                 await credits.add_ledger(
@@ -1818,8 +1814,8 @@ def create_app() -> FastAPI:
                     meta={
                         "source": "admin_web",
                         "action": "set_balance",
-                        "from": str(current_balance),
-                        "to": str(target_balance),
+                        "from": current_balance,
+                        "to": parsed_balance,
                     },
                 )
                 await session.commit()
@@ -2075,7 +2071,7 @@ def create_app() -> FastAPI:
 
             for row in rows:
                 kie_usd = round(row["kie_credits"] * kie_usd_per_credit, 4)
-                renderis_usd = round(float(row["renderis_credits"]) * usd_per_credit, 4)
+                renderis_usd = round(row["renderis_credits"] * usd_per_credit, 4)
                 profit_pct = ""
                 if kie_usd > 0:
                     profit_pct = round((renderis_usd / kie_usd) * 100, 1)
@@ -2182,18 +2178,13 @@ def create_app() -> FastAPI:
             ).scalars().all()
             price_map = {(p.model_key, p.option_key): p for p in prices}
 
-            def update_price(
-                model_key: str,
-                option_key: str,
-                renderis_val: Decimal | None,
-                kie_val: int | None,
-            ) -> None:
+            def update_price(model_key: str, option_key: str, renderis_val: int | None, kie_val: int | None) -> None:
                 row = price_map.get((model_key, option_key))
                 if not row:
                     row = Price(
                         model_key=model_key,
                         option_key=option_key,
-                        price_credits=Decimal("0"),
+                        price_credits=0,
                         provider_credits=None,
                         active=True,
                         model_type="image",
@@ -2206,11 +2197,11 @@ def create_app() -> FastAPI:
                 if kie_val is not None:
                     row.provider_credits = kie_val
 
-            def get_val(model_key: str, option_key: str, attr: str) -> Decimal | int:
+            def get_val(model_key: str, option_key: str, attr: str) -> int:
                 return _get_price_value(price_map.get((model_key, option_key)), attr)
 
             parsed_kie = _parse_int(provider_credits.strip()) if provider_credits.strip() else None
-            parsed_renderis = _parse_decimal(renderis_credits.strip()) if renderis_credits.strip() else None
+            parsed_renderis = _parse_int(renderis_credits.strip()) if renderis_credits.strip() else None
 
             if row_id == "nano_banana":
                 update_price("nano_banana", "base", parsed_renderis, parsed_kie)
