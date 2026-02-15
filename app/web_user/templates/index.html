@@ -5209,7 +5209,12 @@
         setTimeout(() => {
           thumbsRefreshScheduled = false;
           if (!galleryItems.length || galleryMode !== 'carousel' || resultSkeletonActive) return;
-          renderGallery();
+          const currentItem = galleryItems[galleryIndex] || null;
+          if (currentItem && currentItem.invalid) {
+            renderGallery();
+            return;
+          }
+          renderThumbs(currentItem, false);
         }, 0);
       }
 
