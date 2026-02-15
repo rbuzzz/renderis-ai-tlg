@@ -5387,7 +5387,7 @@
           const afterTop = anchor.getBoundingClientRect().top;
           const delta = afterTop - beforeTop;
           if (Math.abs(delta) > 1) {
-            window.scrollBy({ top: delta, left: 0 });
+            window.scrollBy({ top: -delta, left: 0 });
           }
         };
         window.requestAnimationFrame(() => {
