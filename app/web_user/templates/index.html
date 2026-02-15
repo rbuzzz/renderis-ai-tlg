@@ -6082,17 +6082,13 @@
           event.preventDefault();
           if (prevBtn.disabled) return;
           thumbsPageIndex = Math.max(0, thumbsPageIndex - 1);
-          withScrollAnchor(document.getElementById('thumbsWrap'), () => {
-            renderThumbs(galleryItems[galleryIndex] || currentItem || null, false);
-          });
+          renderThumbs(galleryItems[galleryIndex] || currentItem || null, false);
         };
         nextBtn.onclick = (event) => {
           event.preventDefault();
           if (nextBtn.disabled) return;
           thumbsPageIndex = Math.min(totalPages - 1, thumbsPageIndex + 1);
-          withScrollAnchor(document.getElementById('thumbsWrap'), () => {
-            renderThumbs(galleryItems[galleryIndex] || currentItem || null, false);
-          });
+          renderThumbs(galleryItems[galleryIndex] || currentItem || null, false);
         };
 
         const visible = displayItems.length;
