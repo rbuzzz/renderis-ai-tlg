@@ -5376,18 +5376,15 @@
         metaEl.style.display = parts.length ? 'block' : 'none';
       }
 
-      function withScrollAnchor(anchorEl, updateFn) {
-        const anchor = anchorEl && typeof anchorEl.getBoundingClientRect === 'function'
-          ? anchorEl
-          : null;
-        const beforeTop = anchor ? anchor.getBoundingClientRect().top : 0;
+      function withScrollAnchor(_anchorEl, updateFn) {
+        const beforeX = window.scrollX || window.pageXOffset || 0;
+        const beforeY = window.scrollY || window.pageYOffset || 0;
         updateFn();
-        if (!anchor) return;
         const restore = () => {
-          const afterTop = anchor.getBoundingClientRect().top;
-          const delta = afterTop - beforeTop;
-          if (Math.abs(delta) > 1) {
-            window.scrollBy({ top: -delta, left: 0 });
+          const afterX = window.scrollX || window.pageXOffset || 0;
+          const afterY = window.scrollY || window.pageYOffset || 0;
+          if (Math.abs(afterY - beforeY) > 0 || Math.abs(afterX - beforeX) > 0) {
+            window.scrollTo(beforeX, beforeY);
           }
         };
         window.requestAnimationFrame(() => {
